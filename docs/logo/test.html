@@ -1,248 +1,50 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Schema-Pop Vortex</title>
+    <title>schema-pop · logo preview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="logo.css">
     <style>
         body {
-            background-color: #1a1a1a;
-            color: #fdf5e6;
+            background: #1a1a1a;
             font-family: 'Inter', sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+            color: #fdf5e6;
             margin: 0;
-            overflow: hidden;
-        }
-
-        .logo-container {
-            font-size: 80px;
-            font-weight: 900;
+            padding: 48px;
             display: flex;
-            align-items: center;
-            letter-spacing: -2px;
+            flex-direction: column;
+            gap: 40px;
+            align-items: flex-start;
         }
-
-        .vortex-anchor {
-            position: relative;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 5px;
+        button {
+            background: #fdf5e6;
+            color: #1a1a1a;
+            border: 0;
+            border-radius: 6px;
+            padding: 12px 18px;
+            font-family: inherit;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
         }
-
-        #vortex-canvas {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 256px;
-            height: 256px;
-            pointer-events: none;
-            z-index: 2;
-        }
+        button:hover { background: #fff; }
     </style>
 </head>
-
 <body>
+    <div class="schema-pop-logo size-512">schema-p<span class="vortex-anchor">o</span>p</div>
+    <div class="schema-pop-logo size-256">schema-p<span class="vortex-anchor">o</span>p</div>
+    <div class="schema-pop-logo size-128">schema-p<span class="vortex-anchor">o</span>p</div>
+    <button id="download-spiral">Download spiral 512×512</button>
 
-    <div class="logo-container">
-        <span>schema-p</span>
-        <span class="vortex-anchor">
-            <span class="static-text">🍭</span>
-            <canvas id="vortex-canvas" width="512" height="512"></canvas>
-        </span>
-        <span>p</span>
-    </div>
-
+    <script src="logo.js"></script>
     <script>
-
-        const CONFIG = {
-            repetitions: 1.0,
-            spiralCenterX: 0.5,
-            spiralCenterY: 0.5,
-            radius: 0.185,
-            speed: 4.0
-        };
-
-        const vertexShaderSource = `
-    attribute vec2 a_position;
-    varying vec2 v_texCoord;
-    void main() {
-        v_texCoord = a_position * 0.5 + 0.5;
-        gl_Position = vec4(a_position, 0.0, 1.0);
-    }
-`;
-
-        const fragmentShaderVortex = `
-    precision mediump float;
-    varying vec2 v_texCoord;
-    
-    uniform float u_time;
-    uniform sampler2D u_buffer;
-    uniform vec2  u_center;
-    uniform float u_repetitions;
-    uniform float u_radius;
-    uniform float u_speed;
-
-    void main() {
-        vec2 uv = v_texCoord;
-        vec2 delta = uv - u_center;
-        float dist = length(delta);
-        float angle = atan(delta.y, delta.x);
-
-        // --- 1. FEEDBACK BUFFER STABILIZATION ---
-        float spinForce = 0.04 / (dist + 0.1); 
-        float suckForce = 0.006; 
-        float readAngle = angle - spinForce; 
-        float readDist = dist + suckForce;  
-        vec2 readUV = u_center + vec2(cos(readAngle), sin(readAngle)) * readDist;
-        
-        vec4 prevColor = texture2D(u_buffer, readUV) * 0.97;
-        
-        // NOISE FLOOR: SNAP TO ZERO if nearly transparent 
-        // This prevents the "muddy soup" background degradation
-        if(prevColor.a < 0.01) {
-            prevColor = vec4(0.0);
-        }
-
-        // --- 2. 3-COLOR LOLLIPOP ---
-        float circleMask = smoothstep(u_radius, u_radius - 0.005, dist);
-        float phase = angle * u_repetitions + pow(dist, 0.8) * 20.0 - u_time * u_speed;
-
-        vec3 colCream = vec3(253.0/255.0, 245.0/255.0, 230.0/255.0); 
-        vec3 colPink  = vec3(247.0/255.0,  86.0/255.0, 124.0/255.0); 
-        vec3 colBlue  = vec3( 41.0/255.0, 182.0/255.0, 246.0/255.0); 
-
-        float w1 = pow(max(0.0, cos(phase)), 12.0);
-        float w2 = pow(max(0.0, cos(phase - 2.0944)), 12.0);
-        float w3 = pow(max(0.0, cos(phase - 4.1888)), 12.0);
-        vec3 baseColor = (w1 * colCream + w2 * colPink + w3 * colBlue) / (w1 + w2 + w3);
-
-        // --- 3. STYLIZED LIGHTING ---
-        vec3 lolliColor = baseColor;
-        if (dist < u_radius) {
-            float z = sqrt(max(0.0, u_radius*u_radius - dist*dist));
-            vec3 normal = normalize(vec3(delta.x, delta.y, z * 0.9)); 
-            vec3 viewDir = vec3(0.0, 0.0, 1.0);
-            float diffuse = max(dot(normal, normalize(vec3(-1.0, 1.0, 1.0))), 0.0);
-            lolliColor *= (0.7 + 0.3 * diffuse);
-            vec3 reflectDir = reflect(-normalize(vec3(-1.5, 1.5, 0.3)), normal);
-            float specBase = max(dot(viewDir, reflectDir), 0.0);
-            lolliColor += vec3(1.0) * (smoothstep(0.85, 0.95, specBase) * 0.7 + pow(specBase, 60.0) * 0.5);
-            lolliColor += baseColor * pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0) * 0.5; 
-        }
-        lolliColor = mix(lolliColor, vec3(0.05), smoothstep(u_radius - 0.015, u_radius, dist) * 0.5);
-
-        // --- 4. COMPOSITION ---
-        // Foreground (lollipop) is rendered fresh every frame.
-        // Background (prevColor) only stays where the lollipop is NOT.
-        gl_FragColor = mix(prevColor, vec4(lolliColor, 1.0), circleMask);
-    }
-`;
-
-        const fragmentShaderDisplay = `
-    precision mediump float;
-    varying vec2 v_texCoord;
-    uniform sampler2D u_tex;
-    void main() {
-        gl_FragColor = texture2D(u_tex, v_texCoord);
-    }
-`;
-
-        const canvas = document.getElementById('vortex-canvas');
-        const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false });
-
-        if (gl) {
-            function createShader(type, source) {
-                const s = gl.createShader(type);
-                gl.shaderSource(s, source);
-                gl.compileShader(s);
-                return s;
-            }
-
-            function createProgram(fsSource) {
-                const p = gl.createProgram();
-                gl.attachShader(p, createShader(gl.VERTEX_SHADER, vertexShaderSource));
-                gl.attachShader(p, createShader(gl.FRAGMENT_SHADER, fsSource));
-                gl.linkProgram(p);
-                return p;
-            }
-
-            const vortexProg = createProgram(fragmentShaderVortex);
-            const displayProg = createProgram(fragmentShaderDisplay);
-
-            const posBuf = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
-            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-
-            function createFBO() {
-                const tex = gl.createTexture();
-                gl.bindTexture(gl.TEXTURE_2D, tex);
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-                const fb = gl.createFramebuffer();
-                gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-                return { fb, tex };
-            }
-
-            let fboA = createFBO(), fboB = createFBO();
-            const vLocPos = gl.getAttribLocation(vortexProg, "a_position");
-            const dLocPos = gl.getAttribLocation(displayProg, "a_position");
-
-            const uLocs = {
-                time: gl.getUniformLocation(vortexProg, "u_time"),
-                buffer: gl.getUniformLocation(vortexProg, "u_buffer"),
-                center: gl.getUniformLocation(vortexProg, "u_center"),
-                reps: gl.getUniformLocation(vortexProg, "u_repetitions"),
-                radius: gl.getUniformLocation(vortexProg, "u_radius"),
-                speed: gl.getUniformLocation(vortexProg, "u_speed")
-            };
-
-            let startTime = performance.now();
-
-            function render() {
-                let time = (performance.now() - startTime) / 1000.0;
-
-                gl.useProgram(vortexProg);
-                gl.bindFramebuffer(gl.FRAMEBUFFER, fboB.fb);
-                gl.viewport(0, 0, canvas.width, canvas.height);
-                gl.enableVertexAttribArray(vLocPos);
-                gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
-                gl.vertexAttribPointer(vLocPos, 2, gl.FLOAT, false, 0, 0);
-
-                gl.uniform1f(uLocs.time, time);
-                gl.uniform2f(uLocs.center, CONFIG.spiralCenterX, CONFIG.spiralCenterY);
-                gl.uniform1f(uLocs.reps, CONFIG.repetitions);
-                gl.uniform1f(uLocs.radius, CONFIG.radius);
-                gl.uniform1f(uLocs.speed, CONFIG.speed);
-
-                gl.activeTexture(gl.TEXTURE0);
-                gl.bindTexture(gl.TEXTURE_2D, fboA.tex);
-                gl.uniform1i(uLocs.buffer, 0);
-                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-                gl.useProgram(displayProg);
-                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-                gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
-                gl.enableVertexAttribArray(dLocPos);
-                gl.vertexAttribPointer(dLocPos, 2, gl.FLOAT, false, 0, 0);
-                gl.bindTexture(gl.TEXTURE_2D, fboB.tex);
-                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-                [fboA, fboB] = [fboB, fboA];
-                requestAnimationFrame(render);
-            }
-            requestAnimationFrame(render);
-        }
+        document.getElementById('download-spiral').addEventListener('click', () => {
+            window.SchemaPopLogo.downloadSpiral('schema-pop-spiral-512.png', 512);
+        });
     </script>
 </body>
-
 </html>
