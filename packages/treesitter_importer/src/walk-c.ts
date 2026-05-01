@@ -319,9 +319,16 @@ function handleBareDeclaration(
 	opts: { allowClass: boolean },
 ) {
 	// Patterns we care about: `struct Foo { ... };` or `enum Foo { ... };`
-	// without a declarator. Any declarator → it's a variable declaration, skip.
+	// without a declarator (no var being declared), or function prototypes
+	// like `int do_thing(uint8_t x);`.
 	if (node.namedChildren.some((c) => c?.type === "init_declarator")) return;
-	if (node.namedChildren.some((c) => c?.type === "function_declarator")) return;
+
+	const fnDecl = findNestedFunctionDeclarator(node);
+	if (fnDecl) {
+		const fn = handleFunctionPrototype(node, fnDecl, doc, scopePrefix, skipped);
+		if (fn) items.push(fn);
+		return;
+	}
 
 	for (const c of node.namedChildren) {
 		if (!c) continue;
@@ -339,10 +346,98 @@ function handleBareDeclaration(
 	}
 }
 
+/**
+ * Walk inwards from a `declaration` node to find a `function_declarator`,
+ * possibly wrapped in pointer/parenthesized declarators. Returns null if
+ * the declaration isn't a function prototype.
+ */
+function findNestedFunctionDeclarator(decl: TSNode): TSNode | null {
+	for (const c of decl.namedChildren) {
+		if (!c) continue;
+		if (c.type === "function_declarator") return c;
+		if (c.type === "pointer_declarator" || c.type === "parenthesized_declarator") {
+			const inner = c.childForFieldName("declarator");
+			if (inner?.type === "function_declarator") return inner;
+		}
+	}
+	return null;
+}
+
+function handleFunctionPrototype(
+	declNode: TSNode,
+	fnDecl: TSNode,
+	doc: string | undefined,
+	_scopePrefix: string,
+	skipped: { name: string; reason: string }[],
+): RustItem | null {
+	// Skip definitions with body — we want prototypes only (typical in headers).
+	// Note: `function_definition` is its own top-level node; `declaration` here
+	// means just the prototype.
+	const nameNode = fnDecl.childForFieldName("declarator");
+	const name = nameNode?.text;
+	if (!name || /[*&]/.test(name)) {
+		// Function pointer typedef or pointer-to-function — skip for MVP.
+		skipped.push({
+			name: name ?? "<anon>",
+			reason: "function pointer / complex declarator",
+		});
+		return null;
+	}
+
+	// Return type lives in the `type` field of the declaration node.
+	const returnTypeNode = declNode.childForFieldName("type");
+	const returnType: RustType = returnTypeNode
+		? parseCType(returnTypeNode)
+		: { kind: "unsupported", raw: "void" };
+
+	const params = fnDecl.childForFieldName("parameters");
+	const args: { name?: string; type: RustType }[] = [];
+	if (params) {
+		for (const p of params.namedChildren) {
+			if (!p) continue;
+			if (p.type !== "parameter_declaration") continue;
+			const ptype = p.childForFieldName("type");
+			const pdecl = p.childForFieldName("declarator");
+			if (!ptype) continue;
+			let argName: string | undefined;
+			if (pdecl?.type === "identifier") argName = pdecl.text;
+			else if (pdecl?.type === "pointer_declarator") {
+				// `const char *name` — for MVP we emit the pointer as unsupported
+				// but still record the arg name so it appears in docs.
+				const inner = pdecl.childForFieldName("declarator");
+				if (inner?.type === "identifier") argName = inner.text;
+			}
+			args.push({ name: argName, type: parseCType(ptype) });
+		}
+	}
+
+	// `void` as a sole arg means "no args" in C — strip it.
+	if (
+		args.length === 1 &&
+		args[0]!.type.kind === "unsupported" &&
+		args[0]!.type.raw === "void" &&
+		!args[0]!.name
+	) {
+		args.length = 0;
+	}
+
+	return {
+		kind: "function",
+		name,
+		args,
+		returnType,
+		// C convention: cdecl by default; we leave abi unset and let consumers
+		// assume the platform default. Future: pull from `__attribute__((stdcall))`.
+		doc,
+		pub: true,
+	};
+}
+
 function markPacked(items: RustItem[], attrs: string[]) {
 	if (attrs.length === 0 || items.length === 0) return;
 	const last = items[items.length - 1];
-	if (!last || last.kind === "alias") return;
+	if (!last) return;
+	if (last.kind !== "struct" && last.kind !== "enum") return;
 	if (attrs.some((a) => /\bpacked\b/.test(a))) {
 		last.repr = [...(last.repr ?? []), "packed"];
 	}

@@ -77,6 +77,27 @@ export function walkRustFile(tree: Tree, sourcePath: string): RustModuleIR {
 				const item = handleAlias(child, attrs, doc, scopePrefix);
 				if (item.ok) items.push(item.value);
 				else skipped.push({ name: item.name, reason: item.reason });
+			} else if (
+				child.type === "function_item" ||
+				child.type === "function_signature_item"
+			) {
+				const item = handleFunction(child, doc, scopePrefix);
+				if (item.ok) items.push(item.value);
+				else skipped.push({ name: item.name, reason: item.reason });
+			} else if (child.type === "foreign_mod_item") {
+				// `extern "C" { fn foo(...); ... }` — descend into body, applying
+				// the abi from the wrapper.
+				const abi = findExternAbi(child);
+				const body = child.childForFieldName("body");
+				if (body) {
+					for (const fn of body.namedChildren) {
+						if (!fn) continue;
+						if (fn.type !== "function_signature_item") continue;
+						const r = handleFunction(fn, undefined, scopePrefix, abi);
+						if (r.ok) items.push(r.value);
+						else skipped.push({ name: r.name, reason: r.reason });
+					}
+				}
 			} else if (child.type === "mod_item") {
 				const nameNode = child.childForFieldName("name");
 				const bodyNode = child.childForFieldName("body");
@@ -281,6 +302,96 @@ function handleEnum(
 			name,
 			variants,
 			...parseAttrs(attrs),
+			doc,
+			pub: isPub(node),
+		},
+	};
+}
+
+/**
+ * Find the abi string from an `extern_modifier` descendant. Returns the
+ * literal value (e.g., `"C"`, `"system"`), or `"C"` for a bare `extern`
+ * (no string), or undefined if no extern modifier is present.
+ */
+function findExternAbi(node: TSNode): string | undefined {
+	function walk(n: TSNode): string | undefined {
+		if (n.type === "extern_modifier") {
+			for (const cc of n.namedChildren) {
+				if (cc?.type === "string_literal") {
+					return cc.text.replace(/^"|"$/g, "");
+				}
+			}
+			return "C"; // bare `extern fn` defaults to ABI "C"
+		}
+		for (const c of n.namedChildren) {
+			if (!c) continue;
+			// Only descend into modifier-related nodes to keep this cheap.
+			if (
+				c.type === "function_modifiers" ||
+				c.type === "extern_modifier" ||
+				c.type === "foreign_mod_item"
+			) {
+				const r = walk(c);
+				if (r) return r;
+			}
+		}
+		return undefined;
+	}
+	return walk(node);
+}
+
+function handleFunction(
+	node: TSNode,
+	doc: string | undefined,
+	scopePrefix: string,
+	overrideAbi?: string,
+): Handle<RustItem> {
+	const nameNode = node.childForFieldName("name");
+	const name = nameNode?.text;
+	if (!name) return { ok: false, name: "<anon>", reason: "no name" };
+	const qName = scopePrefix ? `${scopePrefix}::${name}` : name;
+
+	if (node.childForFieldName("type_parameters")) {
+		return { ok: false, name: qName, reason: "generic function" };
+	}
+
+	// Detect `extern "C"` (or other ABI) modifier directly on the function
+	// (not just on a surrounding foreign_mod_item). Tree-sitter exposes it
+	// nested as: `function_modifiers > extern_modifier > string_literal`.
+	const abi = overrideAbi ?? findExternAbi(node);
+
+	const params = node.childForFieldName("parameters");
+	const args: { name?: string; type: RustType }[] = [];
+	if (params) {
+		for (const p of params.namedChildren) {
+			if (!p) continue;
+			if (p.type !== "parameter") continue;
+			const nameNode = p.childForFieldName("pattern");
+			const typeNode = p.childForFieldName("type");
+			if (!typeNode) continue;
+			const argName =
+				nameNode && nameNode.type === "identifier"
+					? nameNode.text
+					: undefined;
+			args.push({ name: argName, type: parseRustType(typeNode) });
+		}
+	}
+
+	// Missing `-> Type` in Rust means unit `()`. Map to `{ unsupported, raw: "()" }`
+	// at IR level — the emitter normalizes that to schema-pop's `Field { kind: "unit" }`.
+	const returnTypeNode = node.childForFieldName("return_type");
+	const returnType: RustType = returnTypeNode
+		? parseRustType(returnTypeNode)
+		: { kind: "unsupported", raw: "()" };
+
+	return {
+		ok: true,
+		value: {
+			kind: "function",
+			name,
+			args,
+			returnType,
+			abi,
 			doc,
 			pub: isPub(node),
 		},

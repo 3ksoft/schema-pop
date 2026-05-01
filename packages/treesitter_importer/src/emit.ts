@@ -32,8 +32,13 @@ export function emitArktypeScope(
 	const scopeName = opts.scopeName ?? "$";
 	const header = opts.header ?? defaultHeader(ir.source);
 
+	const typeItems = ir.items.filter((i) => i.kind !== "function");
+	const fnItems = ir.items.filter(
+		(i): i is Extract<RustItem, { kind: "function" }> => i.kind === "function",
+	);
+
 	const aliases: string[] = [];
-	for (const item of ir.items) aliases.push(emitItem(item));
+	for (const item of typeItems) aliases.push(emitItem(item));
 
 	const skipped =
 		ir.skipped.length > 0
@@ -42,15 +47,96 @@ export function emitArktypeScope(
 					.join("\n")}\n`
 			: "";
 
+	const fnsBlock = fnItems.length ? emitFunctions(fnItems) : "";
+
 	return `${header}
 import { scope } from "schema-pop";
-import { binary } from "schema-pop";
+import { binary } from "schema-pop";${fnItems.length ? `\nimport type { FunctionPlan } from "schema-pop";` : ""}
 
 export const ${scopeName} = scope({
 \t...binary.import(),
 ${aliases.map((a) => indent(a, 1)).join(",\n")}${aliases.length ? "," : ""}
 });
-${skipped}`;
+${fnsBlock}${skipped}`;
+}
+
+/**
+ * Emit a `export const functions: FunctionPlan[] = [...]` block. Each entry
+ * is a plain object literal compatible with schema-pop's `FunctionPlan` TS
+ * type. Field types are encoded directly as IR primitives → schema-pop
+ * `Field` shapes (no string-form arktype expressions, since functions
+ * bypass the arktype scope entirely).
+ */
+function emitFunctions(
+	fns: Extract<RustItem, { kind: "function" }>[],
+): string {
+	const entries = fns.map((fn) => {
+		const argEntries = fn.args.map(
+			(a) =>
+				`\t\t\t{ ${a.name ? `name: ${JSON.stringify(a.name)}, ` : ""}type: ${emitFieldLiteral(a.type)} }`,
+		);
+		const ret = emitFieldLiteral(fn.returnType);
+		const docPart = fn.doc
+			? `\n\t\tdescription: ${JSON.stringify(fn.doc)},`
+			: "";
+		const abiPart = fn.abi ? `\n\t\tabi: ${JSON.stringify(fn.abi)},` : "";
+		return `\t{
+\t\tname: ${JSON.stringify(fn.name)},
+\t\tsymbol: ${JSON.stringify(fn.name)},${abiPart}${docPart}
+\t\treturnType: ${ret},
+\t\targs: [${argEntries.length ? `\n${argEntries.join(",\n")}\n\t\t` : ""}],
+\t}`;
+	});
+	return `\nexport const functions: FunctionPlan[] = [\n${entries.join(",\n")},\n];\n`;
+}
+
+/**
+ * Emit a IR `RustType` as a literal `Field` object compatible with
+ * schema-pop's `Field` union. Used inside function argument / return
+ * types where there's no string-form arktype available.
+ */
+function emitFieldLiteral(t: RustType): string {
+	switch (t.kind) {
+		case "primitive":
+			return `{ kind: "primitive", name: ${JSON.stringify(t.name)}, size: ${primitiveSize(t.name)}, align: ${primitiveAlign(t.name)}, paddedSize: ${primitiveSize(t.name)}, popKind: "binary" }`;
+		case "ref":
+			return `{ kind: "reference", name: ${JSON.stringify(t.name)}, indirection: "inline", isForward: false, size: 0, align: 1, paddedSize: 0 }`;
+		case "string":
+			return `{ kind: "string" }`;
+		case "array": {
+			return `{ kind: "array", item: ${emitFieldLiteral(t.item)}, exactLength: ${t.len}, size: 0, align: 1, paddedSize: 0 }`;
+		}
+		case "vec": {
+			return `{ kind: "array", item: ${emitFieldLiteral(t.item)}, size: 0, align: 1, paddedSize: 0 }`;
+		}
+		case "option": {
+			return `{ kind: "optional", inner: ${emitFieldLiteral(t.inner)} }`;
+		}
+		case "unsupported":
+			// `()` (Rust unit) and `void` (C) → encode as `unit` field.
+			if (t.raw === "()" || t.raw === "void") {
+				return `{ kind: "unit" }`;
+			}
+			return `{ kind: "any" /* unsupported: ${escapeJsBlock(t.raw)} */ }`;
+	}
+}
+
+function escapeJsBlock(s: string): string {
+	return s.replace(/\*\//g, "*\\/").replace(/\n/g, " ");
+}
+
+function primitiveSize(name: string): number {
+	const m: Record<string, number> = {
+		u8: 1, i8: 1, bool: 1,
+		u16: 2, i16: 2,
+		u32: 4, i32: 4, f32: 4,
+		u64: 8, i64: 8, f64: 8,
+		u128: 16, i128: 16,
+	};
+	return m[name] ?? 0;
+}
+function primitiveAlign(name: string): number {
+	return primitiveSize(name) || 1;
 }
 
 function defaultHeader(sourcePath: string): string {
@@ -120,8 +206,11 @@ function emitItem(item: RustItem): string {
 		];
 		return all.join(",\n");
 	}
-	// alias
-	return `${quoteTypeName(item.name)}: ${emitTypeAsString(item.type)}`;
+	if (item.kind === "alias") {
+		return `${quoteTypeName(item.name)}: ${emitTypeAsString(item.type)}`;
+	}
+	// function items are emitted via emitFunctions, not inside the scope.
+	return "";
 }
 
 function emittableField(f: RustField): boolean {

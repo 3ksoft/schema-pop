@@ -41,6 +41,11 @@ export type RustEnumVariant =
 	| { kind: "tuple"; name: string; types: RustType[]; doc?: string }
 	| { kind: "struct"; name: string; fields: RustField[]; doc?: string };
 
+export type RustFnArg = {
+	name?: string;
+	type: RustType;
+};
+
 export type RustItem =
 	| {
 			kind: "struct";
@@ -62,6 +67,20 @@ export type RustItem =
 			kind: "alias";
 			name: string;
 			type: RustType;
+			doc?: string;
+			pub: boolean;
+	  }
+	| {
+			kind: "function";
+			name: string;
+			args: RustFnArg[];
+			returnType: RustType;
+			/**
+			 * Calling convention as written in source: `C` (Rust `extern "C"`),
+			 * `system`, `cdecl`, `stdcall`, `fastcall`. `null` for the
+			 * language's default (Rust default, plain C cdecl).
+			 */
+			abi?: string;
 			doc?: string;
 			pub: boolean;
 	  };

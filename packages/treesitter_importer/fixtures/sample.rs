@@ -40,3 +40,16 @@ pub struct Bundle {
     pub samples: Vec<i16>,
     pub fixed: [f32; 4],
 }
+
+/// Read battery state from device. (Free function.)
+pub fn battery_read(id: u32) -> DeviceStatus {
+    DeviceStatus::Idle
+}
+
+/// Reset device — extern C ABI for FFI use.
+pub extern "C" fn device_reset(id: u32) {}
+
+extern "C" {
+    /// Imported from libc-style external library.
+    pub fn external_get_tick() -> u32;
+}

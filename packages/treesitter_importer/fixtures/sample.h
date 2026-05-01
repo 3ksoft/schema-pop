@@ -49,3 +49,12 @@ typedef struct {
     void (*callback)(int);
     Battery *next;
 } Quirky;
+
+/** Read battery state from device. */
+DeviceStatus battery_read(DeviceId id, Battery *out);
+
+/** Reset device — fire and forget. */
+void device_reset(DeviceId id);
+
+/** No args. */
+uint32_t get_tick_count(void);
