@@ -66,31 +66,16 @@ function Section({ label, right, children }) {
   );
 }
 
-function ModeToggle({ value, onChange }) {
-  const opts = [{v:"bars",l:"Bars"},{v:"grid",l:"Grid"}];
-  return (
-    <div className="inline-flex rounded border border-current/15 p-0.5 text-[10px]">
-      {opts.map(o => (
-        <button key={o.v} onClick={() => onChange(o.v)}
-          className={"px-2 py-0.5 rounded-sm leading-none uppercase tracking-wider " +
-            (value === o.v ? "bg-ink text-paper dark:bg-paper dark:text-night" : "opacity-60 hover:opacity-100")}>
-          {o.l}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function SvgEmbed({ markup }) {
   if (!markup) return <div className="text-[11px] italic opacity-50">— no viz —</div>;
   return <div className="sp-viz-host overflow-x-auto" dangerouslySetInnerHTML={{ __html: markup }} />;
 }
 
-function TypeCard({ type, version, mode, onAnchor, onJump }) {
+function TypeCard({ type, version, onAnchor, onJump }) {
   const id = "t-" + version.id.split(".").join("_") + "-" + type.name;
   const k = KIND[type.kind] || KIND.struct;
   const totalSize = type.paddedSize || type.size;
-  const svgMarkup = mode === "grid" ? type.svgGrid : type.svgBars;
+  const svgMarkup = type.svgBars;
   return (
     <article id={id} className="group border border-ink/10 dark:border-paper/10 rounded-lg bg-paper/40 dark:bg-paper/[0.02] hover:border-ink/20 dark:hover:border-paper/20 transition-colors scroll-mt-24">
       <header className="flex items-center gap-3 px-5 py-4 border-b border-ink/5 dark:border-paper/5 flex-wrap">
@@ -212,7 +197,7 @@ function ThemeSwitch({ value, onChange }) {
   );
 }
 
-function Sidebar({ data, activeVersion, onVersion, onJump, onSearch, onCompare, themeMode, onThemeMode, mode, onMode }) {
+function Sidebar({ data, activeVersion, onVersion, onJump, onSearch, onCompare, themeMode, onThemeMode }) {
   const v = data.versions.find((x) => x.id === activeVersion) || data.versions[0];
   if (!v) return null;
   return (
@@ -247,11 +232,6 @@ function Sidebar({ data, activeVersion, onVersion, onJump, onSearch, onCompare, 
             <span>compare versions</span><span>→</span>
           </button>
         )}
-      </div>
-
-      <div className="space-y-2">
-        <div className="text-[10px] uppercase tracking-[0.18em] opacity-50">layout</div>
-        <ModeToggle value={mode} onChange={onMode} />
       </div>
 
       <div className="space-y-1">
@@ -422,14 +402,14 @@ function DiffSummary({ diff, onJump }) {
   );
 }
 
-function CompareCol({ label, type, mode }) {
+function CompareCol({ label, type }) {
   return (
     <div className="p-4 space-y-3">
       <div className="text-[10px] uppercase tracking-[0.2em] opacity-50 font-mono">{label}</div>
       {!type ? <div className="py-6 text-center italic opacity-50 text-[12px]">— not present —</div> : (
         <>
           <div className="text-[11px] opacity-60">{(type.paddedSize || type.size)}b · align {type.align} · {type.kind}</div>
-          <SvgEmbed markup={mode === "grid" ? type.svgGrid : type.svgBars} />
+          <SvgEmbed markup={type.svgBars} />
           {type.kind === "struct" && (
             <ul className="text-[12px] divide-y divide-ink/5 dark:divide-paper/5 font-mono">
               {type.fields.map((f) => (
@@ -455,7 +435,7 @@ function CompareCol({ label, type, mode }) {
   );
 }
 
-function CompareOverlay({ open, data, onClose, mode }) {
+function CompareOverlay({ open, data, onClose }) {
   if (!open) return null;
   const a = data.versions[0];
   const b = data.versions[data.versions.length - 1];
@@ -487,8 +467,8 @@ function CompareOverlay({ open, data, onClose, mode }) {
                   <StatusPill status={status} />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 divide-x divide-dashed divide-ink/10 dark:divide-paper/10">
-                  <CompareCol label={a.id} type={ta} mode={mode} />
-                  <CompareCol label={b.id} type={tb} mode={mode} />
+                  <CompareCol label={a.id} type={ta} />
+                  <CompareCol label={b.id} type={tb} />
                 </div>
               </div>
             );
@@ -502,7 +482,6 @@ function CompareOverlay({ open, data, onClose, mode }) {
 function App() {
   const data = window.SCHEMA_POP_DATA;
   const [activeVersion, setActiveVersion] = useState(data.versions.length ? data.versions[data.versions.length - 1].id : "");
-  const [mode, setMode] = useState("bars");
   const [searchOpen, setSearchOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [systemDark, setSystemDark] = useState(() => typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches);
@@ -569,8 +548,6 @@ function App() {
         onCompare={() => setCompareOpen(true)}
         themeMode={themeMode}
         onThemeMode={setThemeMode}
-        mode={mode}
-        onMode={setMode}
       />
 
       <main className="flex-1 px-10 py-10 max-w-5xl space-y-12">
@@ -608,7 +585,7 @@ function App() {
 
           <div className="space-y-6">
             {activeV.types.map((t) => (
-              <TypeCard key={t.name} type={t} version={activeV} mode={mode} onAnchor={handleAnchor} onJump={jumpTo} />
+              <TypeCard key={t.name} type={t} version={activeV} onAnchor={handleAnchor} onJump={jumpTo} />
             ))}
           </div>
 
@@ -626,7 +603,7 @@ function App() {
       </main>
 
       <CommandPalette open={searchOpen} data={data} onClose={() => setSearchOpen(false)} onPick={handlePick} />
-      <CompareOverlay open={compareOpen} data={data} onClose={() => setCompareOpen(false)} mode={mode} />
+      <CompareOverlay open={compareOpen} data={data} onClose={() => setCompareOpen(false)} />
     </div>
   );
 }

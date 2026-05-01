@@ -12,7 +12,6 @@ import { htmlAppScript } from "./html-app";
 export interface HtmlConfig extends BaseConfig {
 	title?: string;
 	viz?: ExporterPlugin<any>;
-	vizGrid?: ExporterPlugin<any>;
 }
 
 function fieldTypeLabel(f: Field): string {
@@ -109,7 +108,6 @@ function renderFunctionSignature(
 function typeToDocs(
 	t: TypePlan,
 	svgBars: string | undefined,
-	svgGrid: string | undefined,
 	linkCtx?: { knownNames: Set<string>; vid: string },
 ): any {
 	const labelOf = (f: Field) => fieldLabel(f, linkCtx);
@@ -123,7 +121,6 @@ function typeToDocs(
 		obsolete: tAny.obsolete === true ? true : undefined,
 		obsoleteReason: tAny.obsoleteReason,
 		svgBars: svgBars || "",
-		svgGrid: svgGrid || svgBars || "",
 	};
 	if (t.kind === "struct") {
 		return {
@@ -283,9 +280,6 @@ export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
 	};
 	const vizBars =
 		cfg.viz ?? defaultSvg({ mode: "bars", width: 720, rowHeight: 38 });
-	const vizGrid =
-		cfg.vizGrid ??
-		defaultSvg({ mode: "grid", width: 720, rowHeight: 28, rowBytes: 8 });
 
 	return {
 		name: "html",
@@ -332,7 +326,6 @@ export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
 		},
 		generate: (plan: LayoutPlan) => {
 			const barsRecords = vizBars.generate(plan) as Record<string, string>;
-			const gridRecords = vizGrid.generate(plan) as Record<string, string>;
 			const knownNames = new Set(plan.types.map((t) => t.name));
 			const vid = plan.version.split(".").join("_");
 			const linkCtx = { knownNames, vid };
@@ -341,12 +334,7 @@ export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
 				label: plan.version,
 				endian: (plan as any).endian,
 				types: (plan.types as TypePlan[]).map((t) =>
-					typeToDocs(
-						t,
-						barsRecords[`${t.name}.svg`],
-						gridRecords[`${t.name}.svg`],
-						linkCtx,
-					),
+					typeToDocs(t, barsRecords[`${t.name}.svg`], linkCtx),
 				),
 				functions: (plan.functions ?? []).map((fn) => ({
 					name: fn.name,
