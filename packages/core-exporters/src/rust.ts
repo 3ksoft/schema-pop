@@ -1,5 +1,14 @@
-import type { LayoutPlan, BaseConfig, ExporterPlugin, Field } from "schema-pop";
-import { ExporterTools } from "schema-pop";
+import type {
+	LayoutPlan,
+	BaseConfig,
+	ExporterPlugin,
+	Field,
+	FieldChange,
+	FieldPlan,
+	StructPlan,
+	TypeDiff,
+} from "schema-pop";
+import { diffPlans, ExporterTools } from "schema-pop";
 import { rustHarness } from "./rust-harness";
 
 export interface RustConfig
@@ -292,6 +301,182 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 				open: (mod) => `pub mod ${mod} {\n\tuse super::*;`,
 				close: "}",
 			}),
+		generateMigration: (fromPlan: LayoutPlan, toPlan: LayoutPlan) => {
+			const diff = diffPlans(fromPlan, toPlan);
+			const fromNs = fromPlan.version;
+			const toNs = toPlan.version;
+			const blocks: string[] = [];
+			for (const td of diff.types) {
+				const code = renderRustMigration(td, fromNs, toNs);
+				if (code) blocks.push(code);
+			}
+			if (blocks.length === 0) return "";
+			return `\n// migrations: ${fromNs} → ${toNs}\n${blocks.join("\n")}`;
+		},
 		getHarness: cfg.harness ? (plans) => rustHarness(plans) : undefined,
 	};
+
+	function rustLiteral(value: unknown, field: Field): string {
+		if (typeof value === "bigint") return `${value}`;
+		if (typeof value === "boolean") {
+			// bool maps to u8 in our repr — emit 0/1
+			return value ? "1" : "0";
+		}
+		if (typeof value === "number") {
+			const t = fieldInnerType(field);
+			if (t === "f32" || t === "f64") {
+				return Number.isInteger(value) ? `${value}.0` : `${value}`;
+			}
+			return `${value}`;
+		}
+		if (typeof value === "string") {
+			// strings need to land in SharedString<N> when applicable
+			if (field.kind === "string" && field.maxLength !== undefined) {
+				return `SharedString::<${field.maxLength}>::from_str(${JSON.stringify(value)})`;
+			}
+			return JSON.stringify(value);
+		}
+		return "Default::default()";
+	}
+
+	function languageDefault(_field: Field): string {
+		// Most types implement Default — fall through to that. SharedString /
+		// SharedVec / primitive arrays / numerics all have Default impls in
+		// the runtime prelude or via core.
+		return "Default::default()";
+	}
+
+	function rustCastSuffix(from: Field, to: Field): string {
+		// Same-family widening primitives: emit `as <toType>` cast only when
+		// the inner Rust type actually differs (no-op cast otherwise is noise).
+		if (from.kind === "primitive" && to.kind === "primitive") {
+			const fnT = fieldInnerType(from);
+			const tnT = fieldInnerType(to);
+			if (tnT && tnT !== fnT) return ` as ${tnT}`;
+		}
+		return "";
+	}
+
+	function emitFieldExpr(
+		change: FieldChange | undefined,
+		toField: FieldPlan,
+		fromVar: string,
+	): string {
+		if (change?.kind === "renamed") {
+			const cast = rustCastSuffix(change.from.type, change.to.type);
+			return `${fromVar}.${fieldName(change.from.name)}${cast}`;
+		}
+		if (change?.kind === "type-widened") {
+			const cast = rustCastSuffix(change.from.type, change.to.type);
+			return `${fromVar}.${fieldName(change.from.name)}${cast}`;
+		}
+		if (change?.kind === "added" && change.default.kind === "literal") {
+			return rustLiteral(change.default.value, toField.type);
+		}
+		if (
+			change?.kind === "added" &&
+			change.default.kind === "language-default"
+		) {
+			return languageDefault(toField.type);
+		}
+		if (toField.migrationMeta?.defaultValue !== undefined) {
+			return rustLiteral(toField.migrationMeta.defaultValue, toField.type);
+		}
+		return `${fromVar}.${fieldName(toField.name)}`;
+	}
+
+	function renderStructFromImpl(
+		td: TypeDiff & { kind: "changed" | "renamed" },
+		fromNs: string,
+		toNs: string,
+	): string {
+		const fromType = (td as any).from as StructPlan;
+		const toType = (td as any).to as StructPlan;
+		const changeByToName = new Map<string, FieldChange>();
+		for (const c of td.fieldChanges) {
+			if (c.kind === "added") changeByToName.set(c.field.name, c);
+			else if (c.kind === "renamed") changeByToName.set(c.to.name, c);
+			else if (
+				c.kind === "type-widened" ||
+				c.kind === "type-narrowed" ||
+				c.kind === "type-changed" ||
+				c.kind === "reordered"
+			)
+				changeByToName.set(c.to.name, c);
+		}
+
+		let s = "";
+		s += `// status: ${td.status}\n`;
+		if (td.kind === "renamed") s += `// renamed from "${td.oldName}"\n`;
+		s += `impl From<${fromNs}::${typeName(fromType.name)}> for ${toNs}::${typeName(toType.name)} {\n`;
+		s += `${INDENT()}fn from(v1: ${fromNs}::${typeName(fromType.name)}) -> Self {\n`;
+		s += `${INDENT()}${INDENT()}Self {\n`;
+		for (const f of toType.fields) {
+			if (f.type.kind === "unit") continue;
+			if (f.bitSize && f.bitSize < 8) {
+				// Bitfield handling: copy through (the analyzer emits one
+				// `_bitfield_<offset>: u8` per packed group). User-supplied
+				// migrations are required for changed bit layouts.
+				continue;
+			}
+			const ch = changeByToName.get(f.name);
+			const expr = emitFieldExpr(ch, f, "v1");
+			s += `${INDENT()}${INDENT()}${INDENT()}${fieldName(f.name)}: ${expr},\n`;
+			if (f.paddingAfter > 0) {
+				s += `${INDENT()}${INDENT()}${INDENT()}_pad_${fieldName(f.name)}: [0; ${f.paddingAfter}],\n`;
+			}
+		}
+		s += `${INDENT()}${INDENT()}}\n`;
+		s += `${INDENT()}}\n`;
+		s += `}\n`;
+		return s;
+	}
+
+	function renderRustMigration(
+		td: TypeDiff,
+		fromNs: string,
+		toNs: string,
+	): string {
+		if (td.kind !== "changed" && td.kind !== "renamed") return "";
+		const toType = (td as any).to;
+		const fromType = (td as any).from;
+		if (td.status === "user-supplied") {
+			const reasons = td.fieldChanges
+				.filter((c) => c.status === "user-supplied")
+				.map((c) => {
+					switch (c.kind) {
+						case "type-narrowed":
+							return `field '${c.to.name}': narrowing ${(c.from.type as any).name ?? c.from.type.kind} → ${(c.to.type as any).name ?? c.to.type.kind}`;
+						case "type-changed":
+							return `field '${c.to.name}': structural type change`;
+						case "added":
+							return `field '${c.field.name}': new field with no auto default`;
+						case "renamed":
+							return `field '${c.to.name}': renamed AND type changed`;
+						default:
+							return c.kind;
+					}
+				});
+			let s = `// schema-pop: write \`impl From<${fromNs}::${typeName(fromType.name)}> for ${toNs}::${typeName(toType.name)}\` yourself\n`;
+			for (const r of reasons) s += `//   reason: ${r}\n`;
+			if (reasons.length === 0)
+				s += `//   reason: see build summary\n`;
+			return s;
+		}
+		if (toType.kind === "struct") {
+			return renderStructFromImpl(td as any, fromNs, toNs);
+		}
+		// alias / enum / union auto cases — emit identity From impl
+		const tn = typeName(toType.name);
+		const fn = typeName(fromType.name);
+		return (
+			`// status: ${td.status}\n` +
+			`impl From<${fromNs}::${fn}> for ${toNs}::${tn} {\n` +
+			`${INDENT()}fn from(v1: ${fromNs}::${fn}) -> Self {\n` +
+			`${INDENT()}${INDENT()}// SAFETY: same wire layout in both versions\n` +
+			`${INDENT()}${INDENT()}unsafe { core::mem::transmute(v1) }\n` +
+			`${INDENT()}}\n` +
+			`}\n`
+		);
+	}
 }

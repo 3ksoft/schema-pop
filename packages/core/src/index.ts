@@ -7,8 +7,10 @@ export {
 	At,
 	Describe,
 	Obsolete,
+	Renamed,
 } from "./schema/core";
 export * from "./layout/analyzer";
+export * from "./migrations";
 export * from "./codec/pop";
 export * from "./utils/naming";
 export { renderComment } from "./utils/comments";

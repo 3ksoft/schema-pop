@@ -3,8 +3,18 @@ import path from "node:path";
 import { createJiti } from "jiti";
 import { SchemaAnalyzer } from "./layout/analyzer";
 import { runBindings, type BindingSpec } from "./bind";
+import { diffPlans } from "./migrations";
 import type { ExporterPlugin, LayoutPlan } from "./schema/index";
 import { renderComment } from "./utils/comments";
+
+type MigrationSummary = {
+	target: string;
+	schemaName: string;
+	fromVersion: string;
+	toVersion: string;
+	autoCount: number;
+	userSupplied: { typeName: string; reasons: string[] }[];
+};
 
 export async function buildConfig(
 	configPath: string,
@@ -49,6 +59,7 @@ export async function buildSchema(
 			plans: LayoutPlan[];
 		}
 	> = {};
+	const migrationSummaries: MigrationSummary[] = [];
 
 	for (const schema of config.schemas || []) {
 		const versions = schema.versions || [];
@@ -135,6 +146,14 @@ export async function buildSchema(
 					) {
 						const migration = instance.generateMigration(previousPlan, plan);
 						if (migration) entry.body += `\n${migration}\n`;
+						migrationSummaries.push(
+							buildMigrationSummary(
+								instance.name,
+								schema.name || "",
+								previousPlan,
+								plan,
+							),
+						);
 					}
 				} else {
 					for (const [filename, subContent] of Object.entries(content)) {
@@ -204,6 +223,72 @@ export async function buildSchema(
 				console.log(
 					`✅ [Schema-Pop] Harness File: ${path.relative(rootDir, harnessDest)}`,
 				);
+			}
+		}
+	}
+
+	if (migrationSummaries.length > 0) printMigrationSummary(migrationSummaries);
+}
+
+function buildMigrationSummary(
+	target: string,
+	schemaName: string,
+	from: LayoutPlan,
+	to: LayoutPlan,
+): MigrationSummary {
+	const diff = diffPlans(from, to);
+	let autoCount = 0;
+	const userSupplied: { typeName: string; reasons: string[] }[] = [];
+	for (const td of diff.types) {
+		if (td.kind === "unchanged" || td.kind === "added" || td.kind === "removed") continue;
+		if (td.status === "auto") {
+			autoCount++;
+			continue;
+		}
+		const reasons = td.fieldChanges
+			.filter((c) => c.status === "user-supplied")
+			.map((c) => {
+				switch (c.kind) {
+					case "type-narrowed":
+						return `field '${c.to.name}': narrowing`;
+					case "type-changed":
+						return `field '${c.to.name}': structural type change`;
+					case "added":
+						return `field '${c.field.name}': new field with no auto default`;
+					case "renamed":
+						return `field '${c.to.name}': renamed AND type changed`;
+					default:
+						return c.kind;
+				}
+			});
+		userSupplied.push({
+			typeName: (td as any).to.name,
+			reasons: reasons.length > 0 ? reasons : ["see generated comment"],
+		});
+	}
+	return {
+		target,
+		schemaName,
+		fromVersion: from.version,
+		toVersion: to.version,
+		autoCount,
+		userSupplied,
+	};
+}
+
+function printMigrationSummary(summaries: MigrationSummary[]) {
+	const totalAuto = summaries.reduce((n, s) => n + s.autoCount, 0);
+	const totalUser = summaries.reduce((n, s) => n + s.userSupplied.length, 0);
+	if (totalAuto === 0 && totalUser === 0) return;
+	console.log(`\n📦 [Schema-Pop] migrations:`);
+	console.log(`  ✓ ${totalAuto} auto-derived`);
+	if (totalUser > 0) {
+		console.log(`  ⚠  ${totalUser} require user-supplied impl:`);
+		for (const s of summaries) {
+			for (const u of s.userSupplied) {
+				const tag = `${s.target}: ${s.schemaName ? `${s.schemaName} ` : ""}${u.typeName} ${s.fromVersion} → ${s.toVersion}`;
+				console.log(`     - ${tag}`);
+				for (const r of u.reasons) console.log(`         · ${r}`);
 			}
 		}
 	}

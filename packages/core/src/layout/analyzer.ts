@@ -502,6 +502,10 @@ export class SchemaAnalyzer {
 		const description = (node.meta as any)?.description || node.description;
 		const obsolete = (node.meta as any)?.obsolete;
 		const obsoleteReason = (node.meta as any)?.obsoleteReason;
+		const renamedFrom = (node.meta as any)?.renamedFrom;
+		const migrationMetaSpread = renamedFrom
+			? { migrationMeta: { renamedFrom } }
+			: {};
 		if (node.kind === "union") {
 			const plan = this.analyzeUnion(name, node);
 			plan.description = description;
@@ -509,6 +513,7 @@ export class SchemaAnalyzer {
 				plan.obsolete = true;
 				if (obsoleteReason) plan.obsoleteReason = obsoleteReason;
 			}
+			if (renamedFrom) plan.migrationMeta = { renamedFrom };
 			return plan;
 		}
 		const props = getProps(node);
@@ -519,6 +524,7 @@ export class SchemaAnalyzer {
 				plan.obsolete = true;
 				if (obsoleteReason) plan.obsoleteReason = obsoleteReason;
 			}
+			if (renamedFrom) plan.migrationMeta = { renamedFrom };
 			return plan;
 		}
 
@@ -533,6 +539,7 @@ export class SchemaAnalyzer {
 			...(obsolete
 				? { obsolete: true, ...(obsoleteReason ? { obsoleteReason } : {}) }
 				: {}),
+			...migrationMetaSpread,
 		};
 	}
 
@@ -575,7 +582,14 @@ export class SchemaAnalyzer {
 				? `${parentName}_${String(p.key)}`
 				: String(p.key);
 			let type = this.resolveFieldType(p.value, undefined, hint);
-			if (p.kind === "optional") type = { kind: "optional", inner: type };
+			// ArkType `"T = value"` makes the prop optional with `inner.default`.
+			// In schema-pop the default is migration metadata only — the field
+			// stays required at the binary layout level.
+			const inner = (p as any).inner || {};
+			const hasDefault = "default" in inner;
+			if (p.kind === "optional" && !hasDefault) {
+				type = { kind: "optional", inner: type };
+			}
 			const layout = this.getLayout(type);
 			return {
 				prop: p,
@@ -584,6 +598,8 @@ export class SchemaAnalyzer {
 				align: layout.align,
 				size: layout.size,
 				paddedSize: layout.paddedSize,
+				defaultValue: hasDefault ? inner.default : undefined,
+				hasDefault,
 			};
 		});
 
@@ -611,6 +627,16 @@ export class SchemaAnalyzer {
 				meta.prop.value?.description;
 			const fieldObsolete = propMeta.obsolete === true ? true : undefined;
 			const fieldObsoleteReason = propMeta.obsoleteReason;
+			const fieldRenamedFrom = propMeta.renamedFrom;
+
+			const migrationMeta: { renamedFrom?: string; defaultValue?: unknown } =
+				{};
+			if (fieldRenamedFrom) migrationMeta.renamedFrom = fieldRenamedFrom;
+			if (meta.hasDefault) migrationMeta.defaultValue = meta.defaultValue;
+			const migrationMetaSpread =
+				Object.keys(migrationMeta).length > 0
+					? { migrationMeta }
+					: {};
 
 			if (isBitwise) {
 				if (currentBitOffset + bitSize > 8) {
@@ -630,6 +656,7 @@ export class SchemaAnalyzer {
 					...(fieldObsoleteReason
 						? { obsoleteReason: fieldObsoleteReason }
 						: {}),
+					...migrationMetaSpread,
 				});
 				currentBitOffset += bitSize;
 			} else {
@@ -654,6 +681,7 @@ export class SchemaAnalyzer {
 					...(fieldObsoleteReason
 						? { obsoleteReason: fieldObsoleteReason }
 						: {}),
+					...migrationMetaSpread,
 				});
 				currentOffset += meta.paddedSize;
 			}

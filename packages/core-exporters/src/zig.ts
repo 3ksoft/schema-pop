@@ -1,5 +1,14 @@
-import type { LayoutPlan, BaseConfig, ExporterPlugin, Field } from "schema-pop";
-import { ExporterTools } from "schema-pop";
+import type {
+	LayoutPlan,
+	BaseConfig,
+	ExporterPlugin,
+	Field,
+	FieldChange,
+	FieldPlan,
+	StructPlan,
+	TypeDiff,
+} from "schema-pop";
+import { diffPlans, ExporterTools } from "schema-pop";
 import { zigHarness } from "./zig-harness";
 
 export interface ZigConfig
@@ -120,6 +129,125 @@ export function zig(config: ZigConfig): ExporterPlugin<ZigConfig> {
 				open: (mod) => `pub const ${mod} = struct {`,
 				close: "};",
 			}),
+		generateMigration: (fromPlan: LayoutPlan, toPlan: LayoutPlan) => {
+			const diff = diffPlans(fromPlan, toPlan);
+			const fromNs = fromPlan.version;
+			const toNs = toPlan.version;
+			const blocks: string[] = [];
+			for (const td of diff.types) {
+				const code = renderZigMigration(td, fromNs, toNs);
+				if (code) blocks.push(code);
+			}
+			if (blocks.length === 0) return "";
+			return `\n// migrations: ${fromNs} → ${toNs}\n${blocks.join("\n")}`;
+		},
 		getHarness: cfg.harness ? (plans) => zigHarness(plans) : undefined,
 	};
+
+	function zigLiteral(value: unknown): string {
+		if (typeof value === "bigint") return `${value}`;
+		if (typeof value === "boolean") return value ? "true" : "false";
+		if (typeof value === "number") return `${value}`;
+		if (typeof value === "string") return JSON.stringify(value);
+		return ".{}";
+	}
+
+	function languageDefault(field: Field): string {
+		if (field.kind === "primitive") {
+			const name = (field as any).name;
+			if (name === "bool" || name === "boolean") return "false";
+			return "0";
+		}
+		return ".{}";
+	}
+
+	function emitFieldExpr(
+		change: FieldChange | undefined,
+		toField: FieldPlan,
+	): string {
+		if (change?.kind === "renamed")
+			return `src.${fieldName(change.from.name)}`;
+		if (change?.kind === "type-widened")
+			return `@as(${ZIG_PRIMITIVES[(change.to.type as any).name] ?? "u32"}, src.${fieldName(change.from.name)})`;
+		if (change?.kind === "added" && change.default.kind === "literal")
+			return zigLiteral(change.default.value);
+		if (
+			change?.kind === "added" &&
+			change.default.kind === "language-default"
+		)
+			return languageDefault(toField.type);
+		if (toField.migrationMeta?.defaultValue !== undefined)
+			return zigLiteral(toField.migrationMeta.defaultValue);
+		return `src.${fieldName(toField.name)}`;
+	}
+
+	function renderZigMigration(
+		td: TypeDiff,
+		fromNs: string,
+		toNs: string,
+	): string {
+		if (td.kind !== "changed" && td.kind !== "renamed") return "";
+		const fromType = (td as any).from;
+		const toType = (td as any).to;
+		const fnName = `migrate_${typeName(toType.name)}_${fromNs}_to_${toNs}`;
+		const argT = `${fromNs}.${typeName(fromType.name)}`;
+		const retT = `${toNs}.${typeName(toType.name)}`;
+		if (td.status === "user-supplied") {
+			let s = `// schema-pop: implement \`pub fn ${fnName}(src: ${argT}) ${retT}\` in your user module\n`;
+			const reasons = td.fieldChanges
+				.filter((c) => c.status === "user-supplied")
+				.map((c) => {
+					switch (c.kind) {
+						case "type-narrowed":
+							return `field '${c.to.name}': narrowing`;
+						case "type-changed":
+							return `field '${c.to.name}': structural type change`;
+						case "added":
+							return `field '${c.field.name}': new field with no auto default`;
+						case "renamed":
+							return `field '${c.to.name}': renamed AND type changed`;
+						default:
+							return c.kind;
+					}
+				});
+			for (const r of reasons) s += `//   reason: ${r}\n`;
+			s += `pub extern fn ${fnName}(src: ${argT}) ${retT};\n`;
+			return s;
+		}
+		if (toType.kind === "struct") {
+			const stToType = toType as StructPlan;
+			const changeByToName = new Map<string, FieldChange>();
+			for (const c of td.fieldChanges) {
+				if (c.kind === "added") changeByToName.set(c.field.name, c);
+				else if (c.kind === "renamed") changeByToName.set(c.to.name, c);
+				else if (
+					c.kind === "type-widened" ||
+					c.kind === "type-narrowed" ||
+					c.kind === "type-changed" ||
+					c.kind === "reordered"
+				)
+					changeByToName.set(c.to.name, c);
+			}
+			let s = `// status: ${td.status}\n`;
+			if (td.kind === "renamed") s += `// renamed from "${td.oldName}"\n`;
+			s += `pub fn ${fnName}(src: ${argT}) ${retT} {\n`;
+			s += `${INDENT()}return ${retT}{\n`;
+			for (const f of stToType.fields) {
+				if (f.type.kind === "unit") continue;
+				if (f.bitSize && f.bitSize < 8) continue;
+				const ch = changeByToName.get(f.name);
+				const expr = emitFieldExpr(ch, f);
+				s += `${INDENT()}${INDENT()}.${fieldName(f.name)} = ${expr},\n`;
+			}
+			s += `${INDENT()}};\n`;
+			s += `}\n`;
+			return s;
+		}
+		return (
+			`// status: ${td.status}\n` +
+			`pub fn ${fnName}(src: ${argT}) ${retT} {\n` +
+			`${INDENT()}return @as(${retT}, @bitCast(src));\n` +
+			`}\n`
+		);
+	}
 }

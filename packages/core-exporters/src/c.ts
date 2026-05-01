@@ -1,5 +1,14 @@
-import type { LayoutPlan, BaseConfig, ExporterPlugin, Field } from "schema-pop";
-import { ExporterTools } from "schema-pop";
+import type {
+	LayoutPlan,
+	BaseConfig,
+	ExporterPlugin,
+	Field,
+	FieldChange,
+	FieldPlan,
+	StructPlan,
+	TypeDiff,
+} from "schema-pop";
+import { diffPlans, ExporterTools } from "schema-pop";
 
 export interface CConfig
 	extends Omit<BaseConfig, "fieldNaming" | "typeNaming" | "commentStyle"> {
@@ -102,5 +111,124 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 			}
 			return code;
 		},
+		generateMigration: (fromPlan: LayoutPlan, toPlan: LayoutPlan) => {
+			const diff = diffPlans(fromPlan, toPlan);
+			const fromMod = toSafeVersionIdentifier(fromPlan.version);
+			const toMod = toSafeVersionIdentifier(toPlan.version);
+			const blocks: string[] = [];
+			for (const td of diff.types) {
+				const code = renderCMigration(td, fromMod, toMod);
+				if (code) blocks.push(code);
+			}
+			if (blocks.length === 0) return "";
+			return `\n/* migrations: ${fromMod} -> ${toMod} */\n${blocks.join("\n")}`;
+		},
 	};
+
+	function cLiteral(value: unknown): string {
+		if (typeof value === "bigint") return `${value}LL`;
+		if (typeof value === "boolean") return value ? "true" : "false";
+		if (typeof value === "number") return `${value}`;
+		if (typeof value === "string") return JSON.stringify(value);
+		return "{0}";
+	}
+
+	function languageDefault(field: Field): string {
+		if (field.kind === "primitive") {
+			const name = (field as any).name;
+			if (name === "bool" || name === "boolean") return "false";
+			return "0";
+		}
+		return "{0}";
+	}
+
+	function emitFieldExpr(
+		change: FieldChange | undefined,
+		toField: FieldPlan,
+	): string {
+		if (change?.kind === "renamed")
+			return `src->${fieldName(change.from.name)}`;
+		if (change?.kind === "type-widened")
+			return `src->${fieldName(change.from.name)}`;
+		if (change?.kind === "added" && change.default.kind === "literal")
+			return cLiteral(change.default.value);
+		if (
+			change?.kind === "added" &&
+			change.default.kind === "language-default"
+		)
+			return languageDefault(toField.type);
+		if (toField.migrationMeta?.defaultValue !== undefined)
+			return cLiteral(toField.migrationMeta.defaultValue);
+		return `src->${fieldName(toField.name)}`;
+	}
+
+	function renderCMigration(
+		td: TypeDiff,
+		fromMod: string,
+		toMod: string,
+	): string {
+		if (td.kind !== "changed" && td.kind !== "renamed") return "";
+		const fromType = (td as any).from;
+		const toType = (td as any).to;
+		const fromTypeName = `${fromMod}_${typeName(fromType.name)}`;
+		const toTypeName = `${toMod}_${typeName(toType.name)}`;
+		const fnName = `migrate_${typeName(toType.name)}_${fromMod}_to_${toMod}`;
+		const sig = `void ${fnName}(const ${fromTypeName} *src, ${toTypeName} *dst)`;
+		if (td.status === "user-supplied") {
+			let s = `/* schema-pop: implement \`${sig}\` in your own .c */\n`;
+			const reasons = td.fieldChanges
+				.filter((c) => c.status === "user-supplied")
+				.map((c) => {
+					switch (c.kind) {
+						case "type-narrowed":
+							return `field '${c.to.name}': narrowing`;
+						case "type-changed":
+							return `field '${c.to.name}': structural type change`;
+						case "added":
+							return `field '${c.field.name}': new field with no auto default`;
+						case "renamed":
+							return `field '${c.to.name}': renamed AND type changed`;
+						default:
+							return c.kind;
+					}
+				});
+			for (const r of reasons) s += `/*   reason: ${r} */\n`;
+			s += `${sig};\n`;
+			return s;
+		}
+		if (toType.kind === "struct") {
+			const stToType = toType as StructPlan;
+			const changeByToName = new Map<string, FieldChange>();
+			for (const c of td.fieldChanges) {
+				if (c.kind === "added") changeByToName.set(c.field.name, c);
+				else if (c.kind === "renamed") changeByToName.set(c.to.name, c);
+				else if (
+					c.kind === "type-widened" ||
+					c.kind === "type-narrowed" ||
+					c.kind === "type-changed" ||
+					c.kind === "reordered"
+				)
+					changeByToName.set(c.to.name, c);
+			}
+			let s = `/* status: ${td.status} */\n`;
+			if (td.kind === "renamed")
+				s += `/* renamed from "${td.oldName}" */\n`;
+			s += `static inline ${sig} {\n`;
+			for (const f of stToType.fields) {
+				if (f.type.kind === "unit") continue;
+				if (f.bitSize && f.bitSize < 8) continue;
+				const ch = changeByToName.get(f.name);
+				const expr = emitFieldExpr(ch, f);
+				s += `${INDENT()}dst->${fieldName(f.name)} = ${expr};\n`;
+			}
+			s += `}\n`;
+			return s;
+		}
+		return (
+			`/* status: ${td.status} */\n` +
+			`static inline ${sig} {\n` +
+			`${INDENT()}*dst = *(const ${toTypeName} *)src;\n` +
+			`}\n`
+		);
+	}
 }

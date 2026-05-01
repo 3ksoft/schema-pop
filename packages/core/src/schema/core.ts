@@ -15,6 +15,7 @@ declare global {
 			description?: string;
 			obsolete?: boolean;
 			obsoleteReason?: string;
+			renamedFrom?: string;
 		};
 	}
 }
@@ -23,7 +24,10 @@ declare global {
  * Attaches a text description to the field metadata.
  */
 export const Describe = generic(["t", "unknown"], ["d", "string"])(
-	(args) => (args.t as Type).configure({ description: String(args.d) }),
+	(args) =>
+		(args.t as Type).configure({
+			description: String((args.d as any).unit),
+		}),
 	class extends Hkt<[t: unknown, d: string]> {
 		declare body: this[0];
 	},
@@ -118,6 +122,25 @@ export const Obsolete = generic(["t", "unknown"], ["reason", "string"])(
 	},
 );
 
+/**
+ * Marks a field/type as renamed in this schema version: in the previous
+ * version it was called `oldName`. Migration emit uses this to map values
+ * across the rename instead of treating the change as (removed, added).
+ *
+ * The marker affects migration metadata only — the v2 layout/output is
+ * identical to the un-marked version. The marker resets per migration step;
+ * v3 doesn't need to know what v1 called the field, only what v2 called it.
+ */
+export const Renamed = generic(["t", "unknown"], ["oldName", "string"])(
+	(args) =>
+		(args.t as Type).configure({
+			renamedFrom: String((args.oldName as any).unit),
+		}),
+	class extends Hkt<[t: unknown, oldName: string]> {
+		declare body: this[0];
+	},
+);
+
 export const $schemaPop = scope({
 	Describe,
 	Binary,
@@ -126,4 +149,5 @@ export const $schemaPop = scope({
 	Scale,
 	At,
 	Obsolete,
+	Renamed,
 });

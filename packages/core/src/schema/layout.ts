@@ -94,6 +94,9 @@ export const $layout = scope({
 		"description?": "string",
 		"obsolete?": "boolean",
 		"obsoleteReason?": "string",
+		// `migrationMeta?: MigrationMeta` is added as a TS-only field on the
+		// exported types — keeping it out of the arktype scope here avoids
+		// tipping inference past the TS serialization limit.
 	},
 
 	InlineStructField: {
@@ -197,23 +200,52 @@ export const {
 	LayoutPlan,
 } = $layout.export();
 
-export type AliasPlan = typeof AliasPlan.infer;
+/**
+ * Migration-time metadata attached to fields and types.
+ * - `renamedFrom`: from `Renamed<T, "oldName">` marker.
+ * - `defaultValue`: from ArkType native default (`"T = value"`).
+ * Plain TS type — not in the arktype scope (would push inference past
+ * the TS serialization limit).
+ */
+export type MigrationMeta = {
+	renamedFrom?: string;
+	defaultValue?: unknown;
+};
+
 export type AnyField = typeof AnyField.infer;
 export type ArrayField = typeof ArrayField.infer;
-export type EnumPlan = typeof EnumPlan.infer;
 export type EnumVariant = typeof EnumVariant.infer;
 export type Field = typeof Field.infer;
-export type FieldPlan = typeof FieldPlan.infer;
 export type InlineStructField = typeof InlineStructField.infer;
 export type MapField = typeof MapField.infer;
 export type OptionalField = typeof OptionalField.infer;
 export type PrimitiveField = typeof PrimitiveField.infer;
 export type ReferenceField = typeof ReferenceField.infer;
 export type StringField = typeof StringField.infer;
-export type StructPlan = typeof StructPlan.infer;
-export type UnionPlan = typeof UnionPlan.infer;
 export type VariantPlan = typeof VariantPlan.infer;
-export type TypePlan = typeof TypePlan.infer;
 export type TypeLayout = typeof TypeLayout.infer;
 export type LayoutConfig = typeof LayoutConfig.infer;
-export type LayoutPlan = typeof LayoutPlan.infer;
+
+// Plans that carry migrationMeta — TS-only addition on top of the arktype
+// scope, since adding it inside the scope tips TS inference past the
+// serialization limit.
+export type FieldPlan = typeof FieldPlan.infer & {
+	migrationMeta?: MigrationMeta;
+};
+export type StructPlan = Omit<typeof StructPlan.infer, "fields"> & {
+	fields: FieldPlan[];
+	migrationMeta?: MigrationMeta;
+};
+export type UnionPlan = typeof UnionPlan.infer & {
+	migrationMeta?: MigrationMeta;
+};
+export type EnumPlan = typeof EnumPlan.infer & {
+	migrationMeta?: MigrationMeta;
+};
+export type AliasPlan = typeof AliasPlan.infer & {
+	migrationMeta?: MigrationMeta;
+};
+export type TypePlan = StructPlan | UnionPlan | EnumPlan | AliasPlan;
+export type LayoutPlan = Omit<typeof LayoutPlan.infer, "types"> & {
+	types: TypePlan[];
+};
