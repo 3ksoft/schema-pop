@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo/schema-pop-wordmark.svg" alt="schema-pop" width="480" />
+  <img src="docs/logo/schema-pop-wordmark.svg" alt="schema-pop" width="480" style="aspect-ratio:4" />
 </p>
 
 <p align="center"><em>Memory-layout-first schemas for zero-copy cross-language data structures.</em></p>
