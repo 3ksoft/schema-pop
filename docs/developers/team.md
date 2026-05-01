@@ -1,2 +1,2 @@
 Karol Rybak
-Partycja Dżeminika
+Klaudia Dżeminika
