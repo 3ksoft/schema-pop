@@ -105,6 +105,15 @@ export async function buildSchema(
 			});
 			const plan = analyzer.analyze(safeVersion, config.endian || "le");
 
+			// Attach function declarations from the same module if exported.
+			// Importers (tree-sitter / clang) emit these as a named array
+			// alongside the arktype scope; the analyzer never produces them
+			// because functions aren't part of arktype's domain.
+			const functions = module["functions"];
+			if (Array.isArray(functions) && functions.length > 0) {
+				plan.functions = functions;
+			}
+
 			for (const target of targets) {
 				const instance = target as ExporterPlugin<any>;
 				const targetConfig = instance.config;
