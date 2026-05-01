@@ -26,13 +26,24 @@ cd "$ROOT"
 PACKAGES=(packages/core packages/core-exporters packages/extra-exporters packages/create)
 
 if [ -z "$DRY_RUN" ]; then
-	echo "==> Bumping all packages to $VERSION"
+	echo "==> Bumping all packages to $VERSION (and pinning workspace deps)"
 	for pkg in "${PACKAGES[@]}"; do
 		node -e "
 			const fs = require('fs');
 			const p = '$pkg/package.json';
 			const j = JSON.parse(fs.readFileSync(p, 'utf8'));
 			j.version = '$VERSION';
+			// bun publish rewrites workspace:* to the LAST PUBLISHED version
+			// (not the local bumped version), which leaves siblings out of
+			// sync. Pin them ourselves so the published tarball deps match.
+			for (const section of ['dependencies', 'peerDependencies']) {
+				if (!j[section]) continue;
+				for (const dep of Object.keys(j[section])) {
+					if (dep === 'schema-pop' || dep.startsWith('@schema-pop/')) {
+						j[section][dep] = '$VERSION';
+					}
+				}
+			}
 			fs.writeFileSync(p, JSON.stringify(j, null, '\t') + '\n');
 		"
 	done
