@@ -1,7 +1,7 @@
 /// <reference types="@types/bun" />
 import { describe, expect, test } from "bun:test";
 import { parseRust } from "./parser";
-import { walkRustFile } from "./walk";
+import { walkRustFile } from "./walk-rust";
 import { emitArktypeScope } from "./emit";
 
 async function ir(src: string) {

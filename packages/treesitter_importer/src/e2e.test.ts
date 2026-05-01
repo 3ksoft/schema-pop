@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import { SchemaAnalyzer, scope, binary } from "schema-pop";
 import { parseRust } from "./parser";
-import { walkRustFile } from "./walk";
+import { walkRustFile } from "./walk-rust";
 import { emitArktypeScope } from "./emit";
 
 /**

@@ -8,6 +8,7 @@
 	"bun:main": "./src/index.ts",
 	"types": "./dist/index.d.ts",
 	"bin": {
+		"schema-pop-import": "./src/cli.ts",
 		"schema-pop-import-rust": "./src/cli.ts"
 	},
 	"files": [
