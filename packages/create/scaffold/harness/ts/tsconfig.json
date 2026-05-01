@@ -1,0 +1,16 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"strict": true,
+		"declaration": true,
+		"skipLibCheck": true,
+		"esModuleInterop": true,
+		"isolatedModules": true,
+		"noEmit": true,
+		"allowImportingTsExtensions": true,
+		"resolveJsonModule": true,
+		"types": ["node"]
+	}
+}

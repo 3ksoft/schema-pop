@@ -1,0 +1,8 @@
+cpp/src/schema.hpp
+cpp/src/schema.h
+ts/src/schema.ts
+bun.lock
+node_modules
+dist
+build
+target

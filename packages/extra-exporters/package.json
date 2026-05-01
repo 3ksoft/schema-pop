@@ -1,0 +1,27 @@
+{
+	"name": "@schema-pop/extra-exporters",
+	"version": "0.1.0",
+	"type": "module",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"bun:main": "./src/index.ts",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist",
+		"src"
+	],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"scripts": {
+		"build": "rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --packages external && tsc --declaration --emitDeclarationOnly --outDir dist --noEmit false",
+		"typecheck": "tsc --noEmit",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"schema-pop": "workspace:*"
+	}
+}

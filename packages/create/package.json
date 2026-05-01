@@ -1,0 +1,23 @@
+{
+	"name": "create-schema-pop",
+	"version": "0.1.0",
+	"type": "module",
+	"bin": {
+		"create-schema-pop": "bin.ts"
+	},
+	"scripts": {
+		"build": "..setup for npm export",
+		"typecheck": "tsc --noEmit",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"@clack/prompts": "^1.2.0",
+		"@types/bun": "^1.3.13",
+		"kolorist": "^1.8.0",
+		"prompts": "^2.4.2",
+		"schema-pop": "latest"
+	},
+	"devDependencies": {
+		"@types/node": "^25.6.0"
+	}
+}

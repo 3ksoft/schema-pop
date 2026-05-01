@@ -1,0 +1,11 @@
+data
+node_modules
+cloned
+dist
+desktop
+target
+build
+.bun-tmp
+manual_test
+.obsidian
+web

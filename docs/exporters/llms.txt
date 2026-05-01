@@ -1,0 +1,144 @@
+### PROMPT: How to write a schema-pop exporter
+
+You are an expert systems engineer and compiler developer. Your task is to write a new exporter plugin for `schema-pop`, a tool that synchronizes data structures across multiple languages using a Single Source of Truth (ArkType in TypeScript) and a binary-accurate Intermediate Representation (IR) called the `LayoutPlan`.
+
+### 1. CORE CONCEPTS
+
+- **Stateless plugin functions**: Exporters are factory functions returning an object matching the `ExporterPlugin<TConfig>` interface. The `LayoutPlan` is passed to `generate(plan)`. The user's config is captured by closure on the factory call.
+- **LayoutPlan is the source of truth**: Pre-calculated `offset`, `bitOffset`, `bitSize`, `size`, `paddingAfter`, `align`. Your exporter NEVER recalculates these — only renders them.
+- **ABI consistency**: Generated code must exactly match the layout in the `LayoutPlan` so cross-language binary compatibility holds. Emit explicit padding fields when `paddingAfter > 0`.
+- **No runtime dependency**: Generated code must not depend on the `schema-pop` package at runtime.
+
+### 2. THE INTERFACE
+
+```ts
+import type { LayoutPlan, ExporterPlugin, BaseConfig } from "schema-pop";
+
+export interface ExporterPlugin<TConfig extends BaseConfig> {
+    name: string;
+    config: TConfig;
+    generate: (plan: LayoutPlan) => string | Record<string, string>;
+    wrapVersion?: (version: string, code: string) => string;
+    getFileHeader?: () => string;
+    getFileFooter?: () => string;
+    generateMigration?: (fromPlan: LayoutPlan, toPlan: LayoutPlan) => string;
+    getHarness?: (plans: LayoutPlan[]) => Record<string, string>;
+}
+```
+
+`generate` returns either a single concatenated string OR a `Record<filename, content>` for multi-file targets.
+
+`wrapVersion` is required if you want users to be able to ship multiple versions of the same schema in one output file — wrap each version in a namespace/module/prefix so they coexist.
+
+`getHarness` writes auxiliary files alongside the main output — buildable test harnesses, build scripts, package manifests. Receives ALL versioned plans for the schema in one call.
+
+### 3. THE INPUT (LayoutPlan)
+
+```ts
+type LayoutPlan = {
+    version: string;          // already a safe identifier, e.g. "test_schema_1_0"
+    endian: "le" | "be";
+    wordSize: 32 | 64;
+    autoLayout: boolean;
+    types: TypePlan[];
+};
+
+type TypePlan = StructPlan | UnionPlan | EnumPlan | AliasPlan;
+
+// All TypePlan share: name, kind, size, align, paddedSize.
+// Optional shared meta: description, obsolete, obsoleteReason.
+
+// StructPlan: { kind: "struct", fields: FieldPlan[], … }
+// UnionPlan:  { kind: "union",  tagOffset, tagSize, tagType, variants, … }
+// EnumPlan:   { kind: "enum",   underlyingType, variants: { name, value }[], … }
+// AliasPlan:  { kind: "alias",  type: Field, … }
+
+type FieldPlan = {
+    name, offset, bitOffset, bitSize, size, paddingAfter,
+    type: Field,
+    description?, obsolete?, obsoleteReason?,
+};
+
+type Field =
+  | { kind: "primitive", name, size, align, paddedSize, bitSize?, popKind }
+  | { kind: "reference", name }
+  | { kind: "array", item: Field, exactLength? | maxLength? }
+  | { kind: "string", maxLength? }
+  | { kind: "optional", inner: Field }
+  | { kind: "inlineStruct", fields: FieldPlan[], size, align, paddedSize }
+  | { kind: "unit" };
+```
+
+### 4. IMPLEMENTATION GUIDELINES
+
+1. **Use `ExporterTools(cfg)`** for naming, indentation, namespace wrapping:
+   ```ts
+   import { ExporterTools } from "schema-pop";
+   const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace, indentBlock } = ExporterTools(cfg);
+   ```
+2. **Naming**: always pass names through `typeName()` / `fieldName()` so users can pick `snake_case` / `camelCase` / `PascalCase` / `original`.
+3. **Padding**: when `f.paddingAfter > 0`, emit an explicit reserved field (`uint8_t _pad_x[N]` / `pub _pad: [u8; N]` / `_pad: [N]u8`).
+4. **Versioning**: implement `wrapVersion(version, code)` returning a namespace/module wrapper. The `version` string is already a safe identifier.
+5. **Non-scalar fields**: for ABI-strict targets (Rust/C++/Zig), the safe fallback for fields the analyzer can't reduce to a primitive is an opaque byte buffer of the right size. `mapScalarField(field, primitives, typeName)` returns `undefined` for kinds you must recurse into; for those, fall back to `[u8; size]` (or equivalent).
+6. **Deprecation**: respect `obsolete` / `obsoleteReason` on TypePlan and FieldPlan and emit language-native deprecation (`#[deprecated]`, `[[deprecated]]`, JSDoc `@deprecated`, etc.).
+7. **No header/footer surprises**: the builder injects `getFileHeader()` once per output file, then iterates versions, then `getFileFooter()`. Don't double-emit headers from `generate`.
+
+### 5. TEMPLATE
+
+```ts
+import type { LayoutPlan, ExporterPlugin, BaseConfig } from "schema-pop";
+import { ExporterTools } from "schema-pop";
+
+export interface MyConfig extends BaseConfig {
+    namespace?: string;
+}
+
+export function myLang(config: MyConfig): ExporterPlugin<MyConfig> {
+    const cfg: MyConfig = { commentStyle: "slash", ...config };
+    const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace } = ExporterTools(cfg);
+
+    return {
+        name: "my-lang",
+        config: cfg,
+        getFileHeader: () => `// generated\n\n`,
+        generate: (plan) => {
+            let code = "";
+            for (const t of plan.types) {
+                const tn = typeName(t.name);
+                if (t.kind === "struct") {
+                    code += `struct ${tn} {\n`;
+                    for (const f of t.fields) {
+                        if (f.type.kind === "unit") continue;
+                        const fn = fieldName(f.name);
+                        const ty = mapScalarField(f.type, MY_PRIMITIVES, typeName) ?? `bytes<${f.size}>`;
+                        code += `${INDENT()}${fn}: ${ty};\n`;
+                        if (f.paddingAfter > 0) code += `${INDENT()}_pad_${fn}: bytes<${f.paddingAfter}>;\n`;
+                    }
+                    code += `}\n\n`;
+                }
+                // … enum / union / alias …
+            }
+            return code;
+        },
+        wrapVersion: (version, code) => wrapNamespace(version, code, {
+            open: (mod) => `module ${mod} {`,
+            close: "}",
+        }),
+    };
+}
+
+const MY_PRIMITIVES: Record<string, string> = {
+    u8: "u8", i8: "i8", u16: "u16", i16: "i16",
+    u32: "u32", i32: "i32", u64: "u64", i64: "i64",
+    f32: "f32", f64: "f64", bool: "bool",
+};
+```
+
+### 6. REFERENCE IMPLEMENTATIONS
+
+Read these for canonical patterns:
+
+- `packages/core-exporters/src/rust.ts` + `rust-harness.ts` — full ABI-safe + buildable harness via `getHarness`
+- `packages/core-exporters/src/ts.ts` — JSDoc emit, `PopCodec` glue
+- `packages/extra-exporters/src/svg.ts` — `Record<string, string>` multi-file output, CSS-var-driven theming
+- `packages/extra-exporters/src/html.ts` + `html-app.ts` — single-file output composing with another exporter (`viz`)

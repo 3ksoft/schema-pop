@@ -1,0 +1,2 @@
+Karol Rybak
+Partycja Dżeminika

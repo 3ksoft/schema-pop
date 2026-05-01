@@ -1,0 +1,6 @@
+{
+	"name": "brainfuck-harness",
+	"scripts": {
+		"build": "gcc interpreter.c -o bf-interpreter && chmod +x harness"
+	}
+}

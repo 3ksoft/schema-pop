@@ -1,0 +1,1 @@
+All code is typescript 6.0 compatible, full strict mode, erasable syntax enabled.

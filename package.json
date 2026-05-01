@@ -1,0 +1,19 @@
+{
+	"name": "schema-pop-monorepo",
+	"private": true,
+	"type": "module",
+	"workspaces": [
+		"packages/*"
+	],
+	"scripts": {
+		"build": "cd packages/core && bun run build && cd ../core-exporters && bun run build && cd ../extra-exporters && bun run build",
+		"typecheck": "cd packages/core && bun run typecheck && cd ../core-exporters && bun run typecheck && cd ../extra-exporters && bun run typecheck && cd ../create && bun run typecheck",
+		"test": "cd packages/core && bun test && cd ../create && bun test"
+	},
+	"devDependencies": {
+		"arktype": "2.2.0",
+		"typescript": "~6.0.0",
+		"@types/node": "^25.6.0",
+		"verdaccio": "^6.5.2"
+	}
+}

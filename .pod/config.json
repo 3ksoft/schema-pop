@@ -1,0 +1,63 @@
+{
+  "profiles": [
+    {
+      "name": "core",
+      "label": "core",
+      "query": "+ packages/core/**/*.{ts,hpp,cpp,rs,toml,json,md}\n- packages/core/dist/**"
+    },
+    {
+      "name": "create",
+      "label": "create",
+      "query": "+ packages/create/**/*.{ts,hpp,cpp,rs,toml,json,md}"
+    },
+    {
+      "name": "core-exporters",
+      "label": "core-exporters",
+      "query": "+ packages/core-exporters/**/*.{ts,hpp,cpp,rs,toml,json,md}"
+    },
+    {
+      "name": "extra-exporters",
+      "label": "extr a-exporters",
+      "query": "+ packages/extra-exporters/**/*.{ts,hpp,cpp,rs,toml,json,md}"
+    },
+    {
+      "name": "web",
+      "label": "web",
+      "query": "+ web/**/*.{ts,hpp,cpp,rs,toml,json,md,html}"
+    },
+    {
+      "name": "docs",
+      "label": "docs",
+      "query": "+ docs/**/*.{ts,hpp,cpp,rs,toml,json,md}"
+    },
+    {
+      "name": "design",
+      "label": "design",
+      "query": "+ docs/design/**"
+    },
+    {
+      "name": "config",
+      "label": "config",
+      "query": "+ package.json\n+ */package.json\n+ */tsconfig.json"
+    },
+    {
+      "name": "manual_test",
+      "label": "manual_test",
+      "query": "+ manual_test/schemas/**/*.{ts,hpp,cpp,rs,toml,json,md,zig}"
+    }
+  ],
+  "projectRoot": "/home/kr/Documents/schema-pop",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 7401,
+    "serveGui": true
+  },
+  "tasks": {},
+  "notifications": {
+    "enableDesktop": true,
+    "enableGui": true
+  },
+  "forceRoot": false,
+  "syncVersion": false,
+  "version": "0.0.150"
+}
