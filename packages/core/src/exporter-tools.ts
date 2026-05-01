@@ -1,5 +1,5 @@
 import { applyNaming } from "./utils/naming";
-import type { Field } from "./schema/layout";
+import type { Field, TypePlan } from "./schema/layout";
 import type { NamingStrategy } from "./schema/exporter";
 
 const INDENT = (num = 1): string => "\t".repeat(num);
@@ -47,12 +47,42 @@ function mapScalarField(
 	return undefined;
 }
 
+/**
+ * True if a Field carries no fixed memory layout (rich-tier). Recursive:
+ * an array of unbounded items is rich, an optional<rich> is rich, etc.
+ * Binary-tier exporters use this to skip types they can't honestly emit.
+ */
+function isRichField(f: Field): boolean {
+	if (f.kind === "map" || f.kind === "any") return true;
+	if (f.kind === "primitive" && (f as any).popKind === "rich") return true;
+	if (f.kind === "array") return isRichField(f.item);
+	if (f.kind === "optional") return isRichField(f.inner);
+	if (f.kind === "inlineStruct")
+		return f.fields.some((fp) => isRichField(fp.type));
+	return false;
+}
+
+/**
+ * True if a TypePlan is binary-emittable. Wraps `isRichField` over all
+ * fields/variants so an exporter can decide to skip the whole type with a
+ * single check.
+ */
+function isRichType(t: TypePlan): boolean {
+	if (t.kind === "struct") return t.fields.some((f) => isRichField(f.type));
+	if (t.kind === "union")
+		return t.variants.some((v) => isRichField(v.type as Field));
+	if (t.kind === "alias") return isRichField(t.type);
+	return false;
+}
+
 export interface ExporterToolsKit {
 	INDENT: typeof INDENT;
 	indentBlock: typeof indentBlock;
 	wrapNamespace: typeof wrapNamespace;
 	toSafeVersionIdentifier: typeof toSafeVersionIdentifier;
 	mapScalarField: typeof mapScalarField;
+	isRichField: typeof isRichField;
+	isRichType: typeof isRichType;
 	typeName: (n: string) => string;
 	fieldName: (n: string) => string;
 }
@@ -71,6 +101,8 @@ export function ExporterTools(cfg: {
 		wrapNamespace,
 		toSafeVersionIdentifier,
 		mapScalarField,
+		isRichField,
+		isRichType,
 		typeName: (n: string) => applyNaming(n, cfg.typeNaming ?? "original"),
 		fieldName: (n: string) => applyNaming(n, cfg.fieldNaming ?? "original"),
 	};

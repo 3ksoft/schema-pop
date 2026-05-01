@@ -37,7 +37,7 @@ export function zig(config: ZigConfig): ExporterPlugin<ZigConfig> {
 		includeComptimeAssertions: true,
 		...config,
 	};
-	const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace } =
+	const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace, isRichType } =
 		ExporterTools(cfg);
 
 	function fieldZigType(
@@ -65,6 +65,12 @@ export function zig(config: ZigConfig): ExporterPlugin<ZigConfig> {
 					? `${indent}// DEPRECATED${reason ? `: ${reason}` : ""}\n`
 					: "";
 			for (const t of plan.types) {
+				if (isRichType(t)) {
+					console.warn(
+						`  ⚠ zig: skipping "${t.name}" — contains rich-tier types`,
+					);
+					continue;
+				}
 				const tn = typeName(t.name);
 				const tAny = t as any;
 				code += deprecatedComment(tAny.obsolete, tAny.obsoleteReason);

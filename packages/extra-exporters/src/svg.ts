@@ -37,6 +37,12 @@ function fieldTypeLabel(f: Field): string {
 			return `${fieldTypeLabel(f.inner)}?`;
 		case "inlineStruct":
 			return "{…}";
+		case "map": {
+			const k = f.keyKind === "number" ? "number" : "string";
+			return `Record<${k}, ${fieldTypeLabel(f.value)}>`;
+		}
+		case "any":
+			return "unknown";
 		case "unit":
 			return "unit";
 		default:

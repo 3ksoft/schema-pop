@@ -25,14 +25,33 @@ export const $layout = scope({
 
 	/** Recursive field definition */
 	Field:
-		"PrimitiveField | ReferenceField | ArrayField | StringField | OptionalField | InlineStructField | UnitField",
+		"PrimitiveField | ReferenceField | ArrayField | StringField | OptionalField | InlineStructField | UnitField | MapField | AnyField",
 
 	PrimitiveField: {
 		"...": "TypeLayout",
 		kind: "'primitive'",
 		name: "string",
 		"bitSize?": "number",
-		popKind: "'binary' | 'bitwise' | 'reserved' = 'binary'",
+		popKind: "'binary' | 'bitwise' | 'reserved' | 'rich' = 'binary'",
+	},
+
+	/**
+	 * Index-signature / Record<K, V>. No fixed memory layout; binary-tier
+	 * exporters should skip these with a warning. `value` is recursive Field.
+	 */
+	MapField: {
+		kind: "'map'",
+		keyKind: "'string' | 'number' | 'symbol' = 'string'",
+		value: "Field",
+	},
+
+	/**
+	 * arktype `unknown` / `any` / `unknown.any`. Carries no shape info;
+	 * exporters that can render an opaque value (TS `unknown`, JSON `any`)
+	 * may emit it; binary-tier exporters skip with a warning.
+	 */
+	AnyField: {
+		kind: "'any'",
 	},
 
 	ReferenceField: {
@@ -157,12 +176,14 @@ export const $layout = scope({
 
 export const {
 	AliasPlan,
+	AnyField,
 	ArrayField,
 	EnumPlan,
 	EnumVariant,
 	Field,
 	FieldPlan,
 	InlineStructField,
+	MapField,
 	OptionalField,
 	PrimitiveField,
 	ReferenceField,
@@ -177,12 +198,14 @@ export const {
 } = $layout.export();
 
 export type AliasPlan = typeof AliasPlan.infer;
+export type AnyField = typeof AnyField.infer;
 export type ArrayField = typeof ArrayField.infer;
 export type EnumPlan = typeof EnumPlan.infer;
 export type EnumVariant = typeof EnumVariant.infer;
 export type Field = typeof Field.infer;
 export type FieldPlan = typeof FieldPlan.infer;
 export type InlineStructField = typeof InlineStructField.infer;
+export type MapField = typeof MapField.infer;
 export type OptionalField = typeof OptionalField.infer;
 export type PrimitiveField = typeof PrimitiveField.infer;
 export type ReferenceField = typeof ReferenceField.infer;

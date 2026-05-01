@@ -33,7 +33,7 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
 		commentStyle: "star",
 		...config,
 	};
-	const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace } =
+	const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace, isRichType } =
 		ExporterTools(cfg);
 
 	function fieldCppType(
@@ -59,6 +59,12 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
 						: `[[deprecated]] `
 					: "";
 			for (const t of plan.types) {
+				if (isRichType(t)) {
+					console.warn(
+						`  ⚠ cpp: skipping "${t.name}" — contains rich-tier types`,
+					);
+					continue;
+				}
 				const tn = typeName(t.name);
 				const tAny = t as any;
 				const typeDeprecate = deprecatedAttr(

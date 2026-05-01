@@ -36,7 +36,7 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 		commentStyle: "slash",
 		...config,
 	};
-	const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace } =
+	const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace, isRichType } =
 		ExporterTools(cfg);
 
 	function fieldRustType(field: Field, fieldSize: number): string {
@@ -59,6 +59,12 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 						: `#[deprecated]\n`
 					: "";
 			for (const t of plan.types) {
+				if (isRichType(t)) {
+					console.warn(
+						`  ⚠ rust: skipping "${t.name}" — contains rich-tier types (Record / unknown / unbounded number)`,
+					);
+					continue;
+				}
 				const tn = typeName(t.name);
 				const tAny = t as any;
 				const typeDeprecate = deprecatedAttr(

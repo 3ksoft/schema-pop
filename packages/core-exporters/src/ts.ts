@@ -28,6 +28,10 @@ const PRIMITIVE_TS: Record<string, string> = {
 	i128: "bigint",
 	bool: "boolean",
 	boolean: "boolean",
+	// rich-tier primitives (popKind: 'rich')
+	number: "number",
+	bigint: "bigint",
+	string: "string",
 };
 
 export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
@@ -50,6 +54,12 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 				return "string";
 			case "array":
 				return `${fieldType(field.item)}[]`;
+			case "map": {
+				const keyT = field.keyKind === "number" ? "number" : "string";
+				return `Record<${keyT}, ${fieldType(field.value)}>`;
+			}
+			case "any":
+				return "unknown";
 			case "inlineStruct": {
 				const parts = field.fields
 					.filter((f) => f.type.kind !== "unit")

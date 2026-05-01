@@ -1,5 +1,5 @@
 import type { LayoutPlan, Field, BaseConfig, ExporterPlugin } from "schema-pop";
-import { applyNaming } from "schema-pop";
+import { applyNaming, ExporterTools } from "schema-pop";
 
 export interface GlslConfig extends BaseConfig {}
 
@@ -44,8 +44,15 @@ export function glsl(config: GlslConfig): ExporterPlugin<GlslConfig> {
 		name: "glsl",
 		config: cfg,
 		generate: (plan: LayoutPlan) => {
+			const { isRichType } = ExporterTools(cfg);
 			let code = "";
 			for (const t of plan.types) {
+				if (isRichType(t)) {
+					console.warn(
+						`  ⚠ glsl: skipping "${t.name}" — contains rich-tier types`,
+					);
+					continue;
+				}
 				if (t.kind === "struct") {
 					code += `struct ${applyNaming(t.name, cfg.typeNaming!)} {\n`;
 					let currentBitfieldOffset = -1;

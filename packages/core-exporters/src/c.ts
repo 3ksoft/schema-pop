@@ -31,7 +31,8 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 		commentStyle: "star",
 		...config,
 	};
-	const { typeName, fieldName, INDENT, mapScalarField } = ExporterTools(cfg);
+	const { typeName, fieldName, INDENT, mapScalarField, isRichType } =
+		ExporterTools(cfg);
 	return {
 		name: "c",
 		config: cfg,
@@ -42,6 +43,12 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 			const mod = plan.version;
 			const refName = (n: string) => `${mod}_${typeName(n)}`;
 			for (const t of plan.types) {
+				if (isRichType(t)) {
+					console.warn(
+						`  ⚠ c: skipping "${t.name}" — contains rich-tier types`,
+					);
+					continue;
+				}
 				if (t.kind === "struct") {
 					const tn = `${mod}_${typeName(t.name)}`;
 					code += `typedef struct ${tn} {\n`;

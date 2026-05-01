@@ -35,6 +35,12 @@ export interface AnalyzerConfig {
 	wordSize?: 32 | 64;
 	autoLayout?: boolean;
 	layoutType?: "aligned" | "zero-padding" | "std140" | "std430" | "dynamic";
+	/**
+	 * 'binary' (default) hard-errors on rich-tier types (Record, unknown,
+	 * unbounded number/string). 'rich' emits MapField/AnyField/rich
+	 * primitives and lets exporters decide how to handle them.
+	 */
+	mode?: "binary" | "rich";
 }
 
 interface InferenceCandidate {
@@ -62,12 +68,29 @@ export class SchemaAnalyzer {
 			wordSize: 64,
 			autoLayout: true,
 			layoutType: "aligned",
+			mode: "binary",
 			...config,
 		};
 		this.module = scope.export();
 		this.aliases = (scope as any).aliases ?? {};
 		this.primitiveNames = Object.keys(binary.export());
-		this.scopeNames = [...scope.exportedNames];
+		// Include spread-imported aliases (from `...other.import()`) so
+		// references to them resolve. `module` (= scope.export()) only
+		// covers locally-declared types. Skip generic templates (Binary,
+		// Bit, Describe, Reserved, …) — they're factories, not concrete
+		// types, and their `.internal` doesn't expose a normal BaseNode.
+		const ownNames = [...scope.exportedNames];
+		const usableAliases = Object.keys(this.aliases).filter((n) => {
+			const a: any = this.aliases[n];
+			return typeof a?.internal?.isRoot === "function";
+		});
+		this.scopeNames = Array.from(new Set([...ownNames, ...usableAliases]));
+		// Backfill `module` so getPlan can analyze spread-imported types.
+		for (const name of usableAliases) {
+			if (!(name in this.module)) {
+				this.module[name] = this.aliases[name] as Type;
+			}
+		}
 		this.inferenceOrder = this.buildInferenceOrder();
 	}
 
@@ -157,6 +180,25 @@ export class SchemaAnalyzer {
 		if (this.resolvedPlans.has(name)) return this.resolvedPlans.get(name)!;
 
 		if (this.visiting.has(name)) {
+			// In rich mode, recursive references (e.g. Type → Array → Type)
+			// are valid — layout is irrelevant for rich-tier types. Return a
+			// forward-reference stub; downstream consumers see the alias
+			// shape and can emit a TS interface that references itself.
+			if (this.config.mode === "rich") {
+				return {
+					kind: "alias",
+					name,
+					size: 0,
+					align: 1,
+					paddedSize: 0,
+					type: {
+						kind: "reference",
+						name,
+						indirection: "inline",
+						isForward: true,
+					},
+				};
+			}
 			this.error(`Cyclic dependency detected for ${name}`);
 			return {
 				kind: "alias",
@@ -204,6 +246,11 @@ export class SchemaAnalyzer {
 
 		const visit = (name: string) => {
 			if (visited.has(name)) return;
+			// Mark visited BEFORE recursing so reference cycles
+			// (Type → Array → Type) terminate cleanly. The cycle is
+			// already broken at IR level because Field references
+			// are by name, not by inlined struct.
+			visited.add(name);
 			const plan = this.resolvedPlans.get(name);
 			if (plan) {
 				const deps = new Set<string>();
@@ -211,6 +258,7 @@ export class SchemaAnalyzer {
 					if (field.kind === "reference") deps.add(field.name);
 					else if (field.kind === "array") addDeps(field.item);
 					else if (field.kind === "optional") addDeps(field.inner);
+					else if (field.kind === "map") addDeps(field.value);
 				};
 				if (plan.kind === "struct") plan.fields.forEach((f) => addDeps(f.type));
 				else if (plan.kind === "union")
@@ -219,7 +267,6 @@ export class SchemaAnalyzer {
 				for (const dep of deps) visit(dep);
 				sorted.push(plan);
 			}
-			visited.add(name);
 		};
 
 		for (const name of names) visit(name);
@@ -833,6 +880,54 @@ export class SchemaAnalyzer {
 			});
 		}
 
+		const richAllowed = this.config.mode === "rich";
+
+		// arktype `unknown` / `unknown.any`: empty intersection.
+		if (
+			(node as any).expression === "unknown" &&
+			Object.keys((node as any).inner ?? {}).length === 0
+		) {
+			if (!richAllowed) {
+				this.error(
+					`unknown / any type is rich-tier — set mode: 'rich' on the version config to allow it`,
+				);
+			}
+			return { kind: "any" };
+		}
+
+		// arktype `Record<K, V>` / `{ [string]: V }`: intersection with
+		// only an index signature. If the structure also has required/
+		// optional props, we treat it as a regular struct (mixed bags
+		// are rare in practice; we'd handle them as inline structs and
+		// drop the index sig for now).
+		const structureNode = (node as any).inner?.structure;
+		const indexes = structureNode?.index;
+		if (indexes && indexes.length > 0) {
+			const requiredCount = structureNode.required?.length ?? 0;
+			const optionalCount = structureNode.optional?.length ?? 0;
+			if (requiredCount === 0 && optionalCount === 0) {
+				if (!richAllowed) {
+					this.error(
+						`Record<K, V> / index-signature is rich-tier — set mode: 'rich' on the version config to allow it`,
+					);
+				}
+				const idx0 = indexes[0];
+				const sigDomain = (idx0.signature?.domain ?? "string") as
+					| "string"
+					| "number"
+					| "symbol";
+				return {
+					kind: "map",
+					keyKind: sigDomain,
+					value: this.resolveFieldType(
+						idx0.value,
+						undefined,
+						pathHint ? `${pathHint}Value` : undefined,
+					),
+				};
+			}
+		}
+
 		if (node.kind === "union") {
 			const children = node.children ?? [];
 			const allUnit = children.every(
@@ -872,9 +967,20 @@ export class SchemaAnalyzer {
 		}
 
 		const expr = typeof node.expression === "string" ? node.expression : "";
+		// arktype prefixes scope-local references with `$` in `expression`
+		// (e.g. `Type` becomes `$Type`); cross-scope spread imports may
+		// keep the bare name. Match by name in both cases.
+		const refByName = expr.startsWith("$")
+			? expr.slice(1)
+			: /^[A-Za-z_][\w]*$/.test(expr)
+				? expr
+				: undefined;
 		const foundName = this.scopeNames.find((n) => {
 			const entry = this.module[n];
-			return entry && (entry.internal === node || entry.expression === expr);
+			if (!entry) return false;
+			if (entry.internal === node || entry.expression === expr) return true;
+			if (refByName && n === refByName) return true;
+			return false;
 		});
 
 		if (foundName && foundName !== currentTypeName) {
@@ -940,6 +1046,53 @@ export class SchemaAnalyzer {
 
 		const inferred = this.inferPrimitiveFromConstraints(node);
 		if (inferred) return inferred;
+
+		// Last-chance rich fallbacks for unconstrained domains. These have
+		// no fixed memory layout — binary-tier exporters skip them; TS/HTML
+		// render them as `number` / `string` / opaque value.
+		if (domainNode) {
+			const dom = (domainNode as any).domain ?? (domainNode as any).expression;
+			if (dom === "number" || dom === "bigint") {
+				if (!richAllowed) {
+					this.error(
+						`unbounded ${dom} is rich-tier — add a constraint (e.g. "0 <= number <= 65535") or set mode: 'rich'`,
+					);
+				}
+				return this.assertField({
+					kind: "primitive",
+					name: dom,
+					size: 0,
+					align: 1,
+					paddedSize: 0,
+					popKind: "rich",
+				});
+			}
+		}
+
+		// Unhandled union (mixed-literal, value-level union like `string | string[]`).
+		// Falls into rich-tier as opaque Any; binary-tier exporters skip these.
+		if (node.kind === "union") {
+			if (!richAllowed) {
+				this.error(
+					`union "${expr}" not classifiable as enum/discriminated — set mode: 'rich' to emit as opaque Any`,
+				);
+			} else {
+				console.warn(
+					`  ⚠ schema-pop: union "${expr}" not classifiable as enum/discriminated — emitting as rich Any`,
+				);
+			}
+			return { kind: "any" };
+		}
+
+		// Rich-mode catch-all: anything we can't classify (inline anonymous
+		// structs at field level, exotic morphs, etc.) falls back to Any with
+		// a warning so the build keeps moving. Binary mode still hard-errors.
+		if (richAllowed) {
+			console.warn(
+				`  ⚠ schema-pop: unhandled type "${expr.slice(0, 80)}${expr.length > 80 ? "…" : ""}" — emitting as rich Any`,
+			);
+			return { kind: "any" };
+		}
 
 		this.error(`Unable to resolve field type: ${expr}`);
 		return this.assertField({

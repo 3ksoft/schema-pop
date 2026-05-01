@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createJiti } from "jiti";
 import { SchemaAnalyzer } from "./layout/analyzer";
+import { runBindings, type BindingSpec } from "./bind";
 import type { ExporterPlugin, LayoutPlan } from "./schema/index";
 import { renderComment } from "./utils/comments";
 
@@ -17,7 +18,11 @@ export async function buildConfig(
 	const rootDir = path.dirname(resolvedPath);
 	const configModule = (await jiti.import(resolvedPath)) as any;
 	const config = configModule.default || configModule.config || configModule;
-	await buildSchema(config, rootDir, ctx);
+	if (config.schemas?.length) await buildSchema(config, rootDir, ctx);
+	const bindings = config.bindings as BindingSpec[] | undefined;
+	if (bindings?.length) {
+		await runBindings(bindings, rootDir);
+	}
 }
 
 export function generateTypes(schema: LayoutPlan, target: ExporterPlugin<any>) {
@@ -82,6 +87,7 @@ export async function buildSchema(
 				wordSize: config.wordSize,
 				autoLayout: config.autoLayout,
 				layoutType: config.layout || "aligned",
+				mode: v.mode === "rich" ? "rich" : "binary",
 			});
 			const plan = analyzer.analyze(safeVersion, config.endian || "le");
 
