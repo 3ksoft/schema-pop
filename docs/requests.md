@@ -169,6 +169,75 @@ Remaining suggestions:
 
 ---
 
+## P13 — `versionNamespace: false` only honored by Rust exporter
+
+`rust({ versionNamespace: false })` (P2 fix) skips the `pub mod konektor_1_0`
+wrap. The C exporter however still prefixes every symbol with the version
+identifier:
+
+```c
+typedef uint8_t konektor_1_0_BleMode;
+#define KONEKTOR_1_0_BLE_MODE_OFF ((konektor_1_0_BleMode)1)
+```
+
+So C consumers still need to write `konektor_1_0_BleMode_Off` instead of
+the natural `BleMode_Off`. Suggestion: honor the same `versionNamespace`
+config option in `c()` and `cpp()`. When false, drop the `konektor_1_0_`
+prefix from typedef names and `KONEKTOR_1_0_` prefix from `#define`s.
+
+For konektor we sed-rewrote ~30 C call sites instead of waiting; not a
+huge deal but every new exporter target re-introduces the same friction.
+
+---
+
+## P12 — More integration findings (round 2 with 0.1.13 / 0.1.14 features)
+
+After regenerating with `versionNamespace: false` + the new real-enum
+generation, a fresh wave of issues:
+
+- **`MacAddress` becomes opaque `pub struct MacAddress { pub _bytes: [u8; 12] }`**
+  even though the schema declares `MacAddress: "u8[]<=6"`. Consumers (whose
+  code reads `mac.as_slice()` or constructs from `Vec<u8>` / `[u8; 6]`)
+  break. Suggestion: emit type aliases for `T[]<=N` schemas as
+  `pub type MacAddress = SharedVec<u8, 6>;` so callers get `as_slice` /
+  `From<[u8; 6]>` automatically. The `_bytes: [u8; 12]` isn't useful —
+  it's a magic 12 (= 4-byte length + 6-byte data + 2 padding) that the
+  caller has no way to interpret.
+
+- **Inline-string-union field types get auto-named**: `WsCommand.command:
+  'ClearBleScan' | ...` becomes `WsCommandCommand` (parent + field name
+  PascalCased). Consumers using the old generation's `Command` name break.
+  Sed-able but worth documenting the naming convention.
+
+- **`HidDeviceType` has no fallback variant** — the schema declares only
+  Gamepad/Keyboard/Mouse, but downstream code wants an `Unknown`/`None`
+  for "device type not yet detected" cases. Today users either add an
+  explicit "Unknown" variant to the schema (verbose) or wrap in
+  `Option<HidDeviceType>` (idiomatic). Maybe a `#[default]` annotation
+  in the schema (`HidDeviceType: "'Gamepad' | 'Keyboard' | 'Mouse'", with
+  `defaultVariant: "..."` somehow) would let `derive(Default)` work.
+
+- **`as_str()` confirmed missing** for both plain enums and tagged-union
+  enums. Already in P11; reiterating because it shows up in many places
+  (debug logging, telemetry serialization, web UI labels). Concrete
+  proposal: `pub fn as_str(&self) -> &'static str` returning the schema
+  variant name string. For tagged unions, return the tag's name.
+
+- **`_pad_*` fields still need explicit specification** in struct
+  literals: `KeyboardData { modifiers, keys, _pad_modifiers: [0; 1] }`.
+  When the only padding is for alignment (zero-init is always correct),
+  this is pure noise. Either: (a) generate `Default` for plain structs so
+  `..Default::default()` covers padding, or (b) generate constructor
+  functions like `KeyboardData::new(modifiers, keys)` that hide padding.
+
+- **Workspace dep to local schema-pop via `file:` works** but hits Bun
+  registry caching: `bun add schema-pop@latest` happily resolves to
+  whatever's in `~/.bun/install/global` cache. Had to use
+  `file:../../../schema-pop/packages/core` to escape the cache. Worth a
+  note in scaffold docs that local development requires file: deps.
+
+---
+
 ## Notes on what works well
 
 For balance — these are wins to keep:

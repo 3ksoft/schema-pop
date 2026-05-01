@@ -2,19 +2,30 @@ import { applyNaming } from "./utils/naming";
 import type { Field, TypePlan } from "./schema/layout";
 import type { NamingStrategy } from "./schema/exporter";
 
-const INDENT = (num = 1): string => "\t".repeat(num);
+/**
+ * Unified indent helper.
+ * - `indent()` → one tab (was `INDENT()`).
+ * - `indent(n)` → n tabs (was `INDENT(n)`).
+ * - `indent(text)` → indent each non-empty line of `text` by one tab.
+ * - `indent(text, prefix)` → indent by `prefix` (was `indentBlock(text, prefix)`).
+ */
+function indent(): string;
+function indent(n: number): string;
+function indent(text: string, prefix?: string): string;
+function indent(arg?: number | string, prefix = "\t"): string {
+	if (typeof arg === "string") {
+		return arg
+			.split("\n")
+			.map((l) => (l ? `${prefix}${l}` : l))
+			.join("\n");
+	}
+	return "\t".repeat(arg ?? 1);
+}
 
 function toSafeVersionIdentifier(version: string): string {
 	let slug = version.replace(/[.-]/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
 	if (/^[0-9]/.test(slug)) slug = `v${slug}`;
 	return slug;
-}
-
-function indentBlock(code: string, indent = "\t"): string {
-	return code
-		.split("\n")
-		.map((l) => (l ? `${indent}${l}` : l))
-		.join("\n");
 }
 
 export interface NamespaceWrapper {
@@ -29,7 +40,7 @@ function wrapNamespace(
 	w: NamespaceWrapper,
 ): string {
 	const mod = toSafeVersionIdentifier(version);
-	return `${w.open(mod)}\n${indentBlock(body, w.indent ?? "\t")}${w.close}\n`;
+	return `${w.open(mod)}\n${indent(body, w.indent ?? "\t")}${w.close}\n`;
 }
 
 /**
@@ -76,8 +87,7 @@ function isRichType(t: TypePlan): boolean {
 }
 
 export interface ExporterToolsKit {
-	INDENT: typeof INDENT;
-	indentBlock: typeof indentBlock;
+	indent: typeof indent;
 	wrapNamespace: typeof wrapNamespace;
 	toSafeVersionIdentifier: typeof toSafeVersionIdentifier;
 	mapScalarField: typeof mapScalarField;
@@ -89,15 +99,14 @@ export interface ExporterToolsKit {
 
 /**
  * Build a per-exporter helper kit. Naming functions are pre-bound to the exporter's config.
- * Usage: `const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace } = ExporterTools(cfg);`
+ * Usage: `const { typeName, fieldName, indent, mapScalarField, wrapNamespace } = ExporterTools(cfg);`
  */
 export function ExporterTools(cfg: {
 	typeNaming?: NamingStrategy;
 	fieldNaming?: NamingStrategy;
 }): ExporterToolsKit {
 	return {
-		INDENT,
-		indentBlock,
+		indent,
 		wrapNamespace,
 		toSafeVersionIdentifier,
 		mapScalarField,

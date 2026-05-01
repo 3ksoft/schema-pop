@@ -42,7 +42,7 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
 		commentStyle: "star",
 		...config,
 	};
-	const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace, isRichType } =
+	const { typeName, fieldName, indent, mapScalarField, wrapNamespace, isRichType } =
 		ExporterTools(cfg);
 
 	function fieldCppType(
@@ -83,7 +83,7 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
 				if (t.kind === "struct") {
 					code += `struct ${typeDeprecate}alignas(${t.align}) ${tn} {\n`;
 					if (t.fields.length === 0)
-						code += `${INDENT()}uint8_t _pad[${t.paddedSize}];\n`;
+						code += `${indent()}uint8_t _pad[${t.paddedSize}];\n`;
 					for (const f of t.fields) {
 						if (f.type.kind === "unit") continue;
 						const fn = fieldName(f.name);
@@ -93,14 +93,14 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
 							fAny.obsoleteReason,
 						);
 						if (f.bitSize && f.bitSize < 8) {
-							code += `${INDENT()}${fieldDeprecate}uint8_t ${fn} : ${f.bitSize};\n`;
+							code += `${indent()}${fieldDeprecate}uint8_t ${fn} : ${f.bitSize};\n`;
 							if (f.paddingAfter > 0)
-								code += `${INDENT()}uint8_t _pad_${fn}[${f.paddingAfter}];\n`;
+								code += `${indent()}uint8_t _pad_${fn}[${f.paddingAfter}];\n`;
 						} else {
 							const t = fieldCppType(f.type, f.size);
-							code += `${INDENT()}${fieldDeprecate}${t.type} ${fn}${t.suffix ?? ""};\n`;
+							code += `${indent()}${fieldDeprecate}${t.type} ${fn}${t.suffix ?? ""};\n`;
 							if (f.paddingAfter > 0)
-								code += `${INDENT()}uint8_t _pad_${fn}[${f.paddingAfter}];\n`;
+								code += `${indent()}uint8_t _pad_${fn}[${f.paddingAfter}];\n`;
 						}
 					}
 					code += `};\n\n`;
@@ -242,7 +242,7 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
 				if (f.bitSize && f.bitSize < 8) continue; // bitfield groups copied as-is via memcpy elsewhere
 				const ch = changeByToName.get(f.name);
 				const expr = emitFieldExpr(ch, f, "src");
-				s += `${INDENT()}dst->${fieldName(f.name)} = ${expr};\n`;
+				s += `${indent()}dst->${fieldName(f.name)} = ${expr};\n`;
 			}
 			s += `}\n`;
 			return s;
@@ -251,7 +251,7 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
 		return (
 			`// status: ${td.status}\n` +
 			`inline ${sig} {\n` +
-			`${INDENT()}*dst = *reinterpret_cast<const ${toNs}::${typeName(toType.name)}*>(src);\n` +
+			`${indent()}*dst = *reinterpret_cast<const ${toNs}::${typeName(toType.name)}*>(src);\n` +
 			`}\n`
 		);
 	}

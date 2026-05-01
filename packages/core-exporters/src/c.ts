@@ -40,7 +40,7 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 		commentStyle: "star",
 		...config,
 	};
-	const { typeName, fieldName, INDENT, mapScalarField, isRichType, toSafeVersionIdentifier } =
+	const { typeName, fieldName, indent, mapScalarField, isRichType, toSafeVersionIdentifier } =
 		ExporterTools(cfg);
 	return {
 		name: "c",
@@ -76,19 +76,19 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 				if (t.kind === "struct") {
 					code += `typedef struct ${tn} {\n`;
 					if (t.fields.length === 0)
-						code += `${INDENT()}uint8_t _pad[${t.paddedSize}];\n`;
+						code += `${indent()}uint8_t _pad[${t.paddedSize}];\n`;
 					for (const f of t.fields) {
 						if (f.type.kind === "unit") continue;
 						const fn = fieldName(f.name);
 						if (f.bitSize && f.bitSize < 8) {
-							code += `${INDENT()}uint8_t ${fn} : ${f.bitSize};\n`;
+							code += `${indent()}uint8_t ${fn} : ${f.bitSize};\n`;
 							if (f.paddingAfter > 0)
-								code += `${INDENT()}uint8_t _pad_${fn}[${f.paddingAfter}];\n`;
+								code += `${indent()}uint8_t _pad_${fn}[${f.paddingAfter}];\n`;
 						} else {
 							const ct = fieldCType(f.type, f.size);
-							code += `${INDENT()}${ct.type} ${fn}${ct.suffix ?? ""};\n`;
+							code += `${indent()}${ct.type} ${fn}${ct.suffix ?? ""};\n`;
 							if (f.paddingAfter > 0)
-								code += `${INDENT()}uint8_t _pad_${fn}[${f.paddingAfter}];\n`;
+								code += `${indent()}uint8_t _pad_${fn}[${f.paddingAfter}];\n`;
 						}
 					}
 					code += `} ${tn};\n\n`;
@@ -219,7 +219,7 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 				if (f.bitSize && f.bitSize < 8) continue;
 				const ch = changeByToName.get(f.name);
 				const expr = emitFieldExpr(ch, f);
-				s += `${INDENT()}dst->${fieldName(f.name)} = ${expr};\n`;
+				s += `${indent()}dst->${fieldName(f.name)} = ${expr};\n`;
 			}
 			s += `}\n`;
 			return s;
@@ -227,7 +227,7 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 		return (
 			`/* status: ${td.status} */\n` +
 			`static inline ${sig} {\n` +
-			`${INDENT()}*dst = *(const ${toTypeName} *)src;\n` +
+			`${indent()}*dst = *(const ${toTypeName} *)src;\n` +
 			`}\n`
 		);
 	}

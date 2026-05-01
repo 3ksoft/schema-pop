@@ -46,7 +46,7 @@ export function zig(config: ZigConfig): ExporterPlugin<ZigConfig> {
 		includeComptimeAssertions: true,
 		...config,
 	};
-	const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace, isRichType } =
+	const { typeName, fieldName, indent, mapScalarField, wrapNamespace, isRichType } =
 		ExporterTools(cfg);
 
 	function fieldZigType(
@@ -86,7 +86,7 @@ export function zig(config: ZigConfig): ExporterPlugin<ZigConfig> {
 				if (t.kind === "struct") {
 					code += `pub const ${tn} = extern struct {\n`;
 					if (t.fields.length === 0)
-						code += `${INDENT()}_pad: [${t.paddedSize}]u8,\n`;
+						code += `${indent()}_pad: [${t.paddedSize}]u8,\n`;
 					let currentBitfieldOffset = -1;
 					for (const f of t.fields) {
 						if (f.type.kind === "unit") continue;
@@ -95,20 +95,20 @@ export function zig(config: ZigConfig): ExporterPlugin<ZigConfig> {
 						code += deprecatedComment(
 							fAny.obsolete,
 							fAny.obsoleteReason,
-							INDENT(),
+							indent(),
 						);
 						if (f.bitSize && f.bitSize < 8) {
 							if (currentBitfieldOffset !== f.offset) {
-								code += `${INDENT()}_bitfield_${f.offset}: u8,\n`;
+								code += `${indent()}_bitfield_${f.offset}: u8,\n`;
 								currentBitfieldOffset = f.offset;
 							}
 							if (f.paddingAfter > 0)
-								code += `${INDENT()}_pad_${f.offset}: [${f.paddingAfter}]u8,\n`;
+								code += `${indent()}_pad_${f.offset}: [${f.paddingAfter}]u8,\n`;
 						} else {
 							const zType = fieldZigType(f.type, f.size, t.align);
-							code += `${INDENT()}${fn}: ${zType},\n`;
+							code += `${indent()}${fn}: ${zType},\n`;
 							if (f.paddingAfter > 0)
-								code += `${INDENT()}_pad_${fn}: [${f.paddingAfter}]u8,\n`;
+								code += `${indent()}_pad_${fn}: [${f.paddingAfter}]u8,\n`;
 						}
 					}
 					code += `};\n\n`;
@@ -231,22 +231,22 @@ export function zig(config: ZigConfig): ExporterPlugin<ZigConfig> {
 			let s = `// status: ${td.status}\n`;
 			if (td.kind === "renamed") s += `// renamed from "${td.oldName}"\n`;
 			s += `pub fn ${fnName}(src: ${argT}) ${retT} {\n`;
-			s += `${INDENT()}return ${retT}{\n`;
+			s += `${indent()}return ${retT}{\n`;
 			for (const f of stToType.fields) {
 				if (f.type.kind === "unit") continue;
 				if (f.bitSize && f.bitSize < 8) continue;
 				const ch = changeByToName.get(f.name);
 				const expr = emitFieldExpr(ch, f);
-				s += `${INDENT()}${INDENT()}.${fieldName(f.name)} = ${expr},\n`;
+				s += `${indent()}${indent()}.${fieldName(f.name)} = ${expr},\n`;
 			}
-			s += `${INDENT()}};\n`;
+			s += `${indent()}};\n`;
 			s += `}\n`;
 			return s;
 		}
 		return (
 			`// status: ${td.status}\n` +
 			`pub fn ${fnName}(src: ${argT}) ${retT} {\n` +
-			`${INDENT()}return @as(${retT}, @bitCast(src));\n` +
+			`${indent()}return @as(${retT}, @bitCast(src));\n` +
 			`}\n`
 		);
 	}

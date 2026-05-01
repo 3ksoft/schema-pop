@@ -190,7 +190,7 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 		commentStyle: "slash",
 		...config,
 	};
-	const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace, isRichType } =
+	const { typeName, fieldName, indent, mapScalarField, wrapNamespace, isRichType } =
 		ExporterTools(cfg);
 
 	function fieldRustType(field: Field, fieldSize: number): string {
@@ -257,7 +257,7 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 				if (t.kind === "struct") {
 					code += `${typeDeprecate}#[repr(C, align(${t.align}))]\n#[derive(Clone, Copy, Debug, PartialEq)]\npub struct ${tn} {\n`;
 					if (t.fields.length === 0)
-						code += `${INDENT()}pub _pad: [u8; ${t.paddedSize}],\n`;
+						code += `${indent()}pub _pad: [u8; ${t.paddedSize}],\n`;
 					let currentBitfieldOffset = -1;
 					for (const f of t.fields) {
 						if (f.type.kind === "unit") continue;
@@ -268,19 +268,19 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 						);
 						if (f.bitSize && f.bitSize < 8) {
 							if (currentBitfieldOffset !== f.offset) {
-								code += `${INDENT()}pub _bitfield_${f.offset}: u8,\n`;
+								code += `${indent()}pub _bitfield_${f.offset}: u8,\n`;
 								currentBitfieldOffset = f.offset;
 							}
 							if (f.paddingAfter > 0)
-								code += `${INDENT()}pub _pad_${f.offset}: [u8; ${f.paddingAfter}],\n`;
+								code += `${indent()}pub _pad_${f.offset}: [u8; ${f.paddingAfter}],\n`;
 						} else {
 							const rType = fieldRustType(f.type, f.size);
 							const fn = fieldName(f.name);
 							if (fieldDeprecate)
-								code += `${INDENT()}${fieldDeprecate.trimEnd()}\n`;
-							code += `${INDENT()}pub ${fn}: ${rType},\n`;
+								code += `${indent()}${fieldDeprecate.trimEnd()}\n`;
+							code += `${indent()}pub ${fn}: ${rType},\n`;
 							if (f.paddingAfter > 0)
-								code += `${INDENT()}pub _pad_${fn}: [u8; ${f.paddingAfter}],\n`;
+								code += `${indent()}pub _pad_${fn}: [u8; ${f.paddingAfter}],\n`;
 						}
 					}
 					code += `}\n\n`;
@@ -291,7 +291,7 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 					code += `${typeDeprecate}#[repr(${t.underlyingType})]\n`;
 					code += `#[derive(Clone, Copy, Debug, PartialEq, Eq)]\npub enum ${tn} {\n`;
 					for (const v of t.variants) {
-						code += `${INDENT()}${typeName(v.name)} = ${v.value},\n`;
+						code += `${indent()}${typeName(v.name)} = ${v.value},\n`;
 					}
 					code += `}\n\n`;
 				} else if (t.kind === "union") {
@@ -316,13 +316,13 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 							const variantName = typeName(v.name);
 							const tagValue = valueOf(v.name);
 							if (v.type.kind === "unit") {
-								code += `${INDENT()}${variantName} = ${tagValue},\n`;
+								code += `${indent()}${variantName} = ${tagValue},\n`;
 							} else {
 								const inner = fieldInnerType(v.type as Field);
 								if (inner) {
-									code += `${INDENT()}${variantName}(${inner}) = ${tagValue},\n`;
+									code += `${indent()}${variantName}(${inner}) = ${tagValue},\n`;
 								} else {
-									code += `${INDENT()}${variantName} = ${tagValue}, // unsupported variant payload\n`;
+									code += `${indent()}${variantName} = ${tagValue}, // unsupported variant payload\n`;
 								}
 							}
 						}
@@ -455,8 +455,8 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 		s += `// status: ${td.status}\n`;
 		if (td.kind === "renamed") s += `// renamed from "${td.oldName}"\n`;
 		s += `impl From<${fromNs}::${typeName(fromType.name)}> for ${toNs}::${typeName(toType.name)} {\n`;
-		s += `${INDENT()}fn from(v1: ${fromNs}::${typeName(fromType.name)}) -> Self {\n`;
-		s += `${INDENT()}${INDENT()}Self {\n`;
+		s += `${indent()}fn from(v1: ${fromNs}::${typeName(fromType.name)}) -> Self {\n`;
+		s += `${indent()}${indent()}Self {\n`;
 		for (const f of toType.fields) {
 			if (f.type.kind === "unit") continue;
 			if (f.bitSize && f.bitSize < 8) {
@@ -467,13 +467,13 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 			}
 			const ch = changeByToName.get(f.name);
 			const expr = emitFieldExpr(ch, f, "v1");
-			s += `${INDENT()}${INDENT()}${INDENT()}${fieldName(f.name)}: ${expr},\n`;
+			s += `${indent()}${indent()}${indent()}${fieldName(f.name)}: ${expr},\n`;
 			if (f.paddingAfter > 0) {
-				s += `${INDENT()}${INDENT()}${INDENT()}_pad_${fieldName(f.name)}: [0; ${f.paddingAfter}],\n`;
+				s += `${indent()}${indent()}${indent()}_pad_${fieldName(f.name)}: [0; ${f.paddingAfter}],\n`;
 			}
 		}
-		s += `${INDENT()}${INDENT()}}\n`;
-		s += `${INDENT()}}\n`;
+		s += `${indent()}${indent()}}\n`;
+		s += `${indent()}}\n`;
 		s += `}\n`;
 		return s;
 	}
@@ -518,10 +518,10 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 		return (
 			`// status: ${td.status}\n` +
 			`impl From<${fromNs}::${fn}> for ${toNs}::${tn} {\n` +
-			`${INDENT()}fn from(v1: ${fromNs}::${fn}) -> Self {\n` +
-			`${INDENT()}${INDENT()}// SAFETY: same wire layout in both versions\n` +
-			`${INDENT()}${INDENT()}unsafe { core::mem::transmute(v1) }\n` +
-			`${INDENT()}}\n` +
+			`${indent()}fn from(v1: ${fromNs}::${fn}) -> Self {\n` +
+			`${indent()}${indent()}// SAFETY: same wire layout in both versions\n` +
+			`${indent()}${indent()}unsafe { core::mem::transmute(v1) }\n` +
+			`${indent()}}\n` +
 			`}\n`
 		);
 	}

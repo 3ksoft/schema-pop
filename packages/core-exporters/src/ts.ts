@@ -52,7 +52,7 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 		commentStyle: "slash",
 		...config,
 	};
-	const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace } =
+	const { typeName, fieldName, indent, mapScalarField, wrapNamespace } =
 		ExporterTools(cfg);
 
 	function fieldType(field: Field): string {
@@ -86,7 +86,7 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 
 	function jsdoc(
 		t: { obsolete?: boolean; obsoleteReason?: string; description?: string },
-		indent = "",
+		pad = "",
 	): string {
 		const lines: string[] = [];
 		if (t.description) lines.push(t.description);
@@ -95,8 +95,8 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 				`@deprecated${t.obsoleteReason ? ` ${t.obsoleteReason}` : ""}`,
 			);
 		if (lines.length === 0) return "";
-		if (lines.length === 1) return `${indent}/** ${lines[0]} */\n`;
-		return `${indent}/**\n${lines.map((l) => `${indent} * ${l}`).join("\n")}\n${indent} */\n`;
+		if (lines.length === 1) return `${pad}/** ${lines[0]} */\n`;
+		return `${pad}/**\n${lines.map((l) => `${pad} * ${l}`).join("\n")}\n${pad} */\n`;
 	}
 
 	function renderStruct(t: TypePlan & { kind: "struct" }): string {
@@ -105,12 +105,12 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 		s += `export interface ${name} {\n`;
 		for (const f of t.fields) {
 			if (f.type.kind === "unit") continue;
-			s += jsdoc(f as any, INDENT());
+			s += jsdoc(f as any, indent());
 			const optional = f.type.kind === "optional";
 			const inner = optional
 				? fieldType((f.type as any).inner)
 				: fieldType(f.type);
-			s += `${INDENT()}${fieldName(f.name)}${optional ? "?" : ""}: ${inner};\n`;
+			s += `${indent()}${fieldName(f.name)}${optional ? "?" : ""}: ${inner};\n`;
 		}
 		s += `}\n`;
 		return s;
@@ -121,7 +121,7 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 		const namesUnion = t.variants.map((v) => `"${v.name}"`).join(" | ");
 		let s = jsdoc(t as any);
 		s += `export const ${name} = {\n`;
-		for (const v of t.variants) s += `${INDENT()}${v.name}: ${v.value},\n`;
+		for (const v of t.variants) s += `${indent()}${v.name}: ${v.value},\n`;
 		s += `} as const;\n`;
 		s += `export type ${name} = ${namesUnion};\n`;
 		return s;
@@ -158,8 +158,8 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 			const t = plan.types[i]!;
 			const n = names[i]!;
 			s += `export const ${n}Codec = {\n`;
-			s += `${INDENT()}encode: (data: ${n}): Uint8Array => _codec.encode("${t.name}", data),\n`;
-			s += `${INDENT()}decode: (buf: Uint8Array): ${n} => _codec.decode("${t.name}", buf) as ${n},\n`;
+			s += `${indent()}encode: (data: ${n}): Uint8Array => _codec.encode("${t.name}", data),\n`;
+			s += `${indent()}decode: (buf: Uint8Array): ${n} => _codec.decode("${t.name}", buf) as ${n},\n`;
 			s += `};\n`;
 		}
 		return s;
@@ -294,14 +294,14 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 				fieldChangeByToName.set(c.to.name, c);
 			}
 		}
-		let body = `${INDENT()}${INDENT()}return {\n`;
+		let body = `${indent()}${indent()}return {\n`;
 		for (const f of toType.fields) {
 			if (f.type.kind === "unit") continue;
 			const ch = fieldChangeByToName.get(f.name);
 			const expr = emitFieldExprWithUser(ch, f, "v1", moduleConfigured);
-			body += `${INDENT()}${INDENT()}${INDENT()}${fieldName(f.name)}: ${expr},\n`;
+			body += `${indent()}${indent()}${indent()}${fieldName(f.name)}: ${expr},\n`;
 		}
-		body += `${INDENT()}${INDENT()}};\n`;
+		body += `${indent()}${indent()}};\n`;
 		return body;
 	}
 
@@ -324,11 +324,11 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 		const retType = `${toNs}.${typeName(toType.name)}`;
 		let s = "";
 		// status comment for clarity in generated output
-		s += `${INDENT()}// status: ${td.status}\n`;
+		s += `${indent()}// status: ${td.status}\n`;
 		if (td.kind === "renamed") {
-			s += `${INDENT()}// renamed from "${td.oldName}"\n`;
+			s += `${indent()}// renamed from "${td.oldName}"\n`;
 		}
-		s += `${INDENT()}export function ${fnName}(v1: ${argType}): ${retType} {\n`;
+		s += `${indent()}export function ${fnName}(v1: ${argType}): ${retType} {\n`;
 
 		// Without a configured user module, user-supplied required types throw
 		// at function level (no way to plug in an impl).
@@ -350,45 +350,45 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 					}
 				})
 				.join("; ");
-			s += `${INDENT()}${INDENT()}throw new Error(\n`;
-			s += `${INDENT()}${INDENT()}${INDENT()}\`schema-pop: ${fnName} requires a user-supplied impl. Reason: ${reason || "see build summary"}. Configure migrationsModule in pop.config.ts and add a defineMigration entry.\`,\n`;
-			s += `${INDENT()}${INDENT()});\n`;
-			s += `${INDENT()}}\n`;
+			s += `${indent()}${indent()}throw new Error(\n`;
+			s += `${indent()}${indent()}${indent()}\`schema-pop: ${fnName} requires a user-supplied impl. Reason: ${reason || "see build summary"}. Configure migrationsModule in pop.config.ts and add a defineMigration entry.\`,\n`;
+			s += `${indent()}${indent()});\n`;
+			s += `${indent()}}\n`;
 			return s;
 		}
 
 		if (moduleConfigured) {
 			// Bind user mapper once at the top of the function body. Looked up
 			// by the function's own name on the user module's namespace.
-			s += `${INDENT()}${INDENT()}const u = ((__popUserMigrations as any).${fnName} ?? {}) as any;\n`;
+			s += `${indent()}${indent()}const u = ((__popUserMigrations as any).${fnName} ?? {}) as any;\n`;
 		}
 
 		if (toType.kind === "struct") {
 			s += renderStructMigrationBody(td as any, moduleConfigured);
 		} else if (toType.kind === "alias") {
 			// Alias migration: identity passthrough (cast).
-			s += `${INDENT()}${INDENT()}return v1 as unknown as ${retType};\n`;
+			s += `${indent()}${indent()}return v1 as unknown as ${retType};\n`;
 		} else if (toType.kind === "enum") {
 			// Per-variant Renamed → switch with explicit string mapping.
 			const renamedVariants = (td as any).variantChanges?.filter?.(
 				(c: any) => c.kind === "renamed",
 			) ?? [];
 			if (renamedVariants.length > 0) {
-				s += `${INDENT()}${INDENT()}switch (v1) {\n`;
+				s += `${indent()}${indent()}switch (v1) {\n`;
 				for (const r of renamedVariants) {
-					s += `${INDENT()}${INDENT()}${INDENT()}case ${JSON.stringify(r.from.name)}: return ${JSON.stringify(r.to.name)};\n`;
+					s += `${indent()}${indent()}${indent()}case ${JSON.stringify(r.from.name)}: return ${JSON.stringify(r.to.name)};\n`;
 				}
-				s += `${INDENT()}${INDENT()}${INDENT()}default: return v1 as unknown as ${retType};\n`;
-				s += `${INDENT()}${INDENT()}}\n`;
+				s += `${indent()}${indent()}${indent()}default: return v1 as unknown as ${retType};\n`;
+				s += `${indent()}${indent()}}\n`;
 			} else {
-				s += `${INDENT()}${INDENT()}return v1 as unknown as ${retType};\n`;
+				s += `${indent()}${indent()}return v1 as unknown as ${retType};\n`;
 			}
 		} else if (toType.kind === "union") {
 			// Discriminated unions key on tag value, not type-reference name —
 			// per-variant rename is binary-stable, identity cast is correct.
-			s += `${INDENT()}${INDENT()}return v1 as unknown as ${retType};\n`;
+			s += `${indent()}${indent()}return v1 as unknown as ${retType};\n`;
 		}
-		s += `${INDENT()}}\n`;
+		s += `${indent()}}\n`;
 		return s;
 	}
 
@@ -483,9 +483,9 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 				const matchTypes = e.alsoUnderName
 					? `(typeName === ${JSON.stringify(e.typeName)} || typeName === ${JSON.stringify(e.alsoUnderName)})`
 					: `typeName === ${JSON.stringify(e.typeName)}`;
-				s += `${INDENT()}if (${matchTypes} && ${cond}) return migrations_${e.fromNs}_to_${e.toNs}.${e.fnName}(value as ${e.fromTypeRef});\n`;
+				s += `${indent()}if (${matchTypes} && ${cond}) return migrations_${e.fromNs}_to_${e.toNs}.${e.fnName}(value as ${e.fromTypeRef});\n`;
 			}
-			s += `${INDENT()}throw new Error(\`schema-pop: no migration registered for \${typeName} \${from} → \${to}\`);\n`;
+			s += `${indent()}throw new Error(\`schema-pop: no migration registered for \${typeName} \${from} → \${to}\`);\n`;
 			s += `}\n`;
 			return s;
 		},
