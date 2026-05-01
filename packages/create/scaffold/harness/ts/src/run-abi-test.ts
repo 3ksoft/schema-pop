@@ -20,20 +20,26 @@ let totalSkips = 0;
 
 console.log("🛡️  Cross-Language ABI Consistency Test\n");
 
-const versions = Object.keys(schema).filter((k) => (schema as any)[k]?.LAYOUT_PLAN);
+const versions = Object.keys(schema).filter(
+	(k) => (schema as any)[k]?.LAYOUT_PLAN,
+);
 
 for (const vKey of versions) {
 	const v = (schema as any)[vKey];
 	const plan = v.LAYOUT_PLAN as LayoutPlan;
 	const codec = new PopCodec(plan);
 
-	const dataset = JSON.parse(random({ count: COUNT_PER_TYPE, seed: 42 }).generate(plan) as string) as Record<string, any[]>;
+	const dataset = JSON.parse(
+		random({ count: COUNT_PER_TYPE, seed: 42 }).generate(plan) as string,
+	) as Record<string, any[]>;
 
 	console.log(`📁 Version: ${vKey}\n`);
 
 	for (const target of targets) {
 		if (!existsSync(target.bin)) {
-			console.log(`  ⏭️  ${target.name}: harness binary not found, skipping (${target.bin})`);
+			console.log(
+				`  ⏭️  ${target.name}: harness binary not found, skipping (${target.bin})`,
+			);
 			continue;
 		}
 
@@ -51,7 +57,10 @@ for (const vKey of versions) {
 			if (!trimmed) continue;
 			const [ver, name, size, align] = trimmed.split(",");
 			if (ver && name && size && align) {
-				nativeLayouts.set(`${ver}::${name}`, { size: parseInt(size, 10), align: parseInt(align, 10) });
+				nativeLayouts.set(`${ver}::${name}`, {
+					size: parseInt(size, 10),
+					align: parseInt(align, 10),
+				});
 			}
 		}
 
@@ -60,10 +69,14 @@ for (const vKey of versions) {
 		// it's that case and skip — anything else (some types missing but
 		// not all) is still treated as a real bug.
 		const versionPrefix = `${vKey}::`;
-		const hasAnyTypeForVersion = [...nativeLayouts.keys()].some((k) => k.startsWith(versionPrefix));
+		const hasAnyTypeForVersion = [...nativeLayouts.keys()].some((k) =>
+			k.startsWith(versionPrefix),
+		);
 		if (!hasAnyTypeForVersion) {
 			const structCount = plan.types.filter((t) => t.kind === "struct").length;
-			console.log(`    ⏭️  skipping ${structCount} type(s) — single-version exporter, schema not emitted for this version`);
+			console.log(
+				`    ⏭️  skipping ${structCount} type(s) — single-version exporter, schema not emitted for this version`,
+			);
 			totalSkips += structCount;
 			continue;
 		}
@@ -83,7 +96,9 @@ for (const vKey of versions) {
 				continue;
 			}
 			if (native.size !== t.paddedSize || native.align !== t.align) {
-				console.error(`    ❌ ${t.name}: layout mismatch — TS ${t.paddedSize}/${t.align} vs native ${native.size}/${native.align}`);
+				console.error(
+					`    ❌ ${t.name}: layout mismatch — TS ${t.paddedSize}/${t.align} vs native ${native.size}/${native.align}`,
+				);
 				totalFailures++;
 				continue;
 			}
@@ -104,19 +119,26 @@ for (const vKey of versions) {
 				maxBuffer: 64 * 1024 * 1024,
 			});
 			if (rt.status !== 0) {
-				console.error(`    ❌ ${t.name}: roundtrip exit ${rt.status} — ${rt.stderr.toString()}`);
+				console.error(
+					`    ❌ ${t.name}: roundtrip exit ${rt.status} — ${rt.stderr.toString()}`,
+				);
 				totalFailures++;
 				continue;
 			}
 			const got = new Uint8Array(rt.stdout);
 			if (got.length !== expected.length) {
-				console.error(`    ❌ ${t.name}: bytes length ${got.length} ≠ ${expected.length}`);
+				console.error(
+					`    ❌ ${t.name}: bytes length ${got.length} ≠ ${expected.length}`,
+				);
 				totalFailures++;
 				continue;
 			}
 			let mismatch = -1;
 			for (let i = 0; i < got.length; i++) {
-				if (got[i] !== expected[i]) { mismatch = i; break; }
+				if (got[i] !== expected[i]) {
+					mismatch = i;
+					break;
+				}
 			}
 			if (mismatch >= 0) {
 				console.error(`    ❌ ${t.name}: byte mismatch at offset ${mismatch}`);
@@ -129,9 +151,12 @@ for (const vKey of versions) {
 	console.log("");
 }
 
-const skipNote = totalSkips > 0 ? ` (${totalSkips} skipped — single-version exporters)` : "";
+const skipNote =
+	totalSkips > 0 ? ` (${totalSkips} skipped — single-version exporters)` : "";
 if (totalFailures > 0) {
-	console.error(`\n💥 ${totalFailures} / ${totalChecks} checks failed${skipNote}.`);
+	console.error(
+		`\n💥 ${totalFailures} / ${totalChecks} checks failed${skipNote}.`,
+	);
 	process.exit(1);
 }
 

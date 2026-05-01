@@ -1,4 +1,11 @@
-import type { LayoutPlan, BaseConfig, ExporterPlugin, TypePlan, FieldPlan, Field } from "schema-pop";
+import type {
+	LayoutPlan,
+	BaseConfig,
+	ExporterPlugin,
+	TypePlan,
+	FieldPlan,
+	Field,
+} from "schema-pop";
 import { svg as defaultSvg, svgInternal } from "./svg";
 import { htmlAppScript } from "./html-app";
 
@@ -30,7 +37,11 @@ function rangeFor(f: FieldPlan): string | undefined {
 	return undefined;
 }
 
-function typeToDocs(t: TypePlan, svgBars: string | undefined, svgGrid: string | undefined): any {
+function typeToDocs(
+	t: TypePlan,
+	svgBars: string | undefined,
+	svgGrid: string | undefined,
+): any {
 	const tAny = t as any;
 	const common = {
 		name: t.name,
@@ -71,7 +82,11 @@ function typeToDocs(t: TypePlan, svgBars: string | undefined, svgGrid: string | 
 			...common,
 			kind: "enum",
 			underlyingType: t.underlyingType,
-			variants: t.variants.map((v) => ({ name: v.name, value: v.value, description: v.description })),
+			variants: t.variants.map((v) => ({
+				name: v.name,
+				value: v.value,
+				description: v.description,
+			})),
 		};
 	}
 	if (t.kind === "union") {
@@ -81,7 +96,10 @@ function typeToDocs(t: TypePlan, svgBars: string | undefined, svgGrid: string | 
 			tagOffset: t.tagOffset,
 			tagSize: t.tagSize,
 			tagType: t.tagType,
-			variants: t.variants.map((v) => ({ name: v.name, type: fieldTypeLabel(v.type) })),
+			variants: t.variants.map((v) => ({
+				name: v.name,
+				type: fieldTypeLabel(v.type),
+			})),
 		};
 	}
 	if (t.kind === "alias") {
@@ -94,7 +112,10 @@ function typeToDocs(t: TypePlan, svgBars: string | undefined, svgGrid: string | 
 	return common;
 }
 
-function diffStatus(from: TypePlan | undefined, to: TypePlan | undefined): { status: "added" | "removed" | "modified" | "unchanged"; note: string } {
+function diffStatus(
+	from: TypePlan | undefined,
+	to: TypePlan | undefined,
+): { status: "added" | "removed" | "modified" | "unchanged"; note: string } {
 	if (!from && to) return { status: "added", note: `New ${to.kind}` };
 	if (from && !to) return { status: "removed", note: `${from.kind} removed` };
 	if (!from || !to) return { status: "unchanged", note: "" };
@@ -118,19 +139,31 @@ function diffStatus(from: TypePlan | undefined, to: TypePlan | undefined): { sta
 	}
 	const fromObs = (from as any).obsolete === true;
 	const toObs = (to as any).obsolete === true;
-	if (fromObs !== toObs) notes.push(toObs ? "marked obsolete" : "un-deprecated");
-	if (notes.length === 0) return { status: "unchanged", note: "wire-compatible" };
+	if (fromObs !== toObs)
+		notes.push(toObs ? "marked obsolete" : "un-deprecated");
+	if (notes.length === 0)
+		return { status: "unchanged", note: "wire-compatible" };
 	return { status: "modified", note: notes.join(", ") };
 }
 
 function jsonScript(payload: any): string {
-	return JSON.stringify(payload).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026");
+	return JSON.stringify(payload)
+		.replace(/</g, "\\u003c")
+		.replace(/>/g, "\\u003e")
+		.replace(/&/g, "\\u0026");
 }
 
 export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
-	const cfg: HtmlConfig = { commentStyle: "none", title: "schema-pop · report", ...config };
-	const vizBars = cfg.viz ?? defaultSvg({ mode: "bars", width: 720, rowHeight: 38 });
-	const vizGrid = cfg.vizGrid ?? defaultSvg({ mode: "grid", width: 720, rowHeight: 28, rowBytes: 8 });
+	const cfg: HtmlConfig = {
+		commentStyle: "none",
+		title: "schema-pop · report",
+		...config,
+	};
+	const vizBars =
+		cfg.viz ?? defaultSvg({ mode: "bars", width: 720, rowHeight: 38 });
+	const vizGrid =
+		cfg.vizGrid ??
+		defaultSvg({ mode: "grid", width: 720, rowHeight: 28, rowBytes: 8 });
 
 	return {
 		name: "html",
@@ -181,16 +214,22 @@ export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
 				label: plan.version,
 				endian: (plan as any).endian,
 				types: (plan.types as TypePlan[]).map((t) =>
-					typeToDocs(t, barsRecords[`${t.name}.svg`], gridRecords[`${t.name}.svg`]),
+					typeToDocs(
+						t,
+						barsRecords[`${t.name}.svg`],
+						gridRecords[`${t.name}.svg`],
+					),
 				),
 			};
 			return `<script>window.SCHEMA_POP_DATA.versions.push(${jsonScript(versionData)});</script>\n`;
 		},
 		generateMigration: (fromPlan: LayoutPlan, toPlan: LayoutPlan) => {
-			const allNames = Array.from(new Set([
-				...fromPlan.types.map((t) => t.name),
-				...toPlan.types.map((t) => t.name),
-			]));
+			const allNames = Array.from(
+				new Set([
+					...fromPlan.types.map((t) => t.name),
+					...toPlan.types.map((t) => t.name),
+				]),
+			);
 			const changes = allNames.map((name) => {
 				const from = fromPlan.types.find((t) => t.name === name);
 				const to = toPlan.types.find((t) => t.name === name);

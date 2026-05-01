@@ -5,7 +5,10 @@ import { SchemaAnalyzer } from "./layout/analyzer";
 import type { ExporterPlugin, LayoutPlan } from "./schema/index";
 import { renderComment } from "./utils/comments";
 
-export async function buildConfig(configPath: string, ctx?: { addWatchFile?: (p: string) => void }) {
+export async function buildConfig(
+	configPath: string,
+	ctx?: { addWatchFile?: (p: string) => void },
+) {
 	const jiti = createJiti(import.meta.url);
 	const resolvedPath = path.resolve(process.cwd(), configPath);
 	if (!fs.existsSync(resolvedPath)) {
@@ -26,14 +29,21 @@ export function generateTypes(schema: LayoutPlan, target: ExporterPlugin<any>) {
 	return code;
 }
 
-export async function buildSchema(config: any, rootDir: string, ctx?: { addWatchFile?: (p: string) => void }) {
+export async function buildSchema(
+	config: any,
+	rootDir: string,
+	ctx?: { addWatchFile?: (p: string) => void },
+) {
 	const jiti = createJiti(import.meta.url);
-	const targetContents: Record<string, { 
-		targetConfig: any; 
-		targetInstance: ExporterPlugin<any>; 
-		body: string; 
-		plans: LayoutPlan[] 
-	}> = {};
+	const targetContents: Record<
+		string,
+		{
+			targetConfig: any;
+			targetInstance: ExporterPlugin<any>;
+			body: string;
+			plans: LayoutPlan[];
+		}
+	> = {};
 
 	for (const schema of config.schemas || []) {
 		const versions = schema.versions || [];
@@ -43,9 +53,14 @@ export async function buildSchema(config: any, rootDir: string, ctx?: { addWatch
 
 		for (let i = 0; i < versions.length; i++) {
 			const v = versions[i]!;
-			const safeVersion = schema.name ? `${schema.name}_${v.version}` : v.version;
+			const safeVersion = schema.name
+				? `${schema.name}_${v.version}`
+				: v.version;
 			const isLatest = i === versions.length - 1;
-			const filePath = path.resolve(rootDir, v.source.endsWith(".ts") ? v.source : v.source + ".ts");
+			const filePath = path.resolve(
+				rootDir,
+				v.source.endsWith(".ts") ? v.source : v.source + ".ts",
+			);
 
 			if (!fs.existsSync(filePath)) {
 				console.error(`❌ [Schema-Pop] File not found: ${filePath}`);
@@ -66,7 +81,7 @@ export async function buildSchema(config: any, rootDir: string, ctx?: { addWatch
 			const analyzer = new SchemaAnalyzer(scope, {
 				wordSize: config.wordSize,
 				autoLayout: config.autoLayout,
-				layoutType: config.layout || "aligned"
+				layoutType: config.layout || "aligned",
 			});
 			const plan = analyzer.analyze(safeVersion, config.endian || "le");
 
@@ -79,14 +94,21 @@ export async function buildSchema(config: any, rootDir: string, ctx?: { addWatch
 
 				if (!instance.wrapVersion && versions.length > 1) {
 					if (!isLatest) continue;
-					console.warn(`⚠️  [Schema-Pop] Exporter "${instance.name}" only supports a single version! Only latest schema version will be exported to ${dest}`);
+					console.warn(
+						`⚠️  [Schema-Pop] Exporter "${instance.name}" only supports a single version! Only latest schema version will be exported to ${dest}`,
+					);
 				}
 
 				let content = instance.generate(plan);
 
 				if (typeof content === "string") {
 					if (!targetContents[dest]) {
-						targetContents[dest] = { targetConfig, targetInstance: instance, body: "", plans: [] };
+						targetContents[dest] = {
+							targetConfig,
+							targetInstance: instance,
+							body: "",
+							plans: [],
+						};
 					}
 					const entry = targetContents[dest]!;
 					entry.plans.push(plan);
@@ -96,7 +118,12 @@ export async function buildSchema(config: any, rootDir: string, ctx?: { addWatch
 					}
 					entry.body += `${content}\n`;
 
-					if (instance.wrapVersion && previousVersion && previousPlan && instance.generateMigration) {
+					if (
+						instance.wrapVersion &&
+						previousVersion &&
+						previousPlan &&
+						instance.generateMigration
+					) {
 						const migration = instance.generateMigration(previousPlan, plan);
 						if (migration) entry.body += `\n${migration}\n`;
 					}
@@ -104,7 +131,12 @@ export async function buildSchema(config: any, rootDir: string, ctx?: { addWatch
 					for (const [filename, subContent] of Object.entries(content)) {
 						const fileDest = path.join(dest, filename);
 						if (!targetContents[fileDest]) {
-							targetContents[fileDest] = { targetConfig, targetInstance: instance, body: "", plans: [] };
+							targetContents[fileDest] = {
+								targetConfig,
+								targetInstance: instance,
+								body: "",
+								plans: [],
+							};
 						}
 						targetContents[fileDest].plans.push(plan);
 						targetContents[fileDest].body += (subContent as string) + "\n";
@@ -120,11 +152,14 @@ export async function buildSchema(config: any, rootDir: string, ctx?: { addWatch
 		const entry = targetContents[dest]!;
 		const { targetInstance, targetConfig } = entry;
 		const absDest = path.resolve(rootDir, dest);
-		
+
 		let finalFile = "";
 		if (!targetConfig.noHeader) {
 			const endianStr = config.endian === "be" ? "Big Endian" : "Little Endian";
-			const header = renderComment(targetConfig.commentStyle ?? "slash", `AUTO GENERATED BY SCHEMA-POP\nLayout: ${endianStr}`);
+			const header = renderComment(
+				targetConfig.commentStyle ?? "slash",
+				`AUTO GENERATED BY SCHEMA-POP\nLayout: ${endianStr}`,
+			);
 			if (header) finalFile += header + "\n";
 		}
 
@@ -132,9 +167,11 @@ export async function buildSchema(config: any, rootDir: string, ctx?: { addWatch
 			finalFile += targetInstance.getFileHeader() + "\n";
 		}
 
-		if (targetConfig.prependToFile) finalFile += targetConfig.prependToFile + "\n";
+		if (targetConfig.prependToFile)
+			finalFile += targetConfig.prependToFile + "\n";
 		finalFile += entry.body;
-		if (targetConfig.appendToFile) finalFile += targetConfig.appendToFile + "\n";
+		if (targetConfig.appendToFile)
+			finalFile += targetConfig.appendToFile + "\n";
 
 		if (targetInstance.getFileFooter) {
 			finalFile += targetInstance.getFileFooter();
@@ -155,7 +192,9 @@ export async function buildSchema(config: any, rootDir: string, ctx?: { addWatch
 				const hDir = path.dirname(harnessDest);
 				if (!fs.existsSync(hDir)) fs.mkdirSync(hDir, { recursive: true });
 				fs.writeFileSync(harnessDest, fileContent as string);
-				console.log(`✅ [Schema-Pop] Harness File: ${path.relative(rootDir, harnessDest)}`);
+				console.log(
+					`✅ [Schema-Pop] Harness File: ${path.relative(rootDir, harnessDest)}`,
+				);
 			}
 		}
 	}

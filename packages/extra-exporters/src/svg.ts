@@ -1,4 +1,11 @@
-import type { LayoutPlan, ExporterPlugin, BaseConfig, FieldPlan, TypePlan, Field } from "schema-pop";
+import type {
+	LayoutPlan,
+	ExporterPlugin,
+	BaseConfig,
+	FieldPlan,
+	TypePlan,
+	Field,
+} from "schema-pop";
 
 export interface SvgConfig extends BaseConfig {
 	width?: number;
@@ -13,8 +20,10 @@ const TITLE_GAP = 18;
 
 function fieldTypeLabel(f: Field): string {
 	switch (f.kind) {
-		case "primitive": return f.name;
-		case "reference": return f.name;
+		case "primitive":
+			return f.name;
+		case "reference":
+			return f.name;
 		case "array": {
 			const inner = fieldTypeLabel(f.item);
 			const len = (f as any).exactLength ?? (f as any).maxLength;
@@ -24,10 +33,14 @@ function fieldTypeLabel(f: Field): string {
 			const len = (f as any).maxLength;
 			return len !== undefined ? `string<${len}>` : "string";
 		}
-		case "optional": return `${fieldTypeLabel(f.inner)}?`;
-		case "inlineStruct": return "{…}";
-		case "unit": return "unit";
-		default: return "?";
+		case "optional":
+			return `${fieldTypeLabel(f.inner)}?`;
+		case "inlineStruct":
+			return "{…}";
+		case "unit":
+			return "unit";
+		default:
+			return "?";
 	}
 }
 
@@ -46,7 +59,12 @@ function fillFor(seed: string | number) {
 	};
 }
 
-function svgWrap(width: number, height: number, body: string, title: string): string {
+function svgWrap(
+	width: number,
+	height: number,
+	body: string,
+	title: string,
+): string {
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" class="sp-viz" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="${title}">
 <defs>
@@ -60,7 +78,8 @@ ${body}
 
 function renderStructBars(t: any, cfg: SvgConfig): string {
 	const totalSize: number = t.paddedSize || t.size;
-	if (totalSize <= 0) return svgWrap(cfg.width!, cfg.rowHeight! + PAD * 2, "", t.name);
+	if (totalSize <= 0)
+		return svgWrap(cfg.width!, cfg.rowHeight! + PAD * 2, "", t.name);
 	const rowH = cfg.rowHeight!;
 	const innerW = cfg.width! - PAD * 2;
 	const scale = innerW / totalSize;
@@ -68,9 +87,11 @@ function renderStructBars(t: any, cfg: SvgConfig): string {
 	let body = `<g class="sp-axis" font-family="ui-monospace, monospace" font-size="9" fill="currentColor" fill-opacity="0.55">`;
 	for (let i = 0; i <= totalSize; i++) {
 		const x = PAD + i * scale;
-		const major = i % Math.max(1, Math.floor(totalSize / 8)) === 0 || i === totalSize;
+		const major =
+			i % Math.max(1, Math.floor(totalSize / 8)) === 0 || i === totalSize;
 		body += `<line x1="${x}" y1="${PAD + AXIS}" x2="${x}" y2="${PAD + AXIS + rowH}" stroke="currentColor" stroke-opacity="${major ? 0.18 : 0.08}" />`;
-		if (major) body += `<text x="${x}" y="${PAD + AXIS - 4}" text-anchor="middle">+${i}</text>`;
+		if (major)
+			body += `<text x="${x}" y="${PAD + AXIS - 4}" text-anchor="middle">+${i}</text>`;
 	}
 	body += `</g>\n<g class="sp-fields">`;
 	const groups = new Map<number, FieldPlan[]>();
@@ -110,7 +131,8 @@ function renderStructBars(t: any, cfg: SvgConfig): string {
 				const c = fillFor(`${t.name}.${f.name}`);
 				body += `<g><title>${f.name} : ${f.bitSize}b @ +${offset}.${f.bitOffset}</title>`;
 				body += `<rect x="${bx}" y="${y + 2}" width="${bw}" height="${rowH - 4}" fill="${c.bg}" />`;
-				if (f.bitOffset > 0) body += `<line x1="${bx}" y1="${y}" x2="${bx}" y2="${y + rowH}" stroke="currentColor" stroke-opacity="0.3" stroke-dasharray="2 2" />`;
+				if (f.bitOffset > 0)
+					body += `<line x1="${bx}" y1="${y}" x2="${bx}" y2="${y + rowH}" stroke="currentColor" stroke-opacity="0.3" stroke-dasharray="2 2" />`;
 				body += `</g>`;
 			}
 			body += `</g>`;
@@ -123,7 +145,8 @@ function renderStructBars(t: any, cfg: SvgConfig): string {
 function renderStructGrid(t: any, cfg: SvgConfig): string {
 	const totalSize: number = t.paddedSize || t.size;
 	if (totalSize <= 0) return svgWrap(cfg.width!, 60, "", t.name);
-	const rowBytes = cfg.rowBytes ?? Math.min(16, Math.max(4, totalSize <= 8 ? totalSize : 8));
+	const rowBytes =
+		cfg.rowBytes ?? Math.min(16, Math.max(4, totalSize <= 8 ? totalSize : 8));
 	const cols = rowBytes;
 	const rows = Math.ceil(totalSize / rowBytes);
 	const innerW = cfg.width! - PAD * 2;
@@ -132,10 +155,15 @@ function renderStructGrid(t: any, cfg: SvgConfig): string {
 	const totalW = PAD * 2 + cell * cols;
 	const totalH = PAD * 2 + cellH * rows;
 
-	const fieldByByte = new Map<number, { f: FieldPlan; isPad: boolean; relIdx: number }>();
+	const fieldByByte = new Map<
+		number,
+		{ f: FieldPlan; isPad: boolean; relIdx: number }
+	>();
 	for (const f of t.fields as FieldPlan[]) {
-		for (let b = 0; b < f.size; b++) fieldByByte.set(f.offset + b, { f, isPad: false, relIdx: b });
-		for (let b = 0; b < (f.paddingAfter || 0); b++) fieldByByte.set(f.offset + f.size + b, { f, isPad: true, relIdx: b });
+		for (let b = 0; b < f.size; b++)
+			fieldByByte.set(f.offset + b, { f, isPad: false, relIdx: b });
+		for (let b = 0; b < (f.paddingAfter || 0); b++)
+			fieldByByte.set(f.offset + f.size + b, { f, isPad: true, relIdx: b });
 	}
 
 	let body = `<g class="sp-grid" font-family="ui-monospace, monospace" font-size="9">`;
@@ -152,7 +180,9 @@ function renderStructGrid(t: any, cfg: SvgConfig): string {
 		}
 		const { f, isPad, relIdx } = ent;
 		const fill = isPad ? `url(#sp-pad)` : fillFor(`${t.name}.${f.name}`).bg;
-		const stroke = isPad ? `currentColor` : fillFor(`${t.name}.${f.name}`).stroke;
+		const stroke = isPad
+			? `currentColor`
+			: fillFor(`${t.name}.${f.name}`).stroke;
 		body += `<g><title>${isPad ? "pad" : `${f.name} : ${fieldTypeLabel(f.type)}`} @ +${i}</title>`;
 		body += `<rect x="${x + 1}" y="${y + 1}" width="${cell - 2}" height="${cellH - 2}" rx="3" fill="${fill}" stroke="${stroke}" stroke-opacity="${isPad ? 0.2 : 0.55}" stroke-width="1" />`;
 		body += `<text x="${x + 4}" y="${y + 11}" fill="currentColor" fill-opacity="0.55">${i.toString(16).padStart(2, "0")}</text>`;
@@ -204,9 +234,14 @@ function renderUnion(t: any, cfg: SvgConfig): string {
 	let body = `<g class="sp-axis" font-family="ui-monospace, monospace" font-size="9" fill="currentColor" fill-opacity="0.55">`;
 	for (let i = 0; i <= totalSize; i++) {
 		const x = PAD + i * scale;
-		const major = i === 0 || i === t.tagOffset || i === t.tagOffset + t.tagSize || i === totalSize;
+		const major =
+			i === 0 ||
+			i === t.tagOffset ||
+			i === t.tagOffset + t.tagSize ||
+			i === totalSize;
 		body += `<line x1="${x}" y1="${PAD + AXIS}" x2="${x}" y2="${PAD + AXIS + rowH}" stroke="currentColor" stroke-opacity="${major ? 0.2 : 0.08}" />`;
-		if (major) body += `<text x="${x}" y="${PAD + AXIS - 4}" text-anchor="middle">+${i}</text>`;
+		if (major)
+			body += `<text x="${x}" y="${PAD + AXIS - 4}" text-anchor="middle">+${i}</text>`;
 	}
 	body += `</g>`;
 	const tagX = PAD + t.tagOffset * scale;
@@ -264,7 +299,10 @@ export function svg(config: SvgConfig = {}): ExporterPlugin<SvgConfig> {
 			for (const t of plan.types as TypePlan[]) {
 				const key = `${t.name}.svg`;
 				if (t.kind === "struct") {
-					results[key] = cfg.mode === "grid" ? renderStructGrid(t, cfg) : renderStructBars(t, cfg);
+					results[key] =
+						cfg.mode === "grid"
+							? renderStructGrid(t, cfg)
+							: renderStructBars(t, cfg);
 				} else if (t.kind === "enum") {
 					results[key] = renderEnum(t, cfg);
 				} else if (t.kind === "union") {

@@ -1,7 +1,10 @@
 import type { LayoutPlan } from "schema-pop";
 import { ExporterTools } from "schema-pop";
 
-export function rustHarness(plans: LayoutPlan[], typeNaming: "PascalCase" = "PascalCase"): Record<string, string> {
+export function rustHarness(
+	plans: LayoutPlan[],
+	typeNaming: "PascalCase" = "PascalCase",
+): Record<string, string> {
 	const { typeName, toSafeVersionIdentifier } = ExporterTools({ typeNaming });
 
 	const layoutLines: string[] = [];
@@ -11,8 +14,12 @@ export function rustHarness(plans: LayoutPlan[], typeNaming: "PascalCase" = "Pas
 		const ver = toSafeVersionIdentifier(plan.version);
 		for (const t of plan.types) {
 			const tn = typeName(t.name);
-			layoutLines.push(`\twriteln!(out, "${ver},${tn},{},{}", std::mem::size_of::<schema::${ver}::${tn}>(), std::mem::align_of::<schema::${ver}::${tn}>())?;`);
-			matchArms.push(`\t\t("${ver}", "${tn}") => rt::<schema::${ver}::${tn}>(&buf, &mut out),`);
+			layoutLines.push(
+				`\twriteln!(out, "${ver},${tn},{},{}", std::mem::size_of::<schema::${ver}::${tn}>(), std::mem::align_of::<schema::${ver}::${tn}>())?;`,
+			);
+			matchArms.push(
+				`\t\t("${ver}", "${tn}") => rt::<schema::${ver}::${tn}>(&buf, &mut out),`,
+			);
 		}
 	}
 

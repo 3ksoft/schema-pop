@@ -1,15 +1,15 @@
 {
-    "name": "schema-pop-test",
-    "version": "0.0.1",
-    "private": true,
-    "type": "module",
-    "scripts": {
-        "generate": "bun src/cli.ts",
-        "build": "bun run generate && tsc"
-    },
-    "devDependencies": {
-        "schema-pop": "latest",
-        "@schema-pop/core-exporters": "latest",
-        "@schema-pop/extra-exporters": "latest"
-    }
+	"name": "schema-pop-test",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"generate": "bun src/cli.ts",
+		"build": "bun run generate && tsc"
+	},
+	"devDependencies": {
+		"schema-pop": "latest",
+		"@schema-pop/core-exporters": "latest",
+		"@schema-pop/extra-exporters": "latest"
+	}
 }

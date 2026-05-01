@@ -1,7 +1,10 @@
 import type { LayoutPlan } from "schema-pop";
 import { ExporterTools } from "schema-pop";
 
-export function cppHarness(plans: LayoutPlan[], typeNaming: "PascalCase" = "PascalCase"): Record<string, string> {
+export function cppHarness(
+	plans: LayoutPlan[],
+	typeNaming: "PascalCase" = "PascalCase",
+): Record<string, string> {
 	const { typeName, toSafeVersionIdentifier } = ExporterTools({ typeNaming });
 
 	const layoutLines: string[] = [];
@@ -11,8 +14,12 @@ export function cppHarness(plans: LayoutPlan[], typeNaming: "PascalCase" = "Pasc
 		const ver = toSafeVersionIdentifier(plan.version);
 		for (const t of plan.types) {
 			const tn = typeName(t.name);
-			layoutLines.push(`\tstd::cout << "${ver},${tn}," << sizeof(${ver}::${tn}) << "," << alignof(${ver}::${tn}) << "\\n";`);
-			matchArms.push(`\tif (version == "${ver}" && ty == "${tn}") return rt<${ver}::${tn}>(buf);`);
+			layoutLines.push(
+				`\tstd::cout << "${ver},${tn}," << sizeof(${ver}::${tn}) << "," << alignof(${ver}::${tn}) << "\\n";`,
+			);
+			matchArms.push(
+				`\tif (version == "${ver}" && ty == "${tn}") return rt<${ver}::${tn}>(buf);`,
+			);
 		}
 	}
 

@@ -21,7 +21,9 @@ export interface BrainfuckConfig extends BaseConfig {
 	harness?: boolean;
 }
 
-export function brainfuck(config: BrainfuckConfig): ExporterPlugin<BrainfuckConfig> {
+export function brainfuck(
+	config: BrainfuckConfig,
+): ExporterPlugin<BrainfuckConfig> {
 	const cfg = { commentStyle: "none", ...config } as BrainfuckConfig;
 	return {
 		name: "brainfuck",

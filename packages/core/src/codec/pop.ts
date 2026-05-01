@@ -28,7 +28,9 @@ export class PopCodec {
 	public decode(typeName: string, buffer: Uint8Array): any {
 		const typePlan = this.findType(typeName);
 		if (buffer.length < typePlan.size) {
-			throw new Error(`Buffer too small for ${typeName}. Expected at least ${typePlan.size} bytes, got ${buffer.length}`);
+			throw new Error(
+				`Buffer too small for ${typeName}. Expected at least ${typePlan.size} bytes, got ${buffer.length}`,
+			);
 		}
 		const view = new DataView(
 			buffer.buffer,
@@ -61,10 +63,12 @@ export class PopCodec {
 				);
 			}
 		} else if (plan.kind === "enum") {
-			const variant = plan.variants.find(v => v.name === data);
+			const variant = plan.variants.find((v) => v.name === data);
 			const val = variant ? variant.value : 0;
-			if (plan.underlyingType === "u16") view.setUint16(baseOffset, val, this.le);
-			else if (plan.underlyingType === "i32") view.setInt32(baseOffset, val, this.le);
+			if (plan.underlyingType === "u16")
+				view.setUint16(baseOffset, val, this.le);
+			else if (plan.underlyingType === "i32")
+				view.setInt32(baseOffset, val, this.le);
 			else view.setUint8(baseOffset, val);
 		} else if (plan.kind === "union") {
 			const variantName =
@@ -105,10 +109,12 @@ export class PopCodec {
 			return out;
 		} else if (plan.kind === "enum") {
 			let index = 0;
-			if (plan.underlyingType === "u16") index = view.getUint16(baseOffset, this.le);
-			else if (plan.underlyingType === "i32") index = view.getInt32(baseOffset, this.le);
+			if (plan.underlyingType === "u16")
+				index = view.getUint16(baseOffset, this.le);
+			else if (plan.underlyingType === "i32")
+				index = view.getInt32(baseOffset, this.le);
 			else index = view.getUint8(baseOffset);
-			const variant = plan.variants.find(v => v.value === index);
+			const variant = plan.variants.find((v) => v.value === index);
 			return variant ? variant.name : "Unknown";
 		} else if (plan.kind === "union") {
 			const tag = view.getUint8(baseOffset + plan.tagOffset);
@@ -285,7 +291,11 @@ export class PopCodec {
 		else if (name === "u128") {
 			const b = BigInt(val ?? 0);
 			view.setBigUint64(offset + (le ? 0 : 8), BigInt.asUintN(64, b), le);
-			view.setBigUint64(offset + (le ? 8 : 0), BigInt.asUintN(64, b >> 64n), le);
+			view.setBigUint64(
+				offset + (le ? 8 : 0),
+				BigInt.asUintN(64, b >> 64n),
+				le,
+			);
 		} else if (name === "i8") view.setInt8(offset, numVal);
 		else if (name === "i16") view.setInt16(offset, numVal, le);
 		else if (name === "i32") view.setInt32(offset, numVal, le);
@@ -326,22 +336,44 @@ export class PopCodec {
 			return view.getUint8(offset) !== 0;
 	}
 
-	private getLayout(field: Field): { size: number; align: number; paddedSize: number } {
+	private getLayout(field: Field): {
+		size: number;
+		align: number;
+		paddedSize: number;
+	} {
 		if (field.kind === "unit") return { size: 0, align: 1, paddedSize: 0 };
 		if (field.kind === "primitive") {
 			const aligns: Record<string, number> = {
-				u8: 1, i8: 1, bool: 1, boolean: 1,
-				u16: 2, i16: 2,
-				u32: 4, i32: 4, f32: 4,
-				f64: 8, u64: 8, i64: 8,
-				u128: 8, i128: 8,
+				u8: 1,
+				i8: 1,
+				bool: 1,
+				boolean: 1,
+				u16: 2,
+				i16: 2,
+				u32: 4,
+				i32: 4,
+				f32: 4,
+				f64: 8,
+				u64: 8,
+				i64: 8,
+				u128: 8,
+				i128: 8,
 			};
 			const sizes: Record<string, number> = {
-				u8: 1, i8: 1, bool: 1, boolean: 1,
-				u16: 2, i16: 2,
-				u32: 4, i32: 4, f32: 4,
-				f64: 8, u64: 8, i64: 8,
-				u128: 16, i128: 16,
+				u8: 1,
+				i8: 1,
+				bool: 1,
+				boolean: 1,
+				u16: 2,
+				i16: 2,
+				u32: 4,
+				i32: 4,
+				f32: 4,
+				f64: 8,
+				u64: 8,
+				i64: 8,
+				u128: 16,
+				i128: 16,
 			};
 			const align = aligns[field.name] || 4;
 			const size = sizes[field.name] || 4;
@@ -349,13 +381,21 @@ export class PopCodec {
 		}
 		if (field.kind === "reference") {
 			const plan = this.findType(field.name);
-			return { size: plan.size, align: plan.align, paddedSize: (plan as any).paddedSize ?? plan.size };
+			return {
+				size: plan.size,
+				align: plan.align,
+				paddedSize: (plan as any).paddedSize ?? plan.size,
+			};
 		}
 		if (field.kind === "optional") {
 			const inner = this.getLayout(field.inner);
 			const align = inner.align;
 			const total = 1 + ((align - (1 % align)) % align) + inner.size;
-			return { size: total, align, paddedSize: Math.ceil(total / align) * align };
+			return {
+				size: total,
+				align,
+				paddedSize: Math.ceil(total / align) * align,
+			};
 		}
 		if (field.kind === "string") {
 			const size = 4 + (field.maxLength || 0);
@@ -367,10 +407,18 @@ export class PopCodec {
 			const itemLayout = this.getLayout(field.item);
 			const baseSize = (isFixed ? 0 : 4) + max * itemLayout.paddedSize;
 			const align = isFixed ? itemLayout.align : Math.max(4, itemLayout.align);
-			return { size: baseSize, align, paddedSize: Math.ceil(baseSize / align) * align };
+			return {
+				size: baseSize,
+				align,
+				paddedSize: Math.ceil(baseSize / align) * align,
+			};
 		}
 		if (field.kind === "inlineStruct") {
-			return { size: field.size, align: field.align, paddedSize: (field as any).paddedSize ?? field.size };
+			return {
+				size: field.size,
+				align: field.align,
+				paddedSize: (field as any).paddedSize ?? field.size,
+			};
 		}
 		return { size: 0, align: 1, paddedSize: 0 };
 	}

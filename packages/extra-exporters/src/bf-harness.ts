@@ -104,7 +104,7 @@ export const BF_PACKAGE_JSON = `{
 export function brainfuckHarness(): Record<string, string> {
 	return {
 		"interpreter.c": BF_INTERPRETER_C,
-		"harness": BF_HARNESS_SH,
+		harness: BF_HARNESS_SH,
 		"package.json": BF_PACKAGE_JSON,
 	};
 }

@@ -3,33 +3,33 @@ import { binary } from "./binary";
 import { bitwise } from "./bitwise";
 
 export const testScope = scope({
-    ...binary.import(),
-    ...bitwise.import(),
+	...binary.import(),
+	...bitwise.import(),
 
-    // Layout / analyzer fixtures
-    Simple: {
-        a: "u8",
-        b: "u32",
-        c: "u16",
-    },
-    Optimized: {
-        x: "u8",
-        y: "u32",
-        z: "u8",
-    },
-    Mac: "u8[] == 6",
-    Choice: "u8 | Simple",
+	// Layout / analyzer fixtures
+	Simple: {
+		a: "u8",
+		b: "u32",
+		c: "u16",
+	},
+	Optimized: {
+		x: "u8",
+		y: "u32",
+		z: "u8",
+	},
+	Mac: "u8[] == 6",
+	Choice: "u8 | Simple",
 
-    // Structural inference fixtures
-    SimpleUser: {
-        id: "0 <= number <= 1000",
-        age: "0 <= number <= 120",
-        balance: "-5000 <= number <= 5000",
-        isAdmin: "boolean",
-    },
-    Permissions: {
-        canRead: "0 | 1",
-        level: "0 | 1 | 2 | 3",
-    },
-    LargeValue: "bigint",
+	// Structural inference fixtures
+	SimpleUser: {
+		id: "0 <= number <= 1000",
+		age: "0 <= number <= 120",
+		balance: "-5000 <= number <= 5000",
+		isAdmin: "boolean",
+	},
+	Permissions: {
+		canRead: "0 | 1",
+		level: "0 | 1 | 2 | 3",
+	},
+	LargeValue: "bigint",
 });

@@ -1,11 +1,7 @@
 import { type, type Scope, type Type } from "arktype";
 import type { BaseNode } from "@ark/schema";
 import { binary } from "../schema/binary";
-import {
-	getProps,
-	findNode,
-	getRule,
-} from "../ark-utils";
+import { getProps, findNode, getRule } from "../ark-utils";
 import {
 	type TypePlan,
 	type StructPlan,
@@ -15,7 +11,7 @@ import {
 	type VariantPlan,
 	type EnumPlan,
 	type TypeLayout,
-	Field
+	Field,
 } from "../schema/layout";
 
 export interface MigrationPlan {
@@ -62,7 +58,12 @@ export class SchemaAnalyzer {
 	private synthEnumNames = new Set<string>();
 
 	constructor(scope: Scope<any>, config: AnalyzerConfig = {}) {
-		this.config = { wordSize: 64, autoLayout: true, layoutType: "aligned", ...config };
+		this.config = {
+			wordSize: 64,
+			autoLayout: true,
+			layoutType: "aligned",
+			...config,
+		};
 		this.module = scope.export();
 		this.aliases = (scope as any).aliases ?? {};
 		this.primitiveNames = Object.keys(binary.export());
@@ -73,7 +74,8 @@ export class SchemaAnalyzer {
 	private buildInferenceOrder(): InferenceCandidate[] {
 		const candidates: InferenceCandidate[] = [];
 		for (const [name, t] of Object.entries(this.aliases)) {
-			if (!t || name === "bool" || typeof (t as any).meta !== "object") continue;
+			if (!t || name === "bool" || typeof (t as any).meta !== "object")
+				continue;
 			const meta = ((t as any).meta ?? {}) as InferenceCandidate["meta"];
 			const kind = meta.SCHEMA_POP_KIND;
 			if (kind !== "binary" && kind !== "bitwise") continue;
@@ -97,7 +99,9 @@ export class SchemaAnalyzer {
 	}
 
 	private toPascal(s: string): string {
-		return s.replace(/(^|[_\s-])(\w)/g, (_, __, c) => c.toUpperCase()).replace(/[^a-zA-Z0-9]/g, "");
+		return s
+			.replace(/(^|[_\s-])(\w)/g, (_, __, c) => c.toUpperCase())
+			.replace(/[^a-zA-Z0-9]/g, "");
 	}
 
 	private synthesizeEnum(values: string[], hint: string): string {
@@ -110,12 +114,16 @@ export class SchemaAnalyzer {
 		if (!name) name = "AnonEnum";
 		let unique = name;
 		let n = 1;
-		while (this.synthEnumNames.has(unique) || this.scopeNames.includes(unique)) {
+		while (
+			this.synthEnumNames.has(unique) ||
+			this.scopeNames.includes(unique)
+		) {
 			unique = `${name}${++n}`;
 		}
 
-		const size = values.length <= 256 ? 1 : (values.length <= 65536 ? 2 : 4);
-		const underlyingType: "u8" | "u16" | "i32" = size === 1 ? "u8" : size === 2 ? "u16" : "i32";
+		const size = values.length <= 256 ? 1 : values.length <= 65536 ? 2 : 4;
+		const underlyingType: "u8" | "u16" | "i32" =
+			size === 1 ? "u8" : size === 2 ? "u16" : "i32";
 		const plan: EnumPlan = {
 			kind: "enum",
 			name: unique,
@@ -150,14 +158,28 @@ export class SchemaAnalyzer {
 
 		if (this.visiting.has(name)) {
 			this.error(`Cyclic dependency detected for ${name}`);
-			return { kind: "alias", name, size: 0, align: 1, paddedSize: 0, type: { kind: "unit" } };
+			return {
+				kind: "alias",
+				name,
+				size: 0,
+				align: 1,
+				paddedSize: 0,
+				type: { kind: "unit" },
+			};
 		}
 		this.visiting.add(name);
 
 		const rawEntry = this.module[name];
 		if (!rawEntry) {
 			this.error(`Cannot resolve type ${name}`);
-			return { kind: "alias", name, size: 0, align: 1, paddedSize: 0, type: { kind: "unit" } };
+			return {
+				kind: "alias",
+				name,
+				size: 0,
+				align: 1,
+				paddedSize: 0,
+				type: { kind: "unit" },
+			};
 		}
 		const node = rawEntry.internal;
 		const plan = this.analyzeTopLevel(name, node);
@@ -169,7 +191,8 @@ export class SchemaAnalyzer {
 
 	public analyze(version: string, endian: "le" | "be" = "le"): LayoutPlan {
 		const names = [...this.scopeNames].filter(
-			(n) => !this.primitiveNames.includes(n) && n !== "Binary" && n !== "Describe",
+			(n) =>
+				!this.primitiveNames.includes(n) && n !== "Binary" && n !== "Describe",
 		);
 
 		for (const name of names) {
@@ -190,7 +213,8 @@ export class SchemaAnalyzer {
 					else if (field.kind === "optional") addDeps(field.inner);
 				};
 				if (plan.kind === "struct") plan.fields.forEach((f) => addDeps(f.type));
-				else if (plan.kind === "union") plan.variants.forEach((v) => addDeps(v.type));
+				else if (plan.kind === "union")
+					plan.variants.forEach((v) => addDeps(v.type));
 				else if (plan.kind === "alias") addDeps(plan.type);
 				for (const dep of deps) visit(dep);
 				sorted.push(plan);
@@ -210,7 +234,10 @@ export class SchemaAnalyzer {
 		}
 
 		if (this.errors.length > 0) {
-			throw new Error(`Schema analysis failed with ${this.errors.length} errors:\n` + this.errors.map(e => `  - ${e}`).join("\n"));
+			throw new Error(
+				`Schema analysis failed with ${this.errors.length} errors:\n` +
+					this.errors.map((e) => `  - ${e}`).join("\n"),
+			);
 		}
 
 		return {
@@ -218,7 +245,7 @@ export class SchemaAnalyzer {
 			endian,
 			autoLayout: !!this.config.autoLayout,
 			wordSize: (this.config.wordSize as 32 | 64) || 64,
-			types: sorted
+			types: sorted,
 		};
 	}
 
@@ -290,14 +317,16 @@ export class SchemaAnalyzer {
 		return migrations;
 	}
 
-	private getBinaryMetadata(node: BaseNode): (TypeLayout & { type: string, bitSize?: number }) | undefined {
+	private getBinaryMetadata(
+		node: BaseNode,
+	): (TypeLayout & { type: string; bitSize?: number }) | undefined {
 		const meta = node.meta as any;
 		if (meta?.SCHEMA_POP_KIND === "binary") {
 			return {
 				size: meta.size!,
 				align: meta.align!,
 				paddedSize: Math.ceil(meta.size! / meta.align!) * meta.align!,
-				type: meta.type!
+				type: meta.type!,
 			};
 		}
 		if (meta?.SCHEMA_POP_KIND === "bitwise") {
@@ -306,7 +335,7 @@ export class SchemaAnalyzer {
 				align: 1,
 				paddedSize: 1,
 				type: `u${meta.size}`,
-				bitSize: meta.size
+				bitSize: meta.size,
 			};
 		}
 		return undefined;
@@ -324,7 +353,7 @@ export class SchemaAnalyzer {
 		if (field.kind === "unit") return { size: 0, align: 1, paddedSize: 0 };
 
 		if (field.kind === "primitive") {
-			if ('size' in field && 'align' in field) {
+			if ("size" in field && "align" in field) {
 				let align = field.align;
 				if (this.config.wordSize === 32 && field.size >= 8) {
 					align = Math.min(align, 4);
@@ -333,7 +362,7 @@ export class SchemaAnalyzer {
 				return {
 					size: field.size,
 					align,
-					paddedSize
+					paddedSize,
 				};
 			}
 			this.error(`Field ${JSON.stringify(field)} is missing layout metadata.`);
@@ -342,7 +371,11 @@ export class SchemaAnalyzer {
 
 		if (field.kind === "reference") {
 			const plan = this.getPlan(field.name);
-			return { size: plan.size, align: plan.align, paddedSize: plan.paddedSize ?? plan.size };
+			return {
+				size: plan.size,
+				align: plan.align,
+				paddedSize: plan.paddedSize ?? plan.size,
+			};
 		}
 
 		if (field.kind === "array") {
@@ -353,9 +386,13 @@ export class SchemaAnalyzer {
 			let align = isFixed ? itemLayout.align : Math.max(4, itemLayout.align);
 			let stride = itemLayout.paddedSize;
 
-			const isVector = isFixed && field.item.kind === "primitive" && max >= 2 && max <= 4;
+			const isVector =
+				isFixed && field.item.kind === "primitive" && max >= 2 && max <= 4;
 
-			if (this.config.layoutType === "std140" || this.config.layoutType === "std430") {
+			if (
+				this.config.layoutType === "std140" ||
+				this.config.layoutType === "std430"
+			) {
 				if (isVector) {
 					align = max === 2 ? 2 * itemLayout.size : 4 * itemLayout.size;
 					stride = itemLayout.size;
@@ -369,7 +406,8 @@ export class SchemaAnalyzer {
 				stride = Math.ceil(stride / align) * align;
 			}
 
-			const baseSize = (isFixed && isVector ? 0 : (isFixed ? 0 : 4)) + max * stride;
+			const baseSize =
+				(isFixed && isVector ? 0 : isFixed ? 0 : 4) + max * stride;
 			const paddedSize = Math.ceil(baseSize / align) * align;
 
 			return { size: baseSize, align, paddedSize };
@@ -393,7 +431,11 @@ export class SchemaAnalyzer {
 		}
 
 		if (field.kind === "inlineStruct") {
-			return { size: field.size, align: field.align, paddedSize: field.paddedSize ?? field.size };
+			return {
+				size: field.size,
+				align: field.align,
+				paddedSize: field.paddedSize ?? field.size,
+			};
 		}
 
 		return { size: 0, align: 1, paddedSize: 0 };
@@ -431,7 +473,9 @@ export class SchemaAnalyzer {
 			...layout,
 			type: field,
 			description,
-			...(obsolete ? { obsolete: true, ...(obsoleteReason ? { obsoleteReason } : {}) } : {}),
+			...(obsolete
+				? { obsolete: true, ...(obsoleteReason ? { obsoleteReason } : {}) }
+				: {}),
 		};
 	}
 
@@ -470,7 +514,9 @@ export class SchemaAnalyzer {
 	private analyzeFields(node: BaseNode, parentName?: string): FieldPlan[] {
 		const props = getProps(node);
 		const propsWithMeta = props.map((p, i) => {
-			const hint = parentName ? `${parentName}_${String(p.key)}` : String(p.key);
+			const hint = parentName
+				? `${parentName}_${String(p.key)}`
+				: String(p.key);
 			let type = this.resolveFieldType(p.value, undefined, hint);
 			if (p.kind === "optional") type = { kind: "optional", inner: type };
 			const layout = this.getLayout(type);
@@ -480,7 +526,7 @@ export class SchemaAnalyzer {
 				type,
 				align: layout.align,
 				size: layout.size,
-				paddedSize: layout.paddedSize
+				paddedSize: layout.paddedSize,
 			};
 		});
 
@@ -497,12 +543,15 @@ export class SchemaAnalyzer {
 		for (const meta of propsWithMeta) {
 			const type = meta.type as any;
 			const isBitwise = type.kind === "primitive" && type.bitSize < 8;
-			const bitSize = isBitwise ? type.bitSize : (meta.size * 8);
+			const bitSize = isBitwise ? type.bitSize : meta.size * 8;
 			const propMeta = {
 				...(meta.prop.value?.meta || {}),
 				...((meta.prop as any).meta || {}),
 			};
-			const fieldDesc = propMeta.description || meta.prop.description || meta.prop.value?.description;
+			const fieldDesc =
+				propMeta.description ||
+				meta.prop.description ||
+				meta.prop.value?.description;
 			const fieldObsolete = propMeta.obsolete === true ? true : undefined;
 			const fieldObsoleteReason = propMeta.obsoleteReason;
 
@@ -521,7 +570,9 @@ export class SchemaAnalyzer {
 					paddingAfter: 0,
 					description: fieldDesc,
 					...(fieldObsolete ? { obsolete: true } : {}),
-					...(fieldObsoleteReason ? { obsoleteReason: fieldObsoleteReason } : {}),
+					...(fieldObsoleteReason
+						? { obsoleteReason: fieldObsoleteReason }
+						: {}),
 				});
 				currentBitOffset += bitSize;
 			} else {
@@ -529,7 +580,8 @@ export class SchemaAnalyzer {
 					currentOffset += 1;
 					currentBitOffset = 0;
 				}
-				const paddingBefore = (meta.align - (currentOffset % meta.align)) % meta.align;
+				const paddingBefore =
+					(meta.align - (currentOffset % meta.align)) % meta.align;
 				currentOffset += paddingBefore;
 
 				fields.push({
@@ -542,15 +594,23 @@ export class SchemaAnalyzer {
 					paddingAfter: 0,
 					description: fieldDesc,
 					...(fieldObsolete ? { obsolete: true } : {}),
-					...(fieldObsoleteReason ? { obsoleteReason: fieldObsoleteReason } : {}),
+					...(fieldObsoleteReason
+						? { obsoleteReason: fieldObsoleteReason }
+						: {}),
 				});
 				currentOffset += meta.paddedSize;
 			}
 		}
 		if (currentBitOffset > 0) currentOffset += 1;
 
-		const structAlign = fields.reduce((max, f) => Math.max(max, this.getLayout(f.type).align), 1);
-		const finalAlign = this.config.layoutType === "std140" ? Math.max(structAlign, 16) : structAlign;
+		const structAlign = fields.reduce(
+			(max, f) => Math.max(max, this.getLayout(f.type).align),
+			1,
+		);
+		const finalAlign =
+			this.config.layoutType === "std140"
+				? Math.max(structAlign, 16)
+				: structAlign;
 
 		for (let i = 0; i < fields.length; i++) {
 			const f = fields[i]!;
@@ -560,7 +620,10 @@ export class SchemaAnalyzer {
 			if (f.bitSize < 8) {
 				let j = i + 1;
 				while (j < fields.length && fields[j]!.offset === f.offset) j++;
-				nextOffset = j < fields.length ? fields[j]!.offset : Math.ceil(currentOffset / finalAlign) * finalAlign;
+				nextOffset =
+					j < fields.length
+						? fields[j]!.offset
+						: Math.ceil(currentOffset / finalAlign) * finalAlign;
 
 				if (j === i + 1) {
 					f.paddingAfter = nextOffset - (f.offset + 1);
@@ -578,34 +641,58 @@ export class SchemaAnalyzer {
 
 	private analyzeUnion(name: string, node: BaseNode): UnionPlan | EnumPlan {
 		const children = node.children ?? [];
-		const isEnum = children.every((c: any) => c.kind === "unit" || c.unit !== undefined);
+		const isEnum = children.every(
+			(c: any) => c.kind === "unit" || c.unit !== undefined,
+		);
 
 		if (isEnum) {
 			const variants = children.map((c: any, i: number) => ({
-				name: c.unit ? String(c.unit) : c.nestableExpression.replace(/['"]/g, ""),
-				value: i
+				name: c.unit
+					? String(c.unit)
+					: c.nestableExpression.replace(/['"]/g, ""),
+				value: i,
 			}));
-			return { kind: "enum", name, size: 1, align: 1, paddedSize: 1, variants, underlyingType: "u8" };
+			return {
+				kind: "enum",
+				name,
+				size: 1,
+				align: 1,
+				paddedSize: 1,
+				variants,
+				underlyingType: "u8",
+			};
 		}
 
-		const disc = (node as any).discriminant as { kind?: string; path?: PropertyKey[]; cases?: Record<string, unknown> } | null;
-		const naturalDisc = !!(disc && disc.kind === "unit" && disc.path?.length === 1 && disc.cases);
+		const disc = (node as any).discriminant as {
+			kind?: string;
+			path?: PropertyKey[];
+			cases?: Record<string, unknown>;
+		} | null;
+		const naturalDisc = !!(
+			disc &&
+			disc.kind === "unit" &&
+			disc.path?.length === 1 &&
+			disc.cases
+		);
 		const discPath = naturalDisc ? String(disc!.path![0]) : undefined;
 
 		const variants: VariantPlan[] = children.map((branch: any, i: number) => {
 			const foundName = this.scopeNames.find(
-				(n) => this.module[n]?.internal === branch
+				(n) => this.module[n]?.internal === branch,
 			);
 			let vName: string;
 			if (branch.kind === "unit" || branch.unit !== undefined) {
-				vName = branch.unit ? String(branch.unit) : branch.nestableExpression.replace(/['"]/g, "");
+				vName = branch.unit
+					? String(branch.unit)
+					: branch.nestableExpression.replace(/['"]/g, "");
 			} else if (naturalDisc) {
 				const branchProps = getProps(branch);
 				const discProp = branchProps.find((p) => String(p.key) === discPath);
 				const discValue = discProp?.value as any;
-				vName = discValue && discValue.unit !== undefined
-					? String(discValue.unit)
-					: (foundName ?? `Variant${i + 1}`);
+				vName =
+					discValue && discValue.unit !== undefined
+						? String(discValue.unit)
+						: (foundName ?? `Variant${i + 1}`);
 			} else {
 				vName = foundName ?? `Variant${i + 1}`;
 			}
@@ -621,20 +708,31 @@ export class SchemaAnalyzer {
 		variants.sort((a, b) => a.name.localeCompare(b.name));
 
 		// Tag enum: synthesize once per union, named `${UnionName}Tag`. Dedupe by case-key set.
-		const tagEnumName = this.synthesizeEnum(variants.map(v => v.name), `${name}Tag`);
+		const tagEnumName = this.synthesizeEnum(
+			variants.map((v) => v.name),
+			`${name}Tag`,
+		);
 		const tagEnum = this.resolvedPlans.get(tagEnumName) as EnumPlan;
 		const tagSize = tagEnum.size;
 		const tagType: "u8" | "u16" | "u32" =
-			tagEnum.underlyingType === "i32" ? "u32" : (tagEnum.underlyingType as "u8" | "u16");
+			tagEnum.underlyingType === "i32"
+				? "u32"
+				: (tagEnum.underlyingType as "u8" | "u16");
 
 		const payloadAlign = variants.reduce(
 			(max, v) =>
-				Math.max(max, v.type.kind !== "unit" ? this.getLayout(v.type).align : 1),
+				Math.max(
+					max,
+					v.type.kind !== "unit" ? this.getLayout(v.type).align : 1,
+				),
 			1,
 		);
 		const payloadSize = variants.reduce(
 			(max, v) =>
-				Math.max(max, v.type.kind !== "unit" ? this.getLayout(v.type).paddedSize : 0),
+				Math.max(
+					max,
+					v.type.kind !== "unit" ? this.getLayout(v.type).paddedSize : 0,
+				),
 			0,
 		);
 
@@ -661,7 +759,7 @@ export class SchemaAnalyzer {
 		size: number,
 		align: number,
 		bitSize?: number,
-		popKind: "binary" | "bitwise" | "reserved" = "binary"
+		popKind: "binary" | "bitwise" | "reserved" = "binary",
 	): Field {
 		return {
 			kind: "primitive",
@@ -670,7 +768,7 @@ export class SchemaAnalyzer {
 			align,
 			paddedSize: Math.ceil(size / align) * align,
 			bitSize: bitSize ?? size * 8,
-			popKind
+			popKind,
 		};
 	}
 
@@ -678,22 +776,28 @@ export class SchemaAnalyzer {
 		if (!node.isRoot()) return undefined;
 
 		const children = (node as any).children ?? [];
-		const isUnitUnion = node.kind === "union"
-			&& children.length > 0
-			&& children.every((c: any) => c.kind === "unit" || c.unit !== undefined);
+		const isUnitUnion =
+			node.kind === "union" &&
+			children.length > 0 &&
+			children.every((c: any) => c.kind === "unit" || c.unit !== undefined);
 
-		const domainNode = findNode(node, "domain") as { domain?: string } | undefined;
+		const domainNode = findNode(node, "domain") as
+			| { domain?: string }
+			| undefined;
 		const domain = domainNode?.domain;
 
 		if (domain === "boolean") {
 			const bool = this.aliases["bool"] as Type | undefined;
-			const m = ((bool as any)?.meta ?? {}) as { size?: number; align?: number };
+			const m = ((bool as any)?.meta ?? {}) as {
+				size?: number;
+				align?: number;
+			};
 			return this.makePrimitive("bool", m.size || 1, m.align || 1, 1, "binary");
 		}
 
 		// unit-unions opt into bitwise candidates; ranges/aliases use binary only
 		const targetKind: "bitwise" | "binary" = isUnitUnion ? "bitwise" : "binary";
-		const candidates = this.inferenceOrder.filter(c => c.kind === targetKind);
+		const candidates = this.inferenceOrder.filter((c) => c.kind === targetKind);
 
 		for (const { name, meta, type: prim, kind } of candidates) {
 			if (node.extends(prim)) {
@@ -709,8 +813,13 @@ export class SchemaAnalyzer {
 		return undefined;
 	}
 
-	private resolveFieldType(node: BaseNode, currentTypeName?: string, pathHint?: string): Field {
-		if (node.kind === "unit" || (node as any).unit !== undefined) return { kind: "unit" };
+	private resolveFieldType(
+		node: BaseNode,
+		currentTypeName?: string,
+		pathHint?: string,
+	): Field {
+		if (node.kind === "unit" || (node as any).unit !== undefined)
+			return { kind: "unit" };
 
 		const meta = this.getBinaryMetadata(node);
 		if (meta) {
@@ -720,23 +829,42 @@ export class SchemaAnalyzer {
 				align: meta.align,
 				paddedSize: meta.paddedSize,
 				name: meta.type,
-				bitSize: meta.bitSize ?? meta.size * 8
+				bitSize: meta.bitSize ?? meta.size * 8,
 			});
 		}
 
 		if (node.kind === "union") {
 			const children = node.children ?? [];
-			const allUnit = children.every((c: any) => c.kind === "unit" || c.unit !== undefined);
+			const allUnit = children.every(
+				(c: any) => c.kind === "unit" || c.unit !== undefined,
+			);
 			if (allUnit) {
 				const units = children.map((c: any) => c.unit);
-				const isBool = children.length === 2 && units.includes(true) && units.includes(false);
+				const isBool =
+					children.length === 2 &&
+					units.includes(true) &&
+					units.includes(false);
 				if (isBool) return this.makePrimitive("bool", 1, 1);
-				const disc = (node as any).discriminant as { kind?: string; path?: PropertyKey[] } | null;
-				const isLeafStringEnum = disc && disc.kind === "unit" && (disc.path?.length ?? 0) === 0
-					&& units.every((u: any) => typeof u === "string");
+				const disc = (node as any).discriminant as {
+					kind?: string;
+					path?: PropertyKey[];
+				} | null;
+				const isLeafStringEnum =
+					disc &&
+					disc.kind === "unit" &&
+					(disc.path?.length ?? 0) === 0 &&
+					units.every((u: any) => typeof u === "string");
 				if (isLeafStringEnum) {
-					const synthName = this.synthesizeEnum(units as string[], pathHint ?? "AnonEnum");
-					return { kind: "reference", name: synthName, indirection: "inline", isForward: false };
+					const synthName = this.synthesizeEnum(
+						units as string[],
+						pathHint ?? "AnonEnum",
+					);
+					return {
+						kind: "reference",
+						name: synthName,
+						indirection: "inline",
+						isForward: false,
+					};
 				}
 				const inferred = this.inferPrimitiveFromConstraints(node);
 				if (inferred) return inferred;
@@ -746,10 +874,7 @@ export class SchemaAnalyzer {
 		const expr = typeof node.expression === "string" ? node.expression : "";
 		const foundName = this.scopeNames.find((n) => {
 			const entry = this.module[n];
-			return (
-				entry &&
-				(entry.internal === node || entry.expression === expr)
-			);
+			return entry && (entry.internal === node || entry.expression === expr);
 		});
 
 		if (foundName && foundName !== currentTypeName) {
@@ -757,15 +882,32 @@ export class SchemaAnalyzer {
 				const primNode = this.module[foundName]!.internal;
 				const primMeta = this.getBinaryMetadata(primNode);
 				if (primMeta) {
-					return this.assertField({ kind: "primitive", size: primMeta.size, align: primMeta.align, paddedSize: primMeta.paddedSize, name: primMeta.type });
+					return this.assertField({
+						kind: "primitive",
+						size: primMeta.size,
+						align: primMeta.align,
+						paddedSize: primMeta.paddedSize,
+						name: primMeta.type,
+					});
 				}
 			}
-			return { kind: "reference", name: foundName, indirection: "inline", isForward: false };
+			return {
+				kind: "reference",
+				name: foundName,
+				indirection: "inline",
+				isForward: false,
+			};
 		}
 
 		if (node.kind === "sequence" || findNode(node, "sequence")) {
-			const seqNode = (node.kind === "sequence" ? node : findNode(node, "sequence")) as any;
-			const exactLength = getRule(node, "exactLength") ?? (seqNode.minLength === seqNode.maxLength ? seqNode.minLength : undefined);
+			const seqNode = (
+				node.kind === "sequence" ? node : findNode(node, "sequence")
+			) as any;
+			const exactLength =
+				getRule(node, "exactLength") ??
+				(seqNode.minLength === seqNode.maxLength
+					? seqNode.minLength
+					: undefined);
 			const maxLength = getRule(node, "maxLength") ?? seqNode.maxLength;
 
 			let itemNode = seqNode.variadic;
@@ -775,7 +917,13 @@ export class SchemaAnalyzer {
 
 			const arrayField: Record<string, unknown> = {
 				kind: "array",
-				item: itemNode ? this.resolveFieldType(itemNode, undefined, pathHint ? `${pathHint}Item` : undefined) : { kind: "primitive", name: "u8", size: 1, align: 1, paddedSize: 1 },
+				item: itemNode
+					? this.resolveFieldType(
+							itemNode,
+							undefined,
+							pathHint ? `${pathHint}Item` : undefined,
+						)
+					: { kind: "primitive", name: "u8", size: 1, align: 1, paddedSize: 1 },
 			};
 			if (exactLength != null) arrayField["exactLength"] = exactLength;
 			if (maxLength != null) arrayField["maxLength"] = maxLength;
@@ -784,13 +932,22 @@ export class SchemaAnalyzer {
 
 		const domainNode = findNode(node, "domain");
 		if (domainNode && (domainNode as any).expression === "string") {
-			return { kind: "string", maxLength: getRule(node, "maxLength") ?? (node as any).maxLength };
+			return {
+				kind: "string",
+				maxLength: getRule(node, "maxLength") ?? (node as any).maxLength,
+			};
 		}
 
 		const inferred = this.inferPrimitiveFromConstraints(node);
 		if (inferred) return inferred;
 
 		this.error(`Unable to resolve field type: ${expr}`);
-		return this.assertField({ kind: "primitive", name: "unknown", size: 0, align: 1, paddedSize: 0 });
+		return this.assertField({
+			kind: "primitive",
+			name: "unknown",
+			size: 0,
+			align: 1,
+			paddedSize: 0,
+		});
 	}
 }

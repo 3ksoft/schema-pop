@@ -18,9 +18,9 @@ import { Reserved, Scale, At } from "./core";
  * locally-defined aliases, dropping the spread-in primitives.)
  */
 export const schemaPop = {
-    ...binary.import(),
-    ...bitwise.import(),
-    "#Reserved": Reserved,
-    "#Scale": Scale,
-    "#At": At,
+	...binary.import(),
+	...bitwise.import(),
+	"#Reserved": Reserved,
+	"#Scale": Scale,
+	"#At": At,
 };

@@ -1,17 +1,17 @@
 {
-    "name": "example-schema-pop",
-    "type": "module",
-    "packageManager": "bun@1.3.3",
-    "workspaces": [
-        "packages/*"
-    ],
-    "scripts": {
-        "generate": "bun run --filter '*-schema' generate",
-        "build": "bun scripts/build.ts",
-        "dev": "bun scripts/build.ts --watch",
-        "test": "bun run build && bun run --filter typescript test"
-    },
-    "devDependencies": {
-        "@types/bun": "latest"
-    }
+	"name": "example-schema-pop",
+	"type": "module",
+	"packageManager": "bun@1.3.3",
+	"workspaces": [
+		"packages/*"
+	],
+	"scripts": {
+		"generate": "bun run --filter '*-schema' generate",
+		"build": "bun scripts/build.ts",
+		"dev": "bun scripts/build.ts --watch",
+		"test": "bun run build && bun run --filter typescript test"
+	},
+	"devDependencies": {
+		"@types/bun": "latest"
+	}
 }

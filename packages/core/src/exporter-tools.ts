@@ -11,7 +11,10 @@ function toSafeVersionIdentifier(version: string): string {
 }
 
 function indentBlock(code: string, indent = "\t"): string {
-	return code.split("\n").map(l => l ? `${indent}${l}` : l).join("\n");
+	return code
+		.split("\n")
+		.map((l) => (l ? `${indent}${l}` : l))
+		.join("\n");
 }
 
 export interface NamespaceWrapper {
@@ -20,7 +23,11 @@ export interface NamespaceWrapper {
 	indent?: string;
 }
 
-function wrapNamespace(version: string, body: string, w: NamespaceWrapper): string {
+function wrapNamespace(
+	version: string,
+	body: string,
+	w: NamespaceWrapper,
+): string {
 	const mod = toSafeVersionIdentifier(version);
 	return `${w.open(mod)}\n${indentBlock(body, w.indent ?? "\t")}${w.close}\n`;
 }
@@ -54,7 +61,10 @@ export interface ExporterToolsKit {
  * Build a per-exporter helper kit. Naming functions are pre-bound to the exporter's config.
  * Usage: `const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace } = ExporterTools(cfg);`
  */
-export function ExporterTools(cfg: { typeNaming?: NamingStrategy; fieldNaming?: NamingStrategy }): ExporterToolsKit {
+export function ExporterTools(cfg: {
+	typeNaming?: NamingStrategy;
+	fieldNaming?: NamingStrategy;
+}): ExporterToolsKit {
 	return {
 		INDENT,
 		indentBlock,

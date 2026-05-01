@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { $ } from "bun";
-import { mkdirSync, rmSync, existsSync, readdirSync, writeFileSync, readFileSync } from "node:fs";
+import {
+	mkdirSync,
+	rmSync,
+	existsSync,
+	readdirSync,
+	writeFileSync,
+	readFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 const HARNESS_PATH = join(import.meta.dirname, "harness");
@@ -14,21 +21,19 @@ const PROJECT_PATH = join(TMP_ROOT, PROJECT_NAME);
 const LONG_TIMEOUT = 60_000;
 var all_tests_passed = false;
 
-
 const PACKAGES = [
 	"packages/core",
 	"packages/core-exporters",
 	"packages/extra-exporters",
-	"packages/create"
+	"packages/create",
 ];
 
 describe("create-schema-pop Integration", () => {
-
 	// Shared registry env — ensures bunx and bun install both hit Verdaccio
 	const testEnv = {
 		...process.env,
 		npm_config_registry: REGISTRY,
-		BUN_CONFIG_REGISTRY: REGISTRY
+		BUN_CONFIG_REGISTRY: REGISTRY,
 	};
 
 	beforeAll(async () => {
@@ -47,8 +52,11 @@ describe("create-schema-pop Integration", () => {
 		for (let i = 0; i < 15; i++) {
 			try {
 				const res = await fetch(REGISTRY);
-				if (res.ok) { ready = true; break; }
-			} catch (e) { }
+				if (res.ok) {
+					ready = true;
+					break;
+				}
+			} catch (e) {}
 			await new Promise((r) => setTimeout(r, 1000));
 		}
 		if (!ready) throw new Error("Verdaccio failed to start");
@@ -63,10 +71,11 @@ describe("create-schema-pop Integration", () => {
 			// 1. workspace:* deps are rewritten to real semver in the tarball
 			// 2. --no-git-checks is a valid flag (it's a bun-specific flag)
 			// 3. --access public ensures scoped packages are installable
-			const pub = await $`bun publish --registry ${REGISTRY} --access public --no-git-checks`
-				.cwd(pkgPath)
-				.nothrow()
-				.quiet();
+			const pub =
+				await $`bun publish --registry ${REGISTRY} --access public --no-git-checks`
+					.cwd(pkgPath)
+					.nothrow()
+					.quiet();
 
 			if (pub.exitCode !== 0) {
 				console.error(`❌ Failed to publish ${pkg}`);
@@ -96,76 +105,94 @@ describe("create-schema-pop Integration", () => {
 		}
 	});
 
+	it(
+		"should scaffold project via bunx from local registry",
+		async () => {
+			console.log("🏗️  Scaffolding...");
 
-	it("should scaffold project via bunx from local registry", async () => {
-		console.log("🏗️  Scaffolding...");
+			const scaffold =
+				await $`bun create schema-pop --name ${PROJECT_NAME} --type all`
+					.env(testEnv)
+					.cwd(TMP_ROOT)
+					.nothrow();
 
-		const scaffold = await $`bun create schema-pop --name ${PROJECT_NAME} --type all`
-			.env(testEnv)
-			.cwd(TMP_ROOT)
-			.nothrow();
+			expect(scaffold.exitCode).toBe(0);
 
-		expect(scaffold.exitCode).toBe(0);
+			console.log("📦 Installing dependencies...");
+			const install = await $`bun install`
+				.env(testEnv)
+				.cwd(PROJECT_PATH)
+				.nothrow();
 
-		console.log("📦 Installing dependencies...");
-		const install = await $`bun install`
-			.env(testEnv)
-			.cwd(PROJECT_PATH)
-			.nothrow();
+			expect(install.exitCode).toBe(0);
+		},
+		LONG_TIMEOUT * 2,
+	); // Long timeout for full E2E
 
-		expect(install.exitCode).toBe(0);
-	}, LONG_TIMEOUT * 2); // Long timeout for full E2E
+	it(
+		"should generate schemas",
+		async () => {
+			console.log("🧬  Generating schemas...");
+			const genProc = await $`bun run generate`
+				.cwd(PROJECT_PATH)
+				.nothrow()
+				.quiet();
 
-	it("should generate schemas", async () => {
-		console.log("🧬  Generating schemas...");
-		const genProc = await $`bun run generate`
-			.cwd(PROJECT_PATH)
-			.nothrow()
-			.quiet();
+			if (genProc.exitCode !== 0) {
+				console.error("Generate Stdout:", genProc.stdout.toString());
+				console.error("Generate Error:", genProc.stderr.toString());
+			}
+			expect(genProc.exitCode).toBe(0);
+		},
+		LONG_TIMEOUT,
+	);
 
-		if (genProc.exitCode !== 0) {
-			console.error("Generate Stdout:", genProc.stdout.toString());
-			console.error("Generate Error:", genProc.stderr.toString());
-		}
-		expect(genProc.exitCode).toBe(0);
-	}, LONG_TIMEOUT);
+	it(
+		"should build artifacts",
+		async () => {
+			console.log("🛠️  Building artifacts...");
+			const buildProc = await $`bun run build`
+				.cwd(PROJECT_PATH)
+				.nothrow()
+				.quiet();
 
-	it("should build artifacts", async () => {
-		console.log("🛠️  Building artifacts...");
-		const buildProc = await $`bun run build`
-			.cwd(PROJECT_PATH)
-			.nothrow()
-			.quiet();
+			if (buildProc.exitCode !== 0) {
+				console.error("Build Stdout:", buildProc.stdout.toString());
+				console.error("Build Error:", buildProc.stderr.toString());
+			}
+			expect(buildProc.exitCode).toBe(0);
+		},
+		LONG_TIMEOUT * 2,
+	);
 
-		if (buildProc.exitCode !== 0) {
-			console.error("Build Stdout:", buildProc.stdout.toString());
-			console.error("Build Error:", buildProc.stderr.toString());
-		}
-		expect(buildProc.exitCode).toBe(0);
-	}, LONG_TIMEOUT * 2);
+	it(
+		"should pass ABI Consistency integration test",
+		async () => {
+			console.log("🧪 Running ABI Consistency integration test...");
+			const tsTestProc = await $`bun run test`
+				.cwd(PROJECT_PATH)
+				.nothrow()
+				.quiet();
 
-	it("should pass ABI Consistency integration test", async () => {
-		console.log("🧪 Running ABI Consistency integration test...");
-		const tsTestProc = await $`bun run test`
-			.cwd(PROJECT_PATH)
-			.nothrow()
-			.quiet();
+			if (tsTestProc.exitCode !== 0) {
+				console.error("Test Stdout:", tsTestProc.stdout.toString());
+				console.error("Test Error:", tsTestProc.stderr.toString());
+			} else {
+				console.log(tsTestProc.stdout.toString());
+			}
+			expect(tsTestProc.exitCode).toBe(0);
+		},
+		LONG_TIMEOUT,
+	);
 
-		if (tsTestProc.exitCode !== 0) {
-			console.error("Test Stdout:", tsTestProc.stdout.toString());
-			console.error("Test Error:", tsTestProc.stderr.toString());
-		} else {
-			console.log(tsTestProc.stdout.toString());
-		}
-		expect(tsTestProc.exitCode).toBe(0);
-	}, LONG_TIMEOUT);
+	it(
+		"should run a user-supplied custom exporter",
+		async () => {
+			console.log("🔌 Testing custom exporter loading...");
+			const schemaPath = join(PROJECT_PATH, "packages", "schema");
 
-	it("should run a user-supplied custom exporter", async () => {
-		console.log("🔌 Testing custom exporter loading...");
-		const schemaPath = join(PROJECT_PATH, "packages", "schema");
-
-		// 1. User-side custom exporter — emits a tiny markdown report.
-		const exporterSrc = `import type { LayoutPlan, ExporterPlugin, BaseConfig } from "schema-pop";
+			// 1. User-side custom exporter — emits a tiny markdown report.
+			const exporterSrc = `import type { LayoutPlan, ExporterPlugin, BaseConfig } from "schema-pop";
 
 export interface MarkdownConfig extends BaseConfig {}
 
@@ -189,19 +216,22 @@ export function markdown(config: MarkdownConfig = {}): ExporterPlugin<MarkdownCo
     };
 }
 `;
-		writeFileSync(join(schemaPath, "src", "markdown-exporter.ts"), exporterSrc);
+			writeFileSync(
+				join(schemaPath, "src", "markdown-exporter.ts"),
+				exporterSrc,
+			);
 
-		// 2. Standalone config that imports the custom exporter alongside the
-		//    bundled `defineConfig` helper. Reusing the project's own schema
-		//    sources keeps the test self-contained.
-		const sources = readdirSync(join(schemaPath, "src", "schema"))
-			.filter((f) => f.endsWith(".ts") && !/V\d+\.ts$/.test(f))
-			.map((f) => f.replace(/\.ts$/, ""))
-			.sort();
-		const firstSchema = sources[0];
-		expect(firstSchema).toBeDefined();
+			// 2. Standalone config that imports the custom exporter alongside the
+			//    bundled `defineConfig` helper. Reusing the project's own schema
+			//    sources keeps the test self-contained.
+			const sources = readdirSync(join(schemaPath, "src", "schema"))
+				.filter((f) => f.endsWith(".ts") && !/V\d+\.ts$/.test(f))
+				.map((f) => f.replace(/\.ts$/, ""))
+				.sort();
+			const firstSchema = sources[0];
+			expect(firstSchema).toBeDefined();
 
-		const customConfigSrc = `import { defineConfig } from "schema-pop";
+			const customConfigSrc = `import { defineConfig } from "schema-pop";
 import { markdown } from "./src/markdown-exporter";
 
 export default defineConfig({
@@ -216,28 +246,30 @@ export default defineConfig({
     }],
 });
 `;
-		writeFileSync(join(schemaPath, "pop.custom.config.ts"), customConfigSrc);
+			writeFileSync(join(schemaPath, "pop.custom.config.ts"), customConfigSrc);
 
-		// 3. Run the schema-pop CLI with the custom config.
-		const customGen = await $`bun x schema-pop pop.custom.config.ts`
-			.env(testEnv)
-			.cwd(schemaPath)
-			.nothrow();
+			// 3. Run the schema-pop CLI with the custom config.
+			const customGen = await $`bun x schema-pop pop.custom.config.ts`
+				.env(testEnv)
+				.cwd(schemaPath)
+				.nothrow();
 
-		if (customGen.exitCode !== 0) {
-			console.error("Custom generate stdout:", customGen.stdout.toString());
-			console.error("Custom generate stderr:", customGen.stderr.toString());
-		}
-		expect(customGen.exitCode).toBe(0);
+			if (customGen.exitCode !== 0) {
+				console.error("Custom generate stdout:", customGen.stdout.toString());
+				console.error("Custom generate stderr:", customGen.stderr.toString());
+			}
+			expect(customGen.exitCode).toBe(0);
 
-		// 4. Verify the output file exists and looks plausible.
-		const outPath = join(schemaPath, "dist", "custom.md");
-		expect(existsSync(outPath)).toBe(true);
-		const md = readFileSync(outPath, "utf-8");
-		expect(md).toContain("# Schema");
-		expect(md).toContain("<!-- version:");
-		expect(md).toMatch(/\| offset \| name \| size \|/);
+			// 4. Verify the output file exists and looks plausible.
+			const outPath = join(schemaPath, "dist", "custom.md");
+			expect(existsSync(outPath)).toBe(true);
+			const md = readFileSync(outPath, "utf-8");
+			expect(md).toContain("# Schema");
+			expect(md).toContain("<!-- version:");
+			expect(md).toMatch(/\| offset \| name \| size \|/);
 
-		all_tests_passed = true;
-	}, LONG_TIMEOUT);
+			all_tests_passed = true;
+		},
+		LONG_TIMEOUT,
+	);
 });

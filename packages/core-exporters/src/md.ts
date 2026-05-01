@@ -29,9 +29,16 @@ export function md(config: MdConfig): ExporterPlugin<MdConfig> {
 					out += "| Offset | Field | Type | Size | Padding |\n";
 					out += "| :--- | :--- | :--- | :--- | :--- |\n";
 					for (const f of t.fields) {
-						const offsetStr = f.bitSize && f.bitSize < 8 ? `${f.offset}.${f.bitOffset}` : `${f.offset}`;
-						const typeStr = (f.type.kind === "primitive" || f.type.kind === "reference") ? f.type.name : f.type.kind;
-						const sizeStr = f.bitSize && f.bitSize < 8 ? `${f.bitSize} bits` : `${f.size}b`;
+						const offsetStr =
+							f.bitSize && f.bitSize < 8
+								? `${f.offset}.${f.bitOffset}`
+								: `${f.offset}`;
+						const typeStr =
+							f.type.kind === "primitive" || f.type.kind === "reference"
+								? f.type.name
+								: f.type.kind;
+						const sizeStr =
+							f.bitSize && f.bitSize < 8 ? `${f.bitSize} bits` : `${f.size}b`;
 						out += `| +${offsetStr} | **${f.name}** | \`${typeStr}\` | ${sizeStr} | ${f.paddingAfter || "-"} |\n`;
 					}
 					out += "\n";
@@ -46,16 +53,20 @@ export function md(config: MdConfig): ExporterPlugin<MdConfig> {
 					out += `**Tag:** \`${t.tagType}\` @ +${t.tagOffset}\n\n`;
 					out += "### Variants\n\n";
 					for (const v of t.variants) {
-						const target = v.type.kind === "reference" ? ` → \`${v.type.name}\`` : "";
+						const target =
+							v.type.kind === "reference" ? ` → \`${v.type.name}\`` : "";
 						out += `- **${v.name}**${target}\n`;
 					}
 					out += "\n";
 				} else if (t.kind === "alias") {
-					const target = t.type.kind === "primitive" || t.type.kind === "reference" ? `\`${t.type.name}\`` : `\`${t.type.kind}\``;
+					const target =
+						t.type.kind === "primitive" || t.type.kind === "reference"
+							? `\`${t.type.name}\``
+							: `\`${t.type.kind}\``;
 					out += `**Aliases:** ${target}\n\n`;
 				}
 			}
 			return out;
-		}
+		},
 	};
 }

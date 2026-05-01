@@ -15,7 +15,11 @@ function getWgslType(f: Field): string {
 	if (f.kind === "reference") return f.name;
 	if (f.kind === "array") {
 		const itemType = getWgslType(f.item);
-		const isVector = f.exactLength !== undefined && f.item.kind === "primitive" && f.exactLength >= 2 && f.exactLength <= 4;
+		const isVector =
+			f.exactLength !== undefined &&
+			f.item.kind === "primitive" &&
+			f.exactLength >= 2 &&
+			f.exactLength <= 4;
 		if (isVector) {
 			return `vec${f.exactLength}<${itemType}>`;
 		}
@@ -26,10 +30,15 @@ function getWgslType(f: Field): string {
 }
 
 export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
-    const cfg = { fieldNaming: "snake_case", typeNaming: "PascalCase", commentStyle: "slash", ...config } as WgslConfig;
+	const cfg = {
+		fieldNaming: "snake_case",
+		typeNaming: "PascalCase",
+		commentStyle: "slash",
+		...config,
+	} as WgslConfig;
 	return {
-        name: "wgsl",
-        config: cfg,
+		name: "wgsl",
+		config: cfg,
 		generate: (plan: LayoutPlan) => {
 			let code = "";
 			for (const t of plan.types) {
@@ -51,7 +60,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 								const wgslType = getWgslType(f.type);
 								const fieldName = applyNaming(f.name, cfg.fieldNaming!);
 								const totalSize = f.size + f.paddingAfter;
-								
+
 								// In WGSL, we can use @size to manage padding elegantly.
 								if (f.paddingAfter > 0) {
 									code += `\t@size(${totalSize}) ${fieldName}: ${wgslType},\n`;
@@ -65,6 +74,6 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 				}
 			}
 			return code;
-		}
+		},
 	};
 }

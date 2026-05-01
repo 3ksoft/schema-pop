@@ -15,13 +15,18 @@ function getGlslType(f: Field): string {
 	if (f.kind === "reference") return f.name;
 	if (f.kind === "array") {
 		const itemType = getGlslType(f.item);
-		const isVector = f.exactLength !== undefined && f.item.kind === "primitive" && f.exactLength >= 2 && f.exactLength <= 4;
+		const isVector =
+			f.exactLength !== undefined &&
+			f.item.kind === "primitive" &&
+			f.exactLength >= 2 &&
+			f.exactLength <= 4;
 		if (isVector) {
 			if (f.item.name === "f32") return `vec${f.exactLength}`;
 			if (f.item.name === "f64") return `dvec${f.exactLength}`;
 			if (f.item.name.startsWith("i")) return `ivec${f.exactLength}`;
 			if (f.item.name.startsWith("u")) return `uvec${f.exactLength}`;
-			if (f.item.name === "bool" || f.item.name === "boolean") return `bvec${f.exactLength}`;
+			if (f.item.name === "bool" || f.item.name === "boolean")
+				return `bvec${f.exactLength}`;
 		}
 		return itemType;
 	}
@@ -29,10 +34,15 @@ function getGlslType(f: Field): string {
 }
 
 export function glsl(config: GlslConfig): ExporterPlugin<GlslConfig> {
-    const cfg = { fieldNaming: "snake_case", typeNaming: "PascalCase", commentStyle: "slash", ...config } as GlslConfig;
+	const cfg = {
+		fieldNaming: "snake_case",
+		typeNaming: "PascalCase",
+		commentStyle: "slash",
+		...config,
+	} as GlslConfig;
 	return {
-        name: "glsl",
-        config: cfg,
+		name: "glsl",
+		config: cfg,
 		generate: (plan: LayoutPlan) => {
 			let code = "";
 			for (const t of plan.types) {
@@ -53,17 +63,23 @@ export function glsl(config: GlslConfig): ExporterPlugin<GlslConfig> {
 							} else {
 								const glslType = getGlslType(f.type);
 								const fieldName = applyNaming(f.name, cfg.fieldNaming!);
-								const isVector = f.type.kind === "array" && f.type.exactLength !== undefined && f.type.item.kind === "primitive" && f.type.exactLength >= 2 && f.type.exactLength <= 4;
+								const isVector =
+									f.type.kind === "array" &&
+									f.type.exactLength !== undefined &&
+									f.type.item.kind === "primitive" &&
+									f.type.exactLength >= 2 &&
+									f.type.exactLength <= 4;
 								const isArray = f.type.kind === "array" && !isVector;
-								
+
 								if (isArray) {
-									const len = (f.type as any).exactLength || (f.type as any).maxLength;
+									const len =
+										(f.type as any).exactLength || (f.type as any).maxLength;
 									const max = len ? `[${len}]` : "[]";
 									code += `\t${glslType} ${fieldName}${max};\n`;
 								} else {
 									code += `\t${glslType} ${fieldName};\n`;
 								}
-								
+
 								if (f.paddingAfter > 0) {
 									const padWords = Math.ceil(f.paddingAfter / 4);
 									code += `\tuint _pad_${fieldName}[${padWords}];\n`;
@@ -75,6 +91,6 @@ export function glsl(config: GlslConfig): ExporterPlugin<GlslConfig> {
 				}
 			}
 			return code;
-		}
+		},
 	};
 }

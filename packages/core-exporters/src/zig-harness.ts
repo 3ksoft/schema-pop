@@ -1,7 +1,10 @@
 import type { LayoutPlan } from "schema-pop";
 import { ExporterTools } from "schema-pop";
 
-export function zigHarness(plans: LayoutPlan[], typeNaming: "PascalCase" = "PascalCase"): Record<string, string> {
+export function zigHarness(
+	plans: LayoutPlan[],
+	typeNaming: "PascalCase" = "PascalCase",
+): Record<string, string> {
 	const { typeName, toSafeVersionIdentifier } = ExporterTools({ typeNaming });
 
 	const layoutLines: string[] = [];
@@ -11,8 +14,12 @@ export function zigHarness(plans: LayoutPlan[], typeNaming: "PascalCase" = "Pasc
 		const ver = toSafeVersionIdentifier(plan.version);
 		for (const t of plan.types) {
 			const tn = typeName(t.name);
-			layoutLines.push(`\ttry stdout.print("${ver},${tn},{d},{d}\\n", .{ @sizeOf(schema.${ver}.${tn}), @alignOf(schema.${ver}.${tn}) });`);
-			matchArms.push(`\tif (std.mem.eql(u8, version, "${ver}") and std.mem.eql(u8, ty, "${tn}")) return rt(schema.${ver}.${tn}, buf, stdout);`);
+			layoutLines.push(
+				`\ttry stdout.print("${ver},${tn},{d},{d}\\n", .{ @sizeOf(schema.${ver}.${tn}), @alignOf(schema.${ver}.${tn}) });`,
+			);
+			matchArms.push(
+				`\tif (std.mem.eql(u8, version, "${ver}") and std.mem.eql(u8, ty, "${tn}")) return rt(schema.${ver}.${tn}, buf, stdout);`,
+			);
 		}
 	}
 

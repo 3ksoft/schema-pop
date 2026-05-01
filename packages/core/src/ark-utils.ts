@@ -1,6 +1,5 @@
 import type { BaseNode } from "@ark/schema";
 
-
 export type PropNode = BaseNode & { key: string; value: BaseNode };
 
 export function getPropsRaw(node: BaseNode): PropNode[] {
