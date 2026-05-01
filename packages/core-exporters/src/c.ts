@@ -31,7 +31,7 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 		commentStyle: "star",
 		...config,
 	};
-	const { typeName, fieldName, INDENT, mapScalarField, isRichType } =
+	const { typeName, fieldName, INDENT, mapScalarField, isRichType, toSafeVersionIdentifier } =
 		ExporterTools(cfg);
 	return {
 		name: "c",
@@ -40,7 +40,7 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 			"#pragma once\n#include <stdint.h>\n#include <stdbool.h>\n\n",
 		generate: (plan: LayoutPlan) => {
 			let code = "";
-			const mod = plan.version;
+			const mod = toSafeVersionIdentifier(plan.version);
 			const refName = (n: string) => `${mod}_${typeName(n)}`;
 			for (const t of plan.types) {
 				if (isRichType(t)) {

@@ -1,6 +1,7 @@
 import { type, type Scope, type Type } from "arktype";
 import type { BaseNode } from "@ark/schema";
 import { binary } from "../schema/binary";
+import { bitwise } from "../schema/bitwise";
 import { getProps, findNode, getRule } from "../ark-utils";
 import {
 	type TypePlan,
@@ -73,7 +74,10 @@ export class SchemaAnalyzer {
 		};
 		this.module = scope.export();
 		this.aliases = (scope as any).aliases ?? {};
-		this.primitiveNames = Object.keys(binary.export());
+		this.primitiveNames = [
+			...Object.keys(binary.export()),
+			...Object.keys(bitwise.export()),
+		];
 		// Include spread-imported aliases (from `...other.import()`) so
 		// references to them resolve. `module` (= scope.export()) only
 		// covers locally-declared types. Skip generic templates (Binary,
@@ -430,7 +434,17 @@ export class SchemaAnalyzer {
 			const max = isFixed ? field.exactLength! : field.maxLength || 0;
 			const itemLayout = this.getLayoutInternal(field.item);
 
-			let align = isFixed ? itemLayout.align : Math.max(4, itemLayout.align);
+			// Container alignment: var-length arrays carry a u32 length
+			// prefix, so the array as a whole sits on a 4-byte boundary
+			// regardless of element alignment. Fixed arrays inherit the
+			// element's own alignment.
+			let align = isFixed
+				? itemLayout.align
+				: Math.max(4, itemLayout.align);
+			// Stride (element-to-element distance) tracks the element's
+			// own alignment, NOT the container's. A u8[] should pack at
+			// 1 byte per element even when the array sits on a 4-byte
+			// boundary because of the length prefix.
 			let stride = itemLayout.paddedSize;
 
 			const isVector =
@@ -446,11 +460,7 @@ export class SchemaAnalyzer {
 				} else if (this.config.layoutType === "std140") {
 					align = Math.max(align, 16);
 					stride = Math.ceil(stride / 16) * 16;
-				} else {
-					stride = Math.ceil(stride / align) * align;
 				}
-			} else {
-				stride = Math.ceil(stride / align) * align;
 			}
 
 			const baseSize =
@@ -664,7 +674,14 @@ export class SchemaAnalyzer {
 			const fieldLayout = this.getLayout(f.type);
 			let nextOffset = Math.ceil(currentOffset / finalAlign) * finalAlign;
 
-			if (f.bitSize < 8) {
+			// Unit fields (string-literal singletons / discriminator-only)
+			// occupy zero bytes — they don't introduce padding.
+			if (f.size === 0 && f.bitSize === 0) {
+				f.paddingAfter = 0;
+				continue;
+			}
+
+			if (f.bitSize > 0 && f.bitSize < 8) {
 				let j = i + 1;
 				while (j < fields.length && fields[j]!.offset === f.offset) j++;
 				nextOffset =
@@ -950,6 +967,28 @@ export class SchemaAnalyzer {
 					(disc.path?.length ?? 0) === 0 &&
 					units.every((u: any) => typeof u === "string");
 				if (isLeafStringEnum) {
+					// If this exact union is already a top-level scope alias
+					// (e.g. user wrote `LayerKind: "'a'|'b'"` and a struct
+					// field references `LayerKind`), don't synthesize a copy
+					// with a path-derived name — return a reference to the
+					// existing alias.
+					const aliasExpr =
+						typeof node.expression === "string" ? node.expression : "";
+					const aliasName = this.scopeNames.find((n) => {
+						const entry = this.module[n];
+						return (
+							entry &&
+							(entry.internal === node || entry.expression === aliasExpr)
+						);
+					});
+					if (aliasName && aliasName !== currentTypeName) {
+						return {
+							kind: "reference",
+							name: aliasName,
+							indirection: "inline",
+							isForward: false,
+						};
+					}
 					const synthName = this.synthesizeEnum(
 						units as string[],
 						pathHint ?? "AnonEnum",
