@@ -33,6 +33,15 @@ Repository → settings → secrets and variables → actions → **New reposito
 
 That's it. CI/release workflows already exist in `.github/workflows/`.
 
+## v0.1.0 — kick-off was published locally
+
+The very first `0.1.0` of all four packages was published from a developer
+machine on 2026-05-01, *before* `NPM_TOKEN` was wired up to GH Actions. The
+local tag `v0.1.0` exists on `main` but is intentionally **not pushed** — the
+release workflow would fail on a duplicate publish if the tag fired.
+
+From `0.1.1` onwards the workflow drives every release.
+
 ## Cutting a release
 
 ```bash
