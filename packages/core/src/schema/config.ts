@@ -31,6 +31,19 @@ export interface SchemaConfig {
 	name: string;
 	versions: VersionConfig[];
 	targets?: ExporterPlugin<any>[];
+	/**
+	 * Per-schema layout override. Lets one pop.config.ts host both
+	 * binary-aligned schemas (default) and GPU-bound ones (std140 /
+	 * std430) without splitting into multiple configs.
+	 */
+	layout?: "aligned" | "zero-padding" | "std140" | "std430" | "dynamic";
+	/**
+	 * Per-schema autoLayout override. Default (top-level) reorders
+	 * fields to minimize padding; for shader buffers / FFI structs
+	 * where field order is contract, set this to false to preserve
+	 * the order the user wrote.
+	 */
+	autoLayout?: boolean;
 }
 
 export interface PopConfig {

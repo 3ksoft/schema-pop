@@ -1,5 +1,5 @@
 import { defineConfig } from "schema-pop";
-import { html } from "@schema-pop/extra-exporters";
+import { html, wgsl } from "@schema-pop/extra-exporters";
 
 // Dogfood: run schema-pop against one of its own internal scopes
 // and emit a self-contained HTML doc page. Output lands next to this
@@ -25,6 +25,16 @@ export default defineConfig({
 				},
 			],
 			targets: [html({ dest: "./index.html" })],
+		},
+		{
+			name: "gpu-physics",
+			layout: "std430",
+			autoLayout: false,
+			versions: [{ version: "1.0", source: "./gpu-physics.ts" }],
+			targets: [
+				wgsl({ dest: "./gpu-physics.wgsl" }),
+				html({ dest: "./gpu-physics.html" }),
+			],
 		},
 	],
 });

@@ -49,6 +49,12 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 					);
 					continue;
 				}
+				if (t.kind === "alias") {
+					const aliasName = applyNaming(t.name, cfg.typeNaming!);
+					const target = getWgslType(t.type);
+					code += `alias ${aliasName} = ${target};\n\n`;
+					continue;
+				}
 				if (t.kind === "struct") {
 					code += `struct ${applyNaming(t.name, cfg.typeNaming!)} {\n`;
 					let currentBitfieldOffset = -1;

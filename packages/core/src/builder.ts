@@ -85,8 +85,11 @@ export async function buildSchema(
 
 			const analyzer = new SchemaAnalyzer(scope, {
 				wordSize: config.wordSize,
-				autoLayout: config.autoLayout,
-				layoutType: config.layout || "aligned",
+				autoLayout:
+					schema.autoLayout !== undefined
+						? schema.autoLayout
+						: config.autoLayout,
+				layoutType: schema.layout || config.layout || "aligned",
 				mode: v.mode === "rich" ? "rich" : "binary",
 			});
 			const plan = analyzer.analyze(safeVersion, config.endian || "le");

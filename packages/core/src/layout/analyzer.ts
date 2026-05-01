@@ -1008,19 +1008,34 @@ export class SchemaAnalyzer {
 		const expr = typeof node.expression === "string" ? node.expression : "";
 		// arktype prefixes scope-local references with `$` in `expression`
 		// (e.g. `Type` becomes `$Type`); cross-scope spread imports may
-		// keep the bare name. Match by name in both cases.
+		// keep the bare name. Try the name-based path FIRST: matching
+		// by `entry.expression === expr` is lossy because two distinct
+		// aliases (`Vec2: "f32[] == 2"`, `Vec4: "f32[] == 4"`) can share
+		// the same `.expression` string ("number[]") with the length
+		// hidden in `inner.sequence.exactLength`.
 		const refByName = expr.startsWith("$")
 			? expr.slice(1)
 			: /^[A-Za-z_][\w]*$/.test(expr)
 				? expr
 				: undefined;
-		const foundName = this.scopeNames.find((n) => {
-			const entry = this.module[n];
-			if (!entry) return false;
-			if (entry.internal === node || entry.expression === expr) return true;
-			if (refByName && n === refByName) return true;
-			return false;
-		});
+		let foundName: string | undefined;
+		if (refByName && this.scopeNames.includes(refByName)) {
+			foundName = refByName;
+		} else {
+			// Strict pass first: only trust strict internal-identity. Two
+			// different aliases can share `entry.expression` (e.g. Vec2 and
+			// Vec4 both report "number[]" — the length lives deeper in
+			// `inner.sequence.exactLength`), so an expression match would
+			// pick the first sibling instead of the right alias.
+			foundName = this.scopeNames.find(
+				(n) => this.module[n]?.internal === node,
+			);
+			if (!foundName) {
+				foundName = this.scopeNames.find(
+					(n) => this.module[n]?.expression === expr,
+				);
+			}
+		}
 
 		if (foundName && foundName !== currentTypeName) {
 			if (this.primitiveNames.includes(foundName)) {
