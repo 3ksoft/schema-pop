@@ -1,10 +1,29 @@
+import { scope } from "arktype";
 import type { ExporterPlugin } from "./exporter";
 
-export interface VersionConfig {
-	version: string;
-	source: string;
-	exportName?: string;
-}
+export const $config = scope({
+	BinaryVersion: {
+		mode: "'binary' = 'binary'",
+		version: "string",
+		source: "string",
+		"exportName?": "string",
+	},
+
+	RichVersion: {
+		mode: "'rich'",
+		version: "string",
+		source: "string",
+		"exportName?": "string",
+	},
+
+	VersionConfig: "BinaryVersion | RichVersion",
+});
+
+export const { BinaryVersion, RichVersion, VersionConfig } = $config.export();
+
+export type BinaryVersion = typeof BinaryVersion.infer;
+export type RichVersion = typeof RichVersion.infer;
+export type VersionConfig = typeof VersionConfig.infer;
 
 export interface SchemaConfig {
 	name: string;

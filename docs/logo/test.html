@@ -10,71 +10,56 @@
     <link rel="stylesheet" href="logo.css">
     <style>
         body {
-            background: #1a1a1a;
-            font-family: 'Inter', sans-serif;
-            color: #fdf5e6;
             margin: 0;
+            font-family: 'Inter', sans-serif;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            min-height: 100vh;
+        }
+        .panel {
             padding: 48px;
             display: flex;
             flex-direction: column;
-            gap: 40px;
+            gap: 32px;
             align-items: flex-start;
         }
-        button {
-            background: #fdf5e6;
-            color: #1a1a1a;
-            border: 0;
-            border-radius: 6px;
-            padding: 12px 18px;
-            font-family: inherit;
-            font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-        }
-        button + button { margin-left: 12px; }
-        button:hover { background: #fff; }
-        .compare {
+        .panel.dark { background: #1a1a1a; color: #fdf5e6; color-scheme: dark; }
+        .panel.light { background: #fdf5e6; color: #1a1a1a; color-scheme: light; }
+        .panel.light .schema-pop-logo { color: #1a1a1a; }
+        .row {
             display: flex;
             align-items: center;
-            gap: 32px;
+            gap: 24px;
         }
-        .compare > div {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
+        .row span {
             font-size: 12px;
             opacity: 0.7;
         }
-        #svg-host svg, #svg-host img { width: 256px; height: 256px; display: block; }
+        .row img { display: block; }
     </style>
 </head>
 <body>
-    <div class="schema-pop-logo size-512">schema-p<span class="vortex-anchor">o</span>p</div>
-    <div class="schema-pop-logo size-256">schema-p<span class="vortex-anchor">o</span>p</div>
-    <div class="schema-pop-logo size-128">schema-p<span class="vortex-anchor">o</span>p</div>
-
-    <div class="compare">
-        <div>
-            <div id="svg-host"></div>
-            <span>SVG (no shader)</span>
+    <div class="panel dark">
+        <div class="schema-pop-logo size-256">schema-p<img class="vortex-anchor" src="schema-pop-spiral.svg" alt="o">p</div>
+        <div class="row">
+            <img src="schema-pop-spiral.svg" width="160" height="160">
+            <span>spiral SVG</span>
+        </div>
+        <div class="row">
+            <img src="schema-pop-wordmark.svg" width="528" height="100">
+            <span>wordmark SVG</span>
         </div>
     </div>
-
-    <div>
-        <button id="download-png">Download PNG 512×512</button>
-        <button id="download-svg">Download SVG</button>
+    <div class="panel light">
+        <div class="schema-pop-logo size-256">schema-p<img class="vortex-anchor" src="schema-pop-spiral.svg" alt="o">p</div>
+        <div class="row">
+            <img src="schema-pop-spiral.svg" width="160" height="160">
+            <span>spiral SVG</span>
+        </div>
+        <div class="row">
+            <img src="schema-pop-wordmark.svg" width="528" height="100">
+            <span>wordmark SVG</span>
+        </div>
     </div>
-
-    <script src="logo.js"></script>
-    <script>
-        document.getElementById('svg-host').innerHTML = window.SchemaPopLogo.generateSVG(512);
-        document.getElementById('download-png').addEventListener('click', () => {
-            window.SchemaPopLogo.downloadSpiral('schema-pop-spiral-512.png', 512);
-        });
-        document.getElementById('download-svg').addEventListener('click', () => {
-            window.SchemaPopLogo.downloadSVG('schema-pop-spiral.svg', 512);
-        });
-    </script>
 </body>
 </html>

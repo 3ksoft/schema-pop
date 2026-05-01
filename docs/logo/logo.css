@@ -6,13 +6,13 @@
     color: #fdf5e6;
     display: inline-flex;
     align-items: center;
-    position: relative;
 }
 
 .schema-pop-logo .vortex-anchor {
-    position: relative;
     display: inline-block;
-    color: transparent;
+    width: 0.78em;
+    height: 0.78em;
+    margin: 0 -0.05em;
 }
 
 .size-512 { font-size: 160px; }

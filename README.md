@@ -1,6 +1,12 @@
-# schema-pop
+<p align="center">
+  <img src="docs/logo/schema-pop-wordmark.svg" alt="schema-pop" width="480" />
+</p>
 
-> Memory-layout-first schemas for zero-copy cross-language data structures.
+<p align="center"><em>Memory-layout-first schemas for zero-copy cross-language data structures.</em></p>
+
+<p align="center">
+  <img src="docs/demo/schema-pop-demo.gif" alt="schema-pop demo" width="720" />
+</p>
 
 `schema-pop` calculates the exact in-memory layout of your data and uses **that** as the source of truth. From a single TypeScript schema you generate perfectly packed native structs for **Rust, C, C++, Zig, TypeScript, GLSL, WGSL** — plus docs, OpenAPI, randomized fixtures, and more.
 
@@ -191,6 +197,12 @@ Game engines · multiplayer netcode · WASM systems · GPU compute pipelines · 
 Especially welcome: exporters, edge-case schemas, ABI compatibility validation, language targets, documentation, examples.
 
 For larger PRs, please read [`docs/developers/submission rules.md`](./docs/developers/submission%20rules.md) and [`docs/roadmap.md`](./docs/roadmap.md) first.
+
+---
+
+## Supporters
+
+[kodown1k](https://github.com/kodown1k)
 
 ---
 
