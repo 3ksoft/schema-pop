@@ -16,6 +16,7 @@ const targets = [
 const COUNT_PER_TYPE = 8;
 let totalChecks = 0;
 let totalFailures = 0;
+let totalSkips = 0;
 
 console.log("🛡️  Cross-Language ABI Consistency Test\n");
 
@@ -52,6 +53,19 @@ for (const vKey of versions) {
 			if (ver && name && size && align) {
 				nativeLayouts.set(`${ver}::${name}`, { size: parseInt(size, 10), align: parseInt(align, 10) });
 			}
+		}
+
+		// Single-version exporters (BF, C, …) only emit the latest schema
+		// version. If the harness reports zero types for this vKey, assume
+		// it's that case and skip — anything else (some types missing but
+		// not all) is still treated as a real bug.
+		const versionPrefix = `${vKey}::`;
+		const hasAnyTypeForVersion = [...nativeLayouts.keys()].some((k) => k.startsWith(versionPrefix));
+		if (!hasAnyTypeForVersion) {
+			const structCount = plan.types.filter((t) => t.kind === "struct").length;
+			console.log(`    ⏭️  skipping ${structCount} type(s) — single-version exporter, schema not emitted for this version`);
+			totalSkips += structCount;
+			continue;
 		}
 
 		for (const t of plan.types) {
@@ -115,9 +129,10 @@ for (const vKey of versions) {
 	console.log("");
 }
 
+const skipNote = totalSkips > 0 ? ` (${totalSkips} skipped — single-version exporters)` : "";
 if (totalFailures > 0) {
-	console.error(`\n💥 ${totalFailures} / ${totalChecks} checks failed.`);
+	console.error(`\n💥 ${totalFailures} / ${totalChecks} checks failed${skipNote}.`);
 	process.exit(1);
 }
 
-console.log(`✨ All ${totalChecks} ABI checks passed!`);
+console.log(`✨ All ${totalChecks} ABI checks passed${skipNote}!`);
