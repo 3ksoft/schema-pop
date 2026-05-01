@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 # Cancel in-progress runs of the same ref so a quick succession of pushes only
 # checks the latest commit.
@@ -44,8 +45,11 @@ jobs:
     # the cross-language ABI round-trip. Slow (~3-5 min) so we gate it to
     # main pushes and to PRs that touch publishable packages.
     runs-on: ubuntu-latest
+    # Disabled on push for now: requires Docker + Verdaccio + Rust/Zig and is
+    # slow (~3-5 min). Run via workflow_dispatch from the Actions tab, or by
+    # adding the 'e2e' label to a PR.
     if: |
-      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
       contains(toJson(github.event.pull_request.labels.*.name), 'e2e')
     steps:
       - uses: actions/checkout@v4
