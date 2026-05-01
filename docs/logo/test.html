@@ -31,19 +31,49 @@
             font-size: 14px;
             cursor: pointer;
         }
+        button + button { margin-left: 12px; }
         button:hover { background: #fff; }
+        .compare {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+        }
+        .compare > div {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            opacity: 0.7;
+        }
+        #svg-host svg, #svg-host img { width: 256px; height: 256px; display: block; }
     </style>
 </head>
 <body>
     <div class="schema-pop-logo size-512">schema-p<span class="vortex-anchor">o</span>p</div>
     <div class="schema-pop-logo size-256">schema-p<span class="vortex-anchor">o</span>p</div>
     <div class="schema-pop-logo size-128">schema-p<span class="vortex-anchor">o</span>p</div>
-    <button id="download-spiral">Download spiral 512×512</button>
+
+    <div class="compare">
+        <div>
+            <div id="svg-host"></div>
+            <span>SVG (no shader)</span>
+        </div>
+    </div>
+
+    <div>
+        <button id="download-png">Download PNG 512×512</button>
+        <button id="download-svg">Download SVG</button>
+    </div>
 
     <script src="logo.js"></script>
     <script>
-        document.getElementById('download-spiral').addEventListener('click', () => {
+        document.getElementById('svg-host').innerHTML = window.SchemaPopLogo.generateSVG(512);
+        document.getElementById('download-png').addEventListener('click', () => {
             window.SchemaPopLogo.downloadSpiral('schema-pop-spiral-512.png', 512);
+        });
+        document.getElementById('download-svg').addEventListener('click', () => {
+            window.SchemaPopLogo.downloadSVG('schema-pop-spiral.svg', 512);
         });
     </script>
 </body>

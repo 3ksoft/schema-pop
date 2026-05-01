@@ -125,6 +125,77 @@
         renderSpiral(canvas, radius);
     }
 
+    // Math mirrors the fragment shader: phase = angle*REPS + dist^0.8 * 20.
+    // We trace 9 fixed-color bands (REPS=3 cycles × 3 colours) as filled
+    // SVG paths between two phase-const spirals each. The dome shading is
+    // approximated with two radial gradients (highlight + edge darkening).
+    function generateSVG(size = 512) {
+        const REPS = 3;
+        const DOME_NORM = 0.45;
+        const cx = size / 2;
+        const cy = size / 2;
+        const domePx = DOME_NORM * size;
+
+        const colors = ['#fcf5e6', '#f5547a', '#29b5f5'];
+        const bandsPerCycle = 3;
+        const total = REPS * bandsPerCycle;
+        const phaseStep = (2 * Math.PI) / bandsPerCycle;
+        const half = phaseStep / 2;
+        const samples = 80;
+
+        // Extend the bands a bit past the dome so the circular clipPath
+        // produces a clean curved outer edge instead of a polygon of chords.
+        const OVERSCAN = 1.08;
+        const ptOnSpiral = (centerPhase, edgeSign, i) => {
+            const rN = (i / samples) * DOME_NORM * OVERSCAN;
+            const angle = (centerPhase + edgeSign * half - Math.pow(rN, 0.8) * 20) / REPS;
+            const x = cx + rN * size * Math.cos(angle);
+            const y = cy + rN * size * Math.sin(angle);
+            return `${x.toFixed(2)} ${y.toFixed(2)}`;
+        };
+
+        let paths = '';
+        for (let b = 0; b < total; b++) {
+            const cp = b * phaseStep;
+            let d = `M ${cx} ${cy}`;
+            for (let i = 1; i <= samples; i++) d += ` L ${ptOnSpiral(cp, +1, i)}`;
+            for (let i = samples; i >= 0; i--) d += ` L ${ptOnSpiral(cp, -1, i)}`;
+            d += ' Z';
+            paths += `<path d="${d}" fill="${colors[b % bandsPerCycle]}"/>`;
+        }
+
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+<defs>
+<clipPath id="sp-dome"><circle cx="${cx}" cy="${cy}" r="${domePx}"/></clipPath>
+<radialGradient id="sp-light" cx="35%" cy="30%" r="70%">
+<stop offset="0%" stop-color="white" stop-opacity="0.45"/>
+<stop offset="55%" stop-color="white" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="sp-edge" cx="50%" cy="50%" r="50%">
+<stop offset="82%" stop-color="black" stop-opacity="0"/>
+<stop offset="100%" stop-color="black" stop-opacity="0.5"/>
+</radialGradient>
+</defs>
+<g clip-path="url(#sp-dome)">
+${paths}
+<circle cx="${cx}" cy="${cy}" r="${domePx}" fill="url(#sp-edge)"/>
+<circle cx="${cx}" cy="${cy}" r="${domePx}" fill="url(#sp-light)"/>
+</g>
+</svg>`;
+    }
+
+    function downloadSVG(filename = 'schema-pop.svg', size = 512) {
+        const blob = new Blob([generateSVG(size)], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+
     function downloadSpiral(filename = 'schema-pop.png', size = 512) {
         const canvas = document.createElement('canvas');
         canvas.width = size;
@@ -144,7 +215,7 @@
         }, 'image/png');
     }
 
-    window.SchemaPopLogo = { init: initVortex, downloadSpiral };
+    window.SchemaPopLogo = { init: initVortex, downloadSpiral, generateSVG, downloadSVG };
 
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.schema-pop-logo').forEach(initVortex);
