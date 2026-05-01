@@ -254,16 +254,15 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 					}
 					code += `}\n\n`;
 				} else if (t.kind === "enum") {
-					code += `${typeDeprecate}pub type ${tn} = ${t.underlyingType};\n`;
+					// Emit a real `#[repr(uN)] enum` so consumers get exhaustive
+					// match warnings + type-safe construction. Wire format is
+					// identical to the previous `pub type X = uN` + consts shape.
+					code += `${typeDeprecate}#[repr(${t.underlyingType})]\n`;
+					code += `#[derive(Clone, Copy, Debug, PartialEq, Eq)]\npub enum ${tn} {\n`;
 					for (const v of t.variants) {
-						const constName = `${tn}_${v.name}`
-							.replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-							.replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
-							.replace(/[-\s]+/g, "_")
-							.toUpperCase();
-						code += `pub const ${constName}: ${tn} = ${v.value};\n`;
+						code += `${INDENT()}${typeName(v.name)} = ${v.value},\n`;
 					}
-					code += `\n`;
+					code += `}\n\n`;
 				} else if (t.kind === "union") {
 					// `#[repr(C, u8)] enum` matches our wire format only when
 					// the tag is a single byte at offset 0 (which is the

@@ -107,6 +107,27 @@ describe("rust exporter — generateMigration", () => {
 	});
 });
 
+describe("rust exporter — enum emission", () => {
+	test("plain enum emits #[repr(uN)] enum (not type alias + consts)", () => {
+		const plan = analyze(
+			scope({
+				...binary.import(),
+				MacroLoopMode: "'HoldToLoop' | 'Loop' | 'Once'",
+			}),
+			"v1",
+		);
+		const out = rust({ dest: "out.rs" }).generate(plan) as string;
+		expect(out).toContain("#[repr(u8)]");
+		expect(out).toContain("pub enum MacroLoopMode {");
+		expect(out).toContain("HoldToLoop = 0,");
+		expect(out).toContain("Loop = 1,");
+		expect(out).toContain("Once = 2,");
+		// Old shape gone:
+		expect(out).not.toContain("pub type MacroLoopMode = u8");
+		expect(out).not.toContain("pub const MACRO_LOOP_MODE");
+	});
+});
+
 describe("rust exporter — versionNamespace", () => {
 	test("default: wrap in `pub mod <version>`", () => {
 		const exp = rust({ dest: "out.rs" });
