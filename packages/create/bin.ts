@@ -17,6 +17,7 @@ import {
 	statSync,
 	existsSync,
 	copyFileSync,
+	rmSync,
 } from "node:fs";
 import { join, basename, extname } from "node:path";
 import { cyan, green, dim, yellow, bold } from "kolorist";
@@ -422,9 +423,10 @@ async function main() {
 				const importsStr =
 					Array.from(imports).join("\n") +
 					'\nimport { defineConfig } from "schema-pop";\n';
+				let schemaEntries: string;
 				if (selectedSchemas.length > 0) {
 					const groups = groupSchemaVersions(selectedSchemas);
-					const schemaEntries = groups
+					schemaEntries = groups
 						.map((g) => {
 							const versionsBody = g.versions
 								.map(
@@ -435,16 +437,15 @@ async function main() {
 							return `        {\n            name: "${g.name}",\n            versions: [\n${versionsBody}\n            ],\n            targets: [${renderTargets(g.name).trimEnd()}\n            ]\n        }`;
 						})
 						.join(",\n");
-					content = content.replace(
-						/schemas:\s*\[\s*\{[\s\S]*?\}\s*\]/,
-						`schemas: [\n${schemaEntries}\n    ]`,
-					);
 				} else {
-					content = content.replace(
-						/\/\/ TARGETS_PLACEHOLDER/,
-						renderTargets("schema").trimEnd(),
-					);
+					// No preset chosen — emit a single "default" entry pointing at
+					// default.ts (created by the post-copy cleanup further down).
+					schemaEntries = `        {\n            name: "default",\n            versions: [\n                { version: "1.0", source: "./src/schema/default.ts" },\n            ],\n            targets: [${renderTargets("default").trimEnd()}\n            ]\n        }`;
 				}
+				content = content.replace(
+					/^\s*\/\/ SCHEMAS_PLACEHOLDER\s*$/m,
+					schemaEntries,
+				);
 				content =
 					importsStr +
 					"\n" +
@@ -498,17 +499,35 @@ async function main() {
 			copyRecursive(join(baseDir, "packages", "schema"), targetDir, replacer);
 		}
 
+		const schemaDestDir =
+			projectType === "monorepo" || projectType === "all"
+				? join(targetDir, "packages", "schema", "src", "schema")
+				: join(targetDir, "src", "schema");
+
 		if (selectedSchemas.length > 0 && existsSync(schemasDir)) {
-			const schemaDestDir =
-				projectType === "monorepo" || projectType === "all"
-					? join(targetDir, "packages", "schema", "src", "schema")
-					: join(targetDir, "src", "schema");
 			mkdirSync(schemaDestDir, { recursive: true });
 			for (const schemaName of selectedSchemas) {
 				const schemaSrc = join(schemasDir, `${schemaName}.ts`);
 				if (existsSync(schemaSrc))
 					copyFileSync(schemaSrc, join(schemaDestDir, `${schemaName}.ts`));
 			}
+		} else {
+			// No preset picked — strip the test-schema fixtures the scaffold
+			// ships by default and drop a minimal default.ts in their place.
+			// pop.config.ts already points at default.ts (see replacer above).
+			if (existsSync(schemaDestDir)) {
+				for (const f of readdirSync(schemaDestDir)) {
+					if (f.startsWith("test-schema")) {
+						rmSync(join(schemaDestDir, f));
+					}
+				}
+			} else {
+				mkdirSync(schemaDestDir, { recursive: true });
+			}
+			writeFileSync(
+				join(schemaDestDir, "default.ts"),
+				`import { schemaPop, scope } from "schema-pop";\n\nexport const $ = scope({\n\t...schemaPop,\n\thasSchema: "boolean",\n});\n`,
+			);
 		}
 
 		s.stop("Project structure created!");
