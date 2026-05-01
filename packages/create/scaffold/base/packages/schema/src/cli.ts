@@ -1,4 +1,4 @@
-import { buildConfig } from "schema-pop";
+import { buildConfig } from "schema-pop/node";
 
 console.log("🚀 Building schema...");
 buildConfig("pop.config.ts")
