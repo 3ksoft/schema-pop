@@ -150,6 +150,37 @@ impl<'a, T, const N: usize> IntoIterator for &'a SharedVec<T, N> {
 	type IntoIter = core::slice::Iter<'a, T>;
 	fn into_iter(self) -> Self::IntoIter { self.iter() }
 }
+
+// Slice → SharedVec is alloc-free (just a borrow + copy into the bounded
+// inline buffer), so it stays always-on.
+impl<T: Default + Copy, const N: usize> From<&[T]> for SharedVec<T, N> {
+	fn from(v: &[T]) -> Self {
+		let mut res = Self::new();
+		for &item in v.iter().take(N) { let _ = res.push(item); }
+		res
+	}
+}
+
+// Owning conversions for std/alloc-using callers. Gated on the \`alloc\`
+// feature so this stays no_std-friendly when callers opt out.
+#[cfg(feature = "alloc")]
+extern crate alloc;
+#[cfg(feature = "alloc")]
+impl<const N: usize> From<alloc::string::String> for SharedString<N> {
+	fn from(s: alloc::string::String) -> Self { Self::from_str(s.as_str()) }
+}
+#[cfg(feature = "alloc")]
+impl<const N: usize> From<&alloc::string::String> for SharedString<N> {
+	fn from(s: &alloc::string::String) -> Self { Self::from_str(s.as_str()) }
+}
+#[cfg(feature = "alloc")]
+impl<T: Default + Copy, const N: usize> From<alloc::vec::Vec<T>> for SharedVec<T, N> {
+	fn from(v: alloc::vec::Vec<T>) -> Self {
+		let mut res = Self::new();
+		for item in v.into_iter().take(N) { let _ = res.push(item); }
+		res
+	}
+}
 `;
 
 export function rust(config: RustConfig): ExporterPlugin<RustConfig> {

@@ -128,6 +128,18 @@ describe("rust exporter — enum emission", () => {
 	});
 });
 
+describe("rust exporter — SharedString / SharedVec impls", () => {
+	test("file header includes alloc-gated From impls", () => {
+		const exp = rust({ dest: "out.rs" });
+		const header = exp.getFileHeader!();
+		expect(header).toContain("impl<T: Default + Copy, const N: usize> From<&[T]>");
+		expect(header).toContain('#[cfg(feature = "alloc")]');
+		expect(header).toContain("From<alloc::string::String>");
+		expect(header).toContain("From<&alloc::string::String>");
+		expect(header).toContain("From<alloc::vec::Vec<T>>");
+	});
+});
+
 describe("rust exporter — versionNamespace", () => {
 	test("default: wrap in `pub mod <version>`", () => {
 		const exp = rust({ dest: "out.rs" });
