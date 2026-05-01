@@ -5,3 +5,4 @@ export * from "./bf";
 export * from "./glsl";
 export * from "./wgsl";
 export * from "./svg";
+export * from "./mermaid";

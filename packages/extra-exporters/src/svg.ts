@@ -90,11 +90,14 @@ function renderStructBars(t: any, cfg: SvgConfig): string {
 	const innerW = cfg.width! - PAD * 2;
 	const scale = innerW / totalSize;
 	const totalH = AXIS + rowH + PAD * 2;
+	// For large structures (multi-KB profile blobs etc.) emit only the major
+	// axis ticks; one tick per byte at totalSize=60KB blows up the SVG.
+	const stride = Math.max(1, Math.floor(totalSize / 8));
+	const minorTicks = totalSize <= 256;
 	let body = `<g class="sp-axis" font-family="ui-monospace, monospace" font-size="9" fill="currentColor" fill-opacity="0.55">`;
-	for (let i = 0; i <= totalSize; i++) {
+	for (let i = 0; i <= totalSize; i += minorTicks ? 1 : stride) {
 		const x = PAD + i * scale;
-		const major =
-			i % Math.max(1, Math.floor(totalSize / 8)) === 0 || i === totalSize;
+		const major = i % stride === 0 || i === totalSize;
 		body += `<line x1="${x}" y1="${PAD + AXIS}" x2="${x}" y2="${PAD + AXIS + rowH}" stroke="currentColor" stroke-opacity="${major ? 0.18 : 0.08}" />`;
 		if (major)
 			body += `<text x="${x}" y="${PAD + AXIS - 4}" text-anchor="middle">+${i}</text>`;
@@ -151,6 +154,16 @@ function renderStructBars(t: any, cfg: SvgConfig): string {
 function renderStructGrid(t: any, cfg: SvgConfig): string {
 	const totalSize: number = t.paddedSize || t.size;
 	if (totalSize <= 0) return svgWrap(cfg.width!, 60, "", t.name);
+	// Grid renders one SVG cell per byte. For multi-KB structures (large
+	// bounded arrays, profile blobs) this explodes the output. Cap it and
+	// emit a compact placeholder; the bars view still shows the field
+	// layout, and language exporters carry the precise byte offsets.
+	const GRID_BYTES_CAP = 4096;
+	if (totalSize > GRID_BYTES_CAP) {
+		const msg = `${t.name}: ${totalSize.toLocaleString()} bytes — grid suppressed (cap ${GRID_BYTES_CAP})`;
+		const body = `<g><rect x="${PAD}" y="${PAD}" width="${cfg.width! - PAD * 2}" height="60" rx="6" fill="url(#sp-pad)" stroke="currentColor" stroke-opacity="0.25" stroke-dasharray="4 3" /><text x="${cfg.width! / 2}" y="${PAD + 36}" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="11" fill="currentColor" fill-opacity="0.65">${msg}</text></g>`;
+		return svgWrap(cfg.width!, 60 + PAD * 2, body, t.name);
+	}
 	const rowBytes =
 		cfg.rowBytes ?? Math.min(16, Math.max(4, totalSize <= 8 ? totalSize : 8));
 	const cols = rowBytes;
@@ -237,8 +250,19 @@ function renderUnion(t: any, cfg: SvgConfig): string {
 	const innerW = cfg.width! - PAD * 2;
 	const scale = innerW / totalSize;
 	const totalH = AXIS + rowH + PAD * 2 + TITLE_GAP + 14 * t.variants.length;
+	const minorTicks = totalSize <= 256;
+	const stride = minorTicks ? 1 : Math.max(1, Math.floor(totalSize / 8));
 	let body = `<g class="sp-axis" font-family="ui-monospace, monospace" font-size="9" fill="currentColor" fill-opacity="0.55">`;
-	for (let i = 0; i <= totalSize; i++) {
+	const ticks = new Set<number>();
+	if (minorTicks) {
+		for (let i = 0; i <= totalSize; i++) ticks.add(i);
+	} else {
+		for (let i = 0; i <= totalSize; i += stride) ticks.add(i);
+		ticks.add(totalSize);
+		ticks.add(t.tagOffset);
+		ticks.add(t.tagOffset + t.tagSize);
+	}
+	for (const i of [...ticks].sort((a, b) => a - b)) {
 		const x = PAD + i * scale;
 		const major =
 			i === 0 ||

@@ -144,7 +144,7 @@ function TypeCard({ type, version, mode, onAnchor, onJump }) {
                         </span>
                       )}
                     </td>
-                    <td className="py-2 text-accent font-mono">{f.type}</td>
+                    <td className="py-2 text-accent font-mono" dangerouslySetInnerHTML={{ __html: f.type }} />
                     <td className="py-2 font-mono">{f.size}{f.pad ? " (+" + f.pad + "p)" : ""}</td>
                     <td className="py-2 opacity-60">{f.obsolete && f.obsoleteReason ? f.obsoleteReason : (f.range || "—")}</td>
                   </tr>
@@ -161,7 +161,7 @@ function TypeCard({ type, version, mode, onAnchor, onJump }) {
                 <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded border border-ink/5 dark:border-paper/5 bg-ink/[0.02] dark:bg-paper/[0.02]">
                   <span className="text-[10px] w-5 h-5 rounded-full bg-ink text-paper dark:bg-paper dark:text-night flex items-center justify-center font-mono">{i}</span>
                   <span className="text-[12px] font-medium flex-1">{v.name}</span>
-                  <span className="text-[11px] opacity-60 font-mono">{v.type}</span>
+                  <span className="text-[11px] opacity-60 font-mono" dangerouslySetInnerHTML={{ __html: v.type }} />
                 </div>
               ))}
             </div>
@@ -186,7 +186,7 @@ function TypeCard({ type, version, mode, onAnchor, onJump }) {
           <div className="flex items-baseline gap-3 p-3 rounded bg-ink/[0.03] dark:bg-paper/[0.03]">
             <span className="font-bold">{type.name}</span>
             <span className="opacity-40">≡</span>
-            <span className="text-accent font-mono">{type.aliasOf}</span>
+            <span className="text-accent font-mono" dangerouslySetInnerHTML={{ __html: type.aliasOf }} />
           </div>
         )}
       </div>
@@ -396,12 +396,12 @@ function CompareCol({ label, type, mode }) {
                 <li key={i} className="flex items-center gap-2 py-1.5">
                   <span className="opacity-50 w-4 font-mono">{v.value !== undefined ? v.value : i}</span>
                   <b className="flex-1">{v.name}</b>
-                  {v.type && <span className="text-accent font-mono text-[11px]">{v.type}</span>}
+                  {v.type && <span className="text-accent font-mono text-[11px]" dangerouslySetInnerHTML={{ __html: v.type }} />}
                 </li>
               ))}
             </ul>
           )}
-          {type.kind === "alias" && <div className="text-[12px]"><span className="opacity-50">≡</span> <span className="text-accent font-mono">{type.aliasOf}</span></div>}
+          {type.kind === "alias" && <div className="text-[12px]"><span className="opacity-50">≡</span> <span className="text-accent font-mono" dangerouslySetInnerHTML={{ __html: type.aliasOf }} /></div>}
         </>
       )}
     </div>
@@ -528,9 +528,16 @@ function App() {
 
       <main className="flex-1 px-10 py-10 max-w-5xl space-y-12">
         <header className="space-y-3 pb-8 border-b border-ink/10 dark:border-paper/10">
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] opacity-60">
+          <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.2em] opacity-60">
+            <img
+              src="https://raw.githubusercontent.com/3ksoft/schema-pop/main/docs/logo/schema-pop-wordmark.svg"
+              alt="schema-pop"
+              className="h-4"
+              style={{ width: "auto" }}
+            />
+            <span className="opacity-40">/</span>
             <span className="w-1.5 h-1.5 rounded-full bg-good" />
-            <span>schema-pop report</span>
+            <span>report</span>
             <span className="opacity-40">/</span>
             <span>{(data.meta && data.meta.layout) || "little endian"}</span>
             <span className="opacity-40">/</span>

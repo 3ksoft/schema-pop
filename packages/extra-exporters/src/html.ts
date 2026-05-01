@@ -19,6 +19,53 @@ function fieldTypeLabel(f: Field): string {
 	return svgInternal.fieldTypeLabel(f);
 }
 
+function escapeHtml(s: string): string {
+	return s
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;");
+}
+
+/**
+ * Same shape as fieldTypeLabel but emits HTML with `<a>` anchors around
+ * known type names. Anchor href matches the TypeCard `id` pattern in
+ * html-app.ts (`t-<vid>-<TypeName>`), so clicking jumps in-page.
+ */
+function fieldTypeHtml(f: Field, knownNames: Set<string>, vid: string): string {
+	const anchorFor = (name: string) =>
+		`<a href="#t-${vid}-${name}" class="sp-type-link">${escapeHtml(name)}</a>`;
+	switch (f.kind) {
+		case "primitive":
+			return escapeHtml(f.name);
+		case "reference":
+			return knownNames.has(f.name) ? anchorFor(f.name) : escapeHtml(f.name);
+		case "array": {
+			const inner = fieldTypeHtml(f.item, knownNames, vid);
+			const len = (f as any).exactLength ?? (f as any).maxLength;
+			return len !== undefined ? `[${inner}; ${len}]` : `${inner}[]`;
+		}
+		case "string": {
+			const len = (f as any).maxLength;
+			return len !== undefined ? `string&lt;${len}&gt;` : "string";
+		}
+		case "optional":
+			return `${fieldTypeHtml(f.inner, knownNames, vid)}?`;
+		case "inlineStruct":
+			return "{…}";
+		case "map": {
+			const k = f.keyKind === "number" ? "number" : "string";
+			return `Record&lt;${k}, ${fieldTypeHtml(f.value, knownNames, vid)}&gt;`;
+		}
+		case "any":
+			return "unknown";
+		case "unit":
+			return "unit";
+		default:
+			return "?";
+	}
+}
+
 function rangeFor(f: FieldPlan): string | undefined {
 	const t = f.type;
 	if (t.kind !== "primitive") return undefined;
@@ -41,7 +88,11 @@ function typeToDocs(
 	t: TypePlan,
 	svgBars: string | undefined,
 	svgGrid: string | undefined,
+	linkCtx?: { knownNames: Set<string>; vid: string },
 ): any {
+	const labelOf = linkCtx
+		? (f: Field) => fieldTypeHtml(f, linkCtx.knownNames, linkCtx.vid)
+		: fieldTypeLabel;
 	const tAny = t as any;
 	const common = {
 		name: t.name,
@@ -63,7 +114,7 @@ function typeToDocs(
 				return {
 					offset: f.offset,
 					name: f.name,
-					type: fieldTypeLabel(f.type),
+					type: labelOf(f.type),
 					typeKind: f.type.kind,
 					size: f.size,
 					pad: f.paddingAfter || 0,
@@ -98,7 +149,7 @@ function typeToDocs(
 			tagType: t.tagType,
 			variants: t.variants.map((v) => ({
 				name: v.name,
-				type: fieldTypeLabel(v.type),
+				type: labelOf(v.type as Field),
 			})),
 		};
 	}
@@ -106,7 +157,7 @@ function typeToDocs(
 		return {
 			...common,
 			kind: "alias",
-			aliasOf: fieldTypeLabel(t.type),
+			aliasOf: labelOf(t.type),
 		};
 	}
 	return common;
@@ -184,6 +235,8 @@ export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
   .sp-viz text { font-family: 'Inter', system-ui, sans-serif; }
   :root { --sp-paper: #fffae3; --sp-sat: 70%; --sp-bg-light: 92%; --sp-stroke-light: 38%; --sp-bg-alpha: 1; }
   .dark { --sp-paper: #160814; --sp-sat: 55%; --sp-bg-light: 26%; --sp-stroke-light: 72%; --sp-bg-alpha: 0.8; }
+  .sp-type-link { color: inherit; text-decoration: none; border-bottom: 1px dashed currentColor; opacity: 0.85; }
+  .sp-type-link:hover { opacity: 1; border-bottom-style: solid; }
 </style>
 <script>
   tailwind.config = {
@@ -209,6 +262,9 @@ export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
 		generate: (plan: LayoutPlan) => {
 			const barsRecords = vizBars.generate(plan) as Record<string, string>;
 			const gridRecords = vizGrid.generate(plan) as Record<string, string>;
+			const knownNames = new Set(plan.types.map((t) => t.name));
+			const vid = plan.version.split(".").join("_");
+			const linkCtx = { knownNames, vid };
 			const versionData = {
 				id: plan.version,
 				label: plan.version,
@@ -218,6 +274,7 @@ export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
 						t,
 						barsRecords[`${t.name}.svg`],
 						gridRecords[`${t.name}.svg`],
+						linkCtx,
 					),
 				),
 			};
