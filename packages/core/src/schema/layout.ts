@@ -252,6 +252,42 @@ export type AliasPlan = typeof AliasPlan.infer & {
 	migrationMeta?: MigrationMeta;
 };
 export type TypePlan = StructPlan | UnionPlan | EnumPlan | AliasPlan;
+
+/**
+ * Function arg — `name` is optional because C/C++ headers often elide
+ * argument names. `type` reuses the same Field union as struct fields.
+ *
+ * Defined as a plain TS type (not part of the arktype scope) because
+ * adding it inside `$layout` tips inference past TS7056. Importers
+ * produce these as plain objects; analyzer doesn't synthesize them.
+ */
+export type FunctionArg = {
+	name?: string;
+	type: Field;
+};
+
+/**
+ * A function declaration extracted from source (tree-sitter / clang
+ * importers). Carries enough info to emit FFI bindings, dlsym wrappers,
+ * or doc.
+ *
+ * Mangled `symbol` is filled at clang level; tree-sitter level only
+ * has unmangled identifiers (Rust + `extern "C"` C/C++ symbols match
+ * the source name 1:1, so `symbol` defaults to `name`).
+ */
+export type FunctionPlan = {
+	name: string;
+	symbol?: string;
+	returnType: Field;
+	args: FunctionArg[];
+	/** Calling convention. Common values: `C`, `cdecl`, `stdcall`, `fastcall`, `system`. */
+	abi?: string;
+	description?: string;
+	obsolete?: boolean;
+	obsoleteReason?: string;
+};
+
 export type LayoutPlan = Omit<typeof LayoutPlan.infer, "types"> & {
 	types: TypePlan[];
+	functions?: FunctionPlan[];
 };
