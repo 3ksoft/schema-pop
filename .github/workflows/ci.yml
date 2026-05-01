@@ -25,7 +25,7 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: Typecheck (all packages)
         run: bun run typecheck
@@ -64,7 +64,7 @@ jobs:
           version: 0.13.0
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: Run integration test (Docker + Verdaccio)
         run: bun test
