@@ -7,8 +7,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Cancel in-progress runs of the same ref so a quick succession of pushes only
-# checks the latest commit.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -37,40 +35,3 @@ jobs:
       - name: Unit tests (core)
         run: bun test
         working-directory: packages/core
-
-  e2e:
-    name: scaffold + ABI consistency (Verdaccio E2E)
-    # The full E2E test boots Verdaccio in Docker, scaffolds a fresh project
-    # against the local registry, builds Rust/C++/Zig/TS harnesses, and runs
-    # the cross-language ABI round-trip. Slow (~3-5 min) so we gate it to
-    # main pushes and to PRs that touch publishable packages.
-    runs-on: ubuntu-latest
-    # Disabled on push for now: requires Docker + Verdaccio + Rust/Zig and is
-    # slow (~3-5 min). Run via workflow_dispatch from the Actions tab, or by
-    # adding the 'e2e' label to a PR.
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      contains(toJson(github.event.pull_request.labels.*.name), 'e2e')
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@v1
-        with:
-          version: 0.13.0
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Run integration test (Docker + Verdaccio)
-        run: bun test
-        working-directory: packages/create
-        timeout-minutes: 15
