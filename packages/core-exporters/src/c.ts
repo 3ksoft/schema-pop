@@ -1,4 +1,4 @@
-import type { LayoutPlan, BaseConfig, ExporterPlugin } from "schema-pop";
+import type { LayoutPlan, BaseConfig, ExporterPlugin, Field } from "schema-pop";
 import { ExporterTools } from "schema-pop";
 
 export interface CConfig
@@ -42,6 +42,20 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 			let code = "";
 			const mod = toSafeVersionIdentifier(plan.version);
 			const refName = (n: string) => `${mod}_${typeName(n)}`;
+
+			// C has no native array-of-T field declaration that fits our
+			// `mapScalarField` shape (it returns just a type token). Mirror
+			// cpp.ts's `{type, suffix}` pattern: arrays fall through to a
+			// `uint8_t name[N]` byte blob the user can cast.
+			function fieldCType(
+				field: Field,
+				fieldSize: number,
+			): { type: string; suffix?: string } {
+				const scalar = mapScalarField(field, C_PRIMITIVES, refName);
+				if (scalar !== undefined) return { type: scalar };
+				return { type: "uint8_t", suffix: `[${fieldSize}]` };
+			}
+
 			for (const t of plan.types) {
 				if (isRichType(t)) {
 					console.warn(
@@ -49,8 +63,8 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 					);
 					continue;
 				}
+				const tn = `${mod}_${typeName(t.name)}`;
 				if (t.kind === "struct") {
-					const tn = `${mod}_${typeName(t.name)}`;
 					code += `typedef struct ${tn} {\n`;
 					if (t.fields.length === 0)
 						code += `${INDENT()}uint8_t _pad[${t.paddedSize}];\n`;
@@ -62,18 +76,28 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 							if (f.paddingAfter > 0)
 								code += `${INDENT()}uint8_t _pad_${fn}[${f.paddingAfter}];\n`;
 						} else {
-							const cType = mapScalarField(
-								f.type,
-								C_PRIMITIVES,
-								refName,
-								"uint32_t",
-							)!;
-							code += `${INDENT()}${cType} ${fn};\n`;
+							const ct = fieldCType(f.type, f.size);
+							code += `${INDENT()}${ct.type} ${fn}${ct.suffix ?? ""};\n`;
 							if (f.paddingAfter > 0)
 								code += `${INDENT()}uint8_t _pad_${fn}[${f.paddingAfter}];\n`;
 						}
 					}
 					code += `} ${tn};\n\n`;
+				} else if (t.kind === "enum") {
+					const underlying =
+						C_PRIMITIVES[t.underlyingType] ?? "uint8_t";
+					code += `typedef ${underlying} ${tn};\n`;
+					for (const v of t.variants) {
+						const constName = `${tn}_${v.name}`
+							.replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+							.replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
+							.replace(/[-\s]+/g, "_")
+							.toUpperCase();
+						code += `#define ${constName} ((${tn})${v.value})\n`;
+					}
+					code += `\n`;
+				} else if (t.kind === "union" || t.kind === "alias") {
+					code += `typedef struct ${tn} { uint8_t _bytes[${t.paddedSize}]; } ${tn};\n\n`;
 				}
 			}
 			return code;
