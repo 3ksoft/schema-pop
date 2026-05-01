@@ -106,3 +106,27 @@ describe("rust exporter — generateMigration", () => {
 		expect(out).toContain("flag: Default::default(),");
 	});
 });
+
+describe("rust exporter — versionNamespace", () => {
+	test("default: wrap in `pub mod <version>`", () => {
+		const exp = rust({ dest: "out.rs" });
+		const wrapped = exp.wrapVersion!("1.0", "pub struct Foo;\n");
+		expect(wrapped).toContain("pub mod v1_0 {");
+		expect(wrapped).toContain("use super::*;");
+		expect(wrapped).toContain("pub struct Foo;");
+	});
+
+	test("`false`: no wrap, types emit at top level", () => {
+		const exp = rust({ dest: "out.rs", versionNamespace: false });
+		const wrapped = exp.wrapVersion!("1.0", "pub struct Foo;\n");
+		expect(wrapped).toBe("pub struct Foo;\n");
+		expect(wrapped).not.toContain("pub mod");
+	});
+
+	test("string: use given name verbatim", () => {
+		const exp = rust({ dest: "out.rs", versionNamespace: "ws" });
+		const wrapped = exp.wrapVersion!("1.0", "pub struct Foo;\n");
+		expect(wrapped).toContain("pub mod ws {");
+		expect(wrapped).not.toContain("pub mod v1_0");
+	});
+});

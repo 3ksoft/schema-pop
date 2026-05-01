@@ -19,6 +19,16 @@ export interface RustConfig
 	namespace?: string;
 	traits?: string[];
 	harness?: boolean;
+	/**
+	 * Controls the per-version `pub mod <version> { ... }` wrapper.
+	 *  - `undefined` (default): wrap with the analyzer's safe version
+	 *    identifier (e.g., `pub mod konektor_1_0 { ... }`). Required for
+	 *    multi-version files.
+	 *  - `false`: do not wrap. Types emit at the top level. Only safe for
+	 *    single-version files; multiple versions in one file would collide.
+	 *  - `string`: use the given name verbatim (e.g., `pub mod ws { ... }`).
+	 */
+	versionNamespace?: false | string;
 }
 
 const RUST_PRIMITIVES: Record<string, string> = {
@@ -296,11 +306,17 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 			}
 			return code;
 		},
-		wrapVersion: (version, code) =>
-			wrapNamespace(version, code, {
+		wrapVersion: (version, code) => {
+			if (cfg.versionNamespace === false) return code;
+			const modName =
+				typeof cfg.versionNamespace === "string"
+					? cfg.versionNamespace
+					: version;
+			return wrapNamespace(modName, code, {
 				open: (mod) => `pub mod ${mod} {\n\tuse super::*;`,
 				close: "}",
-			}),
+			});
+		},
 		generateMigration: (fromPlan: LayoutPlan, toPlan: LayoutPlan) => {
 			const diff = diffPlans(fromPlan, toPlan);
 			const fromNs = fromPlan.version;
