@@ -169,6 +169,73 @@ Remaining suggestions:
 
 ---
 
+## P15 — PopCodec.decode loses the variant discriminator on tagged unions
+
+When decoding a `WsMessage` (`#[repr(C, u8)]` enum on Rust side), PopCodec
+returns the active variant's payload **without** the `kind` string field
+that the schema declares:
+
+```ts
+WsTaskList: { kind: "'taskList'", tasks: "..." }
+```
+
+Decoded JS object is `{ tasks: [...] }` — no `kind`. The runtime tag byte
+isn't surfaced in any form, so consumers can't dispatch on it without
+peeking at the raw bytes themselves.
+
+For konektor's GUI / harness this means we can't write:
+```ts
+switch (msg.kind) { case "taskList": ...; case "systemHealth": ...; }
+```
+
+Suggestions (any one):
+- Synthesize the `kind` field from the union's tag byte. Look up the
+  variant name in the analyzer's plan, emit the schema's `kind` literal.
+- Alternatively wrap output as `{ kind: "taskList", value: { tasks: [...] }}`
+  so the discriminator is always available.
+- At minimum: expose a sibling `decodeTagged(typeName, buffer)` that
+  returns `{ tag: number, name: string, value: any }`.
+
+---
+
+## P14 — Generator crashes on `'A' | 'B' | 'C'` lifted to top-level type alias
+
+Adding a top-level inline string union as a schema entry:
+
+```ts
+InjectInputKind: "'Key' | 'Axis' | 'Relative'",
+WsInjectInput: { kind: "'injectInput'", input_kind: "InjectInputKind", ... }
+```
+
+…produces `TypeError: indent is not a function` from
+`packages/core-exporters/src/rust.ts:294`. Root cause turned out to be that
+**`@schema-pop/core-exporters` declares `"schema-pop": "0.1.13"`** (the npm
+version) instead of a workspace dep. So local overrides on `schema-pop`
+don't propagate to its sibling — core-exporters loads the OLD published
+core, where `ExporterTools` had no `indent` member.
+
+Two suggestions:
+- Switch `core-exporters/package.json` (and `extra-exporters`) to
+  `"schema-pop": "workspace:*"` so a local schema-pop change is always
+  paired with the matching exporters.
+- For konektor we worked around with a top-level `overrides` entry in our
+  root `package.json`:
+  ```json
+  "overrides": {
+      "schema-pop": "file:../schema-pop/packages/core",
+      "@schema-pop/core-exporters": "file:../schema-pop/packages/core-exporters",
+      "@schema-pop/extra-exporters": "file:../schema-pop/packages/extra-exporters"
+  }
+  ```
+  Worth documenting this pattern for anyone consuming local schema-pop.
+
+The actual `indent is not a function` error was therefore version skew, not
+a generator bug — but the error message is opaque (no hint that it's a
+loaded-version issue). Worth a pre-flight check in `core-exporters` that
+the `ExporterTools` it imported has the methods it expects.
+
+---
+
 ## P13 — `versionNamespace: false` only honored by Rust exporter
 
 `rust({ versionNamespace: false })` (P2 fix) skips the `pub mod konektor_1_0`

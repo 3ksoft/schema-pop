@@ -1,6 +1,6 @@
 {
 	"name": "@schema-pop/extra-exporters",
-	"version": "0.1.13",
+	"version": "0.1.14",
 	"type": "module",
 	"main": "./dist/index.js",
 	"module": "./dist/index.js",
@@ -22,6 +22,6 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"schema-pop": "0.1.13"
+		"schema-pop": "0.1.14"
 	}
 }
