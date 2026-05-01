@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createJiti } from "jiti";
 import { SchemaAnalyzer } from "./layout/analyzer";
-import { runBindings, type BindingSpec } from "./bind";
+import { runBindings, isArktypeScope, type BindingSpec } from "./bind";
 import { diffPlans } from "./migrations";
 import type { ExporterPlugin, LayoutPlan } from "./schema/index";
 import { renderComment } from "./utils/comments";
@@ -86,13 +86,38 @@ export async function buildSchema(
 			if (ctx?.addWatchFile) ctx.addWatchFile(filePath);
 
 			const module = (await jiti.import(filePath)) as any;
-			const exportName = v.exportName || "$";
-			const scope = module[exportName] || module[schema.name];
+			// Resolution order:
+			// 1. Explicit `versions[].exportName` (errors if missing).
+			// 2. Conventional `$` and the schema's name (existing behavior).
+			// 3. Any other named export that duck-types as an arktype scope —
+			//    this lets schemas use `export const konektor = scope({...})`
+			//    without configuring `exportName` per version.
+			let scope: any = undefined;
+			let scopeSource = "";
+			if (v.exportName) {
+				scope = module[v.exportName];
+				scopeSource = v.exportName;
+			} else if (module["$"]) {
+				scope = module["$"];
+				scopeSource = "$";
+			} else if (schema.name && module[schema.name]) {
+				scope = module[schema.name];
+				scopeSource = schema.name;
+			} else {
+				const candidate = Object.entries(module).find(
+					([, val]) => isArktypeScope(val),
+				);
+				if (candidate) {
+					scope = candidate[1];
+					scopeSource = candidate[0];
+				}
+			}
 
 			if (!scope) {
 				console.error(`❌ [Schema-Pop] No export found in ${filePath}.`);
 				continue;
 			}
+			void scopeSource;
 
 			const analyzer = new SchemaAnalyzer(scope, {
 				wordSize: config.wordSize,

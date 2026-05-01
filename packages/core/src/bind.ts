@@ -9,7 +9,7 @@ import { createJiti } from "jiti";
  * `.import()` as functions counts. Avoids importing arktype's Scope type
  * here because we want bind to keep working if upstream renames the class.
  */
-function isArktypeScope(
+export function isArktypeScope(
 	v: unknown,
 ): v is { export: () => Record<string, unknown>; import: () => unknown } {
 	return (
