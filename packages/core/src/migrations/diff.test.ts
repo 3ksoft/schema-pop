@@ -305,6 +305,41 @@ describe("diffPlans", () => {
 		}
 	});
 
+	test("enum variant Renamed → renamed change with oldName, status auto", () => {
+		const v1 = analyze(
+			scope({
+				...binary.import(),
+				Status: "'Idle' | 'Active' | 'Suspended'",
+			}),
+			"v1",
+		);
+		const v2 = analyze(
+			scope({
+				...binary.import(),
+				...migScope.import(),
+				Status: "'Idle' | 'Active' | Renamed<'Sleep', 'Suspended'>",
+			}),
+			"v2",
+		);
+		const diff = diffPlans(v1, v2);
+		const status = diff.types.find(
+			(t) => "to" in t && t.to.name === "Status",
+		);
+		if (!status || status.kind !== "changed") throw new Error();
+		const renamed = status.variantChanges.find((c) => c.kind === "renamed");
+		if (!renamed || renamed.kind !== "renamed") throw new Error();
+		expect(renamed.oldName).toBe("Suspended");
+		expect((renamed.to as any).name).toBe("Sleep");
+		expect(renamed.status).toBe("auto");
+		// no spurious added/removed for the renamed variant
+		const added = status.variantChanges.filter((c) => c.kind === "added");
+		const removed = status.variantChanges.filter(
+			(c) => c.kind === "removed",
+		);
+		expect(added).toHaveLength(0);
+		expect(removed).toHaveLength(0);
+	});
+
 	test("plan status aggregates to user-supplied if any change is", () => {
 		const v1 = analyze(
 			scope({ ...binary.import(), B: { x: "u32" } }),

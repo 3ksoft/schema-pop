@@ -29,6 +29,7 @@ function StatusPill({ status }) {
     added:     "text-good border-good/40 bg-good/10",
     modified:  "text-warn border-warn/40 bg-warn/10",
     removed:   "text-bad border-bad/40 bg-bad/10",
+    renamed:   "text-dusk border-dusk/40 bg-dusk/10",
     unchanged: "text-ink/50 dark:text-paper/40 border-current/20",
   };
   return <span className={"inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wider " + (map[status] || map.unchanged)}>{status}</span>;
@@ -330,7 +331,7 @@ function CommandPalette({ open, data, onClose, onPick }) {
 
 function DiffSummary({ diff, onJump }) {
   const stats = useMemo(() => {
-    const s = { added:0, removed:0, modified:0, unchanged:0 };
+    const s = { added:0, removed:0, modified:0, renamed:0, unchanged:0 };
     diff.changes.forEach((c) => { s[c.status] = (s[c.status] || 0) + 1; });
     return s;
   }, [diff]);
@@ -346,6 +347,7 @@ function DiffSummary({ diff, onJump }) {
           <span><b className="text-good">{stats.added}</b> added</span>
           <span><b className="text-warn">{stats.modified}</b> modified</span>
           <span><b className="text-bad">{stats.removed}</b> removed</span>
+          {stats.renamed > 0 && <span><b className="text-dusk">{stats.renamed}</b> renamed</span>}
           <span className="opacity-60"><b>{stats.unchanged}</b> unchanged</span>
         </div>
       </div>

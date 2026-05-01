@@ -386,10 +386,30 @@ function diffUnionVariants(
 	const fromByName = new Map(from.variants.map((v) => [v.name, v]));
 	const usedFromNames = new Set<string>();
 
-	// Variants don't carry migrationMeta themselves (yet) — Renamed marker on
-	// a variant would need to be lifted. For now, name-match only. A future
-	// extension can add per-variant Renamed support.
+	// Pass 1: explicit per-variant rename (to.migrationMeta.renamedFrom).
 	for (const tv of to.variants) {
+		const oldName = tv.migrationMeta?.renamedFrom;
+		if (!oldName) continue;
+		const fv = fromByName.get(oldName);
+		if (!fv) {
+			// Marker references a variant that doesn't exist in v1 — treat as
+			// added but flag as user-supplied so the user notices.
+			changes.push({ kind: "added", variant: tv, status: "user-supplied" });
+			continue;
+		}
+		usedFromNames.add(oldName);
+		changes.push({
+			kind: "renamed",
+			from: fv,
+			to: tv,
+			oldName,
+			status: "auto",
+		});
+	}
+
+	// Pass 2: name-matched variants.
+	for (const tv of to.variants) {
+		if (tv.migrationMeta?.renamedFrom) continue;
 		const fv = fromByName.get(tv.name);
 		if (!fv) {
 			changes.push({ kind: "added", variant: tv, status: "auto" });
@@ -397,11 +417,10 @@ function diffUnionVariants(
 		}
 		usedFromNames.add(tv.name);
 	}
+
+	// Pass 3: removed variants (lossy until OnRemoval ships).
 	for (const fv of from.variants) {
 		if (usedFromNames.has(fv.name)) continue;
-		// Variant removal is fundamentally lossy — when a v1 value carries
-		// the removed variant, the migration must do something. Until we ship
-		// `OnRemoval` semantics, flag as user-supplied.
 		changes.push({ kind: "removed", variant: fv, status: "user-supplied" });
 	}
 	return changes;
@@ -412,7 +431,28 @@ function diffEnumVariants(from: EnumPlan, to: EnumPlan): VariantChange[] {
 	const fromByName = new Map(from.variants.map((v) => [v.name, v]));
 	const usedFromNames = new Set<string>();
 
+	// Pass 1: explicit per-variant rename.
 	for (const tv of to.variants) {
+		const oldName = tv.migrationMeta?.renamedFrom;
+		if (!oldName) continue;
+		const fv = fromByName.get(oldName);
+		if (!fv) {
+			changes.push({ kind: "added", variant: tv, status: "user-supplied" });
+			continue;
+		}
+		usedFromNames.add(oldName);
+		changes.push({
+			kind: "renamed",
+			from: fv,
+			to: tv,
+			oldName,
+			status: "auto",
+		});
+	}
+
+	// Pass 2: name-matched.
+	for (const tv of to.variants) {
+		if (tv.migrationMeta?.renamedFrom) continue;
 		const fv = fromByName.get(tv.name);
 		if (!fv) {
 			changes.push({ kind: "added", variant: tv, status: "auto" });
@@ -420,6 +460,8 @@ function diffEnumVariants(from: EnumPlan, to: EnumPlan): VariantChange[] {
 		}
 		usedFromNames.add(tv.name);
 	}
+
+	// Pass 3: removed.
 	for (const fv of from.variants) {
 		if (usedFromNames.has(fv.name)) continue;
 		changes.push({ kind: "removed", variant: fv, status: "user-supplied" });

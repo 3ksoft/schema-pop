@@ -166,32 +166,83 @@ function typeToDocs(
 function diffStatus(
 	from: TypePlan | undefined,
 	to: TypePlan | undefined,
-): { status: "added" | "removed" | "modified" | "unchanged"; note: string } {
+	renamedOldName?: string,
+): {
+	status: "added" | "removed" | "modified" | "unchanged" | "renamed";
+	note: string;
+} {
 	if (!from && to) return { status: "added", note: `New ${to.kind}` };
 	if (from && !to) return { status: "removed", note: `${from.kind} removed` };
 	if (!from || !to) return { status: "unchanged", note: "" };
 	const notes: string[] = [];
+	if (renamedOldName) notes.push(`renamed from "${renamedOldName}"`);
 	if (from.size !== to.size) notes.push(`size ${from.size}→${to.size}`);
 	if (from.align !== to.align) notes.push(`align ${from.align}→${to.align}`);
 	if (from.kind !== to.kind) notes.push(`kind ${from.kind}→${to.kind}`);
 	if (from.kind === "struct" && to.kind === "struct") {
+		// Pair fields by Renamed marker first; fall back to name-match.
+		const usedFromNames = new Set<string>();
+		const fieldRenames: string[] = [];
+		for (const tf of to.fields) {
+			const oldName = (tf as any).migrationMeta?.renamedFrom;
+			if (!oldName) continue;
+			if (from.fields.some((ff) => ff.name === oldName)) {
+				usedFromNames.add(oldName);
+				fieldRenames.push(`${oldName}→${tf.name}`);
+			}
+		}
 		const fromNames = from.fields.map((f) => f.name);
 		const toNames = to.fields.map((f) => f.name);
-		const added = toNames.filter((n) => !fromNames.includes(n));
-		const removed = fromNames.filter((n) => !toNames.includes(n));
+		const renamedToNames = new Set(
+			to.fields
+				.filter((tf) => (tf as any).migrationMeta?.renamedFrom)
+				.map((tf) => tf.name),
+		);
+		const added = toNames.filter(
+			(n) => !fromNames.includes(n) && !renamedToNames.has(n),
+		);
+		const removed = fromNames.filter(
+			(n) => !toNames.includes(n) && !usedFromNames.has(n),
+		);
+		if (fieldRenames.length)
+			notes.push(`renamed: ${fieldRenames.join(", ")}`);
 		if (added.length) notes.push(`+${added.length} field`);
 		if (removed.length) notes.push(`-${removed.length} field`);
 	}
 	if (from.kind === "enum" && to.kind === "enum") {
+		const variantRenames: string[] = [];
+		const usedFromNames = new Set<string>();
+		for (const tv of to.variants) {
+			const oldName = (tv as any).migrationMeta?.renamedFrom;
+			if (!oldName) continue;
+			if (from.variants.some((fv) => fv.name === oldName)) {
+				usedFromNames.add(oldName);
+				variantRenames.push(`${oldName}→${tv.name}`);
+			}
+		}
 		const fromNames = from.variants.map((v) => v.name);
 		const toNames = to.variants.map((v) => v.name);
-		const added = toNames.filter((n) => !fromNames.includes(n));
+		const renamedToNames = new Set(
+			to.variants
+				.filter((tv) => (tv as any).migrationMeta?.renamedFrom)
+				.map((tv) => tv.name),
+		);
+		const added = toNames.filter(
+			(n) => !fromNames.includes(n) && !renamedToNames.has(n),
+		);
+		if (variantRenames.length)
+			notes.push(`renamed: ${variantRenames.join(", ")}`);
 		if (added.length) notes.push(`+${added.length} variant`);
 	}
 	const fromObs = (from as any).obsolete === true;
 	const toObs = (to as any).obsolete === true;
 	if (fromObs !== toObs)
 		notes.push(toObs ? "marked obsolete" : "un-deprecated");
+	if (renamedOldName) {
+		// Type-level rename always reports as `renamed`, even if other fields
+		// shifted — the rename is the headline change.
+		return { status: "renamed", note: notes.join(", ") };
+	}
 	if (notes.length === 0)
 		return { status: "unchanged", note: "wire-compatible" };
 	return { status: "modified", note: notes.join(", ") };
@@ -281,18 +332,41 @@ export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
 			return `<script>window.SCHEMA_POP_DATA.versions.push(${jsonScript(versionData)});</script>\n`;
 		},
 		generateMigration: (fromPlan: LayoutPlan, toPlan: LayoutPlan) => {
-			const allNames = Array.from(
-				new Set([
-					...fromPlan.types.map((t) => t.name),
-					...toPlan.types.map((t) => t.name),
-				]),
-			);
-			const changes = allNames.map((name) => {
-				const from = fromPlan.types.find((t) => t.name === name);
-				const to = toPlan.types.find((t) => t.name === name);
+			const usedFromNames = new Set<string>();
+			const changes: Array<{ type: string; status: string; note: string }> =
+				[];
+
+			// Pass 1: type-level Renamed (to.migrationMeta.renamedFrom).
+			for (const to of toPlan.types) {
+				const oldName = (to as any).migrationMeta?.renamedFrom;
+				if (!oldName) continue;
+				const from = fromPlan.types.find((t) => t.name === oldName);
+				if (!from) {
+					const { status, note } = diffStatus(undefined, to);
+					changes.push({ type: to.name, status, note });
+					continue;
+				}
+				usedFromNames.add(oldName);
+				const { status, note } = diffStatus(from, to, oldName);
+				changes.push({ type: to.name, status, note });
+			}
+
+			// Pass 2: name-matched and added types.
+			for (const to of toPlan.types) {
+				if ((to as any).migrationMeta?.renamedFrom) continue;
+				const from = fromPlan.types.find((t) => t.name === to.name);
+				if (from) usedFromNames.add(to.name);
 				const { status, note } = diffStatus(from, to);
-				return { type: name, status, note };
-			});
+				changes.push({ type: to.name, status, note });
+			}
+
+			// Pass 3: removed types (in `from`, not consumed).
+			for (const from of fromPlan.types) {
+				if (usedFromNames.has(from.name)) continue;
+				const { status, note } = diffStatus(from, undefined);
+				changes.push({ type: from.name, status, note });
+			}
+
 			const diff = { from: fromPlan.version, to: toPlan.version, changes };
 			return `<script>window.SCHEMA_POP_DATA.diffs.push(${jsonScript(diff)});</script>\n`;
 		},

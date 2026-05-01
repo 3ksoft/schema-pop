@@ -214,7 +214,6 @@ export type MigrationMeta = {
 
 export type AnyField = typeof AnyField.infer;
 export type ArrayField = typeof ArrayField.infer;
-export type EnumVariant = typeof EnumVariant.infer;
 export type Field = typeof Field.infer;
 export type InlineStructField = typeof InlineStructField.infer;
 export type MapField = typeof MapField.infer;
@@ -222,7 +221,6 @@ export type OptionalField = typeof OptionalField.infer;
 export type PrimitiveField = typeof PrimitiveField.infer;
 export type ReferenceField = typeof ReferenceField.infer;
 export type StringField = typeof StringField.infer;
-export type VariantPlan = typeof VariantPlan.infer;
 export type TypeLayout = typeof TypeLayout.infer;
 export type LayoutConfig = typeof LayoutConfig.infer;
 
@@ -232,14 +230,22 @@ export type LayoutConfig = typeof LayoutConfig.infer;
 export type FieldPlan = typeof FieldPlan.infer & {
 	migrationMeta?: MigrationMeta;
 };
+export type VariantPlan = typeof VariantPlan.infer & {
+	migrationMeta?: MigrationMeta;
+};
+export type EnumVariant = typeof EnumVariant.infer & {
+	migrationMeta?: MigrationMeta;
+};
 export type StructPlan = Omit<typeof StructPlan.infer, "fields"> & {
 	fields: FieldPlan[];
 	migrationMeta?: MigrationMeta;
 };
-export type UnionPlan = typeof UnionPlan.infer & {
+export type UnionPlan = Omit<typeof UnionPlan.infer, "variants"> & {
+	variants: VariantPlan[];
 	migrationMeta?: MigrationMeta;
 };
-export type EnumPlan = typeof EnumPlan.infer & {
+export type EnumPlan = Omit<typeof EnumPlan.infer, "variants"> & {
+	variants: EnumVariant[];
 	migrationMeta?: MigrationMeta;
 };
 export type AliasPlan = typeof AliasPlan.infer & {

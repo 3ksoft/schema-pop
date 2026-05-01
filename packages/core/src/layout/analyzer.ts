@@ -738,12 +738,16 @@ export class SchemaAnalyzer {
 		);
 
 		if (isEnum) {
-			const variants = children.map((c: any, i: number) => ({
-				name: c.unit
-					? String(c.unit)
-					: c.nestableExpression.replace(/['"]/g, ""),
-				value: i,
-			}));
+			const variants = children.map((c: any, i: number) => {
+				const renamedFrom = (c.meta as any)?.renamedFrom;
+				return {
+					name: c.unit
+						? String(c.unit)
+						: c.nestableExpression.replace(/['"]/g, ""),
+					value: i,
+					...(renamedFrom ? { migrationMeta: { renamedFrom } } : {}),
+				};
+			});
 			return {
 				kind: "enum",
 				name,
@@ -788,12 +792,14 @@ export class SchemaAnalyzer {
 			} else {
 				vName = foundName ?? `Variant${i + 1}`;
 			}
+			const renamedFrom = (branch.meta as any)?.renamedFrom;
 			return {
 				name: vName.replace(/[^a-zA-Z0-9_]/g, ""),
 				type:
 					branch.kind === "unit" || branch.unit !== undefined
 						? { kind: "unit" }
 						: this.resolveFieldType(branch, undefined, `${name}_${vName}`),
+				...(renamedFrom ? { migrationMeta: { renamedFrom } } : {}),
 			};
 		});
 

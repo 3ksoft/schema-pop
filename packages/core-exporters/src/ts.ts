@@ -15,6 +15,13 @@ export interface TsConfig extends Omit<BaseConfig, "commentStyle"> {
 	commentStyle?: "slash";
 	exportJsonPlan?: boolean;
 	withCodec?: boolean;
+	/**
+	 * Path to the user's migrations module (relative to the generated file).
+	 * Each export named `migrate_<TypeName>_<from>_to_<to>` will be consulted
+	 * by the generated dispatcher and per-type migration functions. Use
+	 * `defineMigration` from "schema-pop" for typed partial mappers.
+	 */
+	migrationsModule?: string;
 }
 
 const PRIMITIVE_TS: Record<string, string> = {
@@ -185,13 +192,14 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 		return "undefined as any";
 	}
 
-	function emitFieldExpr(
+	function autoFieldExpr(
 		change: FieldChange | undefined,
 		toField: FieldPlan,
 		fromVar: string,
-	): string {
+	): string | null {
 		// 1. Renamed: pull from old field name.
 		if (change?.kind === "renamed") {
+			if (change.status === "user-supplied") return null;
 			return `${fromVar}.${fieldName(change.from.name)}`;
 		}
 		// 2. Type widened — same data, possible cast (TS: just pass through).
@@ -206,15 +214,69 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 		if (change?.kind === "added" && change.default.kind === "language-default") {
 			return languageDefault(toField.type);
 		}
-		// 5. Pass-through for unchanged fields (default case).
+		// 5. Added user-supplied / type-narrowed / type-changed → no auto.
+		if (
+			change?.kind === "added" ||
+			change?.kind === "type-narrowed" ||
+			change?.kind === "type-changed"
+		) {
+			return null;
+		}
+		// 6. Pass-through for unchanged fields (default case).
 		if (toField.migrationMeta?.defaultValue !== undefined) {
 			return tsLiteral(toField.migrationMeta.defaultValue);
 		}
 		return `${fromVar}.${fieldName(toField.name)}`;
 	}
 
+	function fieldRequiredReason(
+		change: FieldChange | undefined,
+		toField: FieldPlan,
+	): string {
+		if (!change) return `field '${toField.name}': user-supplied required`;
+		switch (change.kind) {
+			case "type-narrowed":
+				return `field '${change.to.name}': narrowing — provide u.${fieldName(change.to.name)}`;
+			case "type-changed":
+				return `field '${change.to.name}': type changed — provide u.${fieldName(change.to.name)}`;
+			case "added":
+				return `field '${change.field.name}': new field with no auto default — provide u.${fieldName(change.field.name)}`;
+			case "renamed":
+				return `field '${change.to.name}': renamed AND type changed — provide u.${fieldName(change.to.name)}`;
+			default:
+				return `field '${toField.name}': user-supplied required`;
+		}
+	}
+
+	function emitFieldExprWithUser(
+		change: FieldChange | undefined,
+		toField: FieldPlan,
+		fromVar: string,
+		moduleConfigured: boolean,
+	): string {
+		const auto = autoFieldExpr(change, toField, fromVar);
+		const fName = fieldName(toField.name);
+		if (!moduleConfigured) {
+			// Without configured module: per-field expression is just auto. If
+			// auto is impossible, emit a runtime throw so individual fields
+			// fail loudly (function-level throw still applies via aggregate
+			// status path — see renderMigrationFn).
+			if (auto !== null) return auto;
+			const reason = fieldRequiredReason(change, toField);
+			return `(((): never => { throw new Error(${JSON.stringify(`schema-pop: ${reason}`)}); })())`;
+		}
+		// migrationsModule configured: prefer user mapper, fall back to auto
+		// (or throw if no auto available).
+		if (auto !== null) {
+			return `u.${fName} ? u.${fName}(${fromVar}) : (${auto})`;
+		}
+		const reason = fieldRequiredReason(change, toField);
+		return `u.${fName} ? u.${fName}(${fromVar}) : (((): never => { throw new Error(${JSON.stringify(`schema-pop: ${reason}`)}); })())`;
+	}
+
 	function renderStructMigrationBody(
 		td: TypeDiff & { kind: "changed" | "renamed" },
+		moduleConfigured: boolean,
 	): string {
 		const toType = td.to as StructPlan;
 		const fieldChangeByToName = new Map<string, FieldChange>();
@@ -232,18 +294,23 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 				fieldChangeByToName.set(c.to.name, c);
 			}
 		}
-		let body = `${INDENT()}return {\n`;
+		let body = `${INDENT()}${INDENT()}return {\n`;
 		for (const f of toType.fields) {
 			if (f.type.kind === "unit") continue;
 			const ch = fieldChangeByToName.get(f.name);
-			const expr = emitFieldExpr(ch, f, "v1");
-			body += `${INDENT()}${INDENT()}${fieldName(f.name)}: ${expr},\n`;
+			const expr = emitFieldExprWithUser(ch, f, "v1", moduleConfigured);
+			body += `${INDENT()}${INDENT()}${INDENT()}${fieldName(f.name)}: ${expr},\n`;
 		}
-		body += `${INDENT()}};\n`;
+		body += `${INDENT()}${INDENT()}};\n`;
 		return body;
 	}
 
-	function renderMigrationFn(td: TypeDiff, fromNs: string, toNs: string): string {
+	function renderMigrationFn(
+		td: TypeDiff,
+		fromNs: string,
+		toNs: string,
+		moduleConfigured: boolean,
+	): string {
 		if (
 			td.kind !== "changed" &&
 			td.kind !== "renamed"
@@ -262,7 +329,10 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 			s += `${INDENT()}// renamed from "${td.oldName}"\n`;
 		}
 		s += `${INDENT()}export function ${fnName}(v1: ${argType}): ${retType} {\n`;
-		if (td.status === "user-supplied") {
+
+		// Without a configured user module, user-supplied required types throw
+		// at function level (no way to plug in an impl).
+		if (!moduleConfigured && td.status === "user-supplied") {
 			const reason = td.fieldChanges
 				.filter((c) => c.status === "user-supplied")
 				.map((c) => {
@@ -281,30 +351,73 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 				})
 				.join("; ");
 			s += `${INDENT()}${INDENT()}throw new Error(\n`;
-			s += `${INDENT()}${INDENT()}${INDENT()}\`schema-pop: migrate_${typeName(toType.name)}_${fromNs}_to_${toNs} requires a user-supplied impl. Reason: ${reason || "see build summary"}.\`,\n`;
+			s += `${INDENT()}${INDENT()}${INDENT()}\`schema-pop: ${fnName} requires a user-supplied impl. Reason: ${reason || "see build summary"}. Configure migrationsModule in pop.config.ts and add a defineMigration entry.\`,\n`;
 			s += `${INDENT()}${INDENT()});\n`;
 			s += `${INDENT()}}\n`;
 			return s;
 		}
+
+		if (moduleConfigured) {
+			// Bind user mapper once at the top of the function body. Looked up
+			// by the function's own name on the user module's namespace.
+			s += `${INDENT()}${INDENT()}const u = ((__popUserMigrations as any).${fnName} ?? {}) as any;\n`;
+		}
+
 		if (toType.kind === "struct") {
-			s += renderStructMigrationBody(td as any);
+			s += renderStructMigrationBody(td as any, moduleConfigured);
 		} else if (toType.kind === "alias") {
 			// Alias migration: identity passthrough (cast).
 			s += `${INDENT()}${INDENT()}return v1 as unknown as ${retType};\n`;
-		} else if (toType.kind === "enum" || toType.kind === "union") {
-			// Conservative: identity cast — auto cases here are variant-additions
-			// only, where every v1 value is still valid.
+		} else if (toType.kind === "enum") {
+			// Per-variant Renamed → switch with explicit string mapping.
+			const renamedVariants = (td as any).variantChanges?.filter?.(
+				(c: any) => c.kind === "renamed",
+			) ?? [];
+			if (renamedVariants.length > 0) {
+				s += `${INDENT()}${INDENT()}switch (v1) {\n`;
+				for (const r of renamedVariants) {
+					s += `${INDENT()}${INDENT()}${INDENT()}case ${JSON.stringify(r.from.name)}: return ${JSON.stringify(r.to.name)};\n`;
+				}
+				s += `${INDENT()}${INDENT()}${INDENT()}default: return v1 as unknown as ${retType};\n`;
+				s += `${INDENT()}${INDENT()}}\n`;
+			} else {
+				s += `${INDENT()}${INDENT()}return v1 as unknown as ${retType};\n`;
+			}
+		} else if (toType.kind === "union") {
+			// Discriminated unions key on tag value, not type-reference name —
+			// per-variant rename is binary-stable, identity cast is correct.
 			s += `${INDENT()}${INDENT()}return v1 as unknown as ${retType};\n`;
 		}
 		s += `${INDENT()}}\n`;
 		return s;
 	}
 
+	// Closure-state: every (from, to) migration call accumulates a record so
+	// getFileFooter can emit a single dispatcher covering all pairs.
+	type DispatchEntry = {
+		typeName: string; // v1 name (the dispatcher key)
+		fromNs: string;
+		toNs: string;
+		fnName: string; // generated migration function name
+		fromTypeRef: string; // fully-qualified v1 type — e.g., "v1.Battery"
+		toTypeRef: string; // fully-qualified v2 type — e.g., "v2.Battery"
+		alsoUnderName?: string; // for renamed types: also dispatch under v2 name
+	};
+	const dispatchEntries: DispatchEntry[] = [];
+
+	const moduleConfigured = !!cfg.migrationsModule;
+
 	return {
 		name: "ts",
 		config: cfg,
-		getFileHeader: () =>
-			cfg.withCodec ? `import { PopCodec } from "schema-pop";\n` : "",
+		getFileHeader: () => {
+			let h = "";
+			if (cfg.withCodec) h += `import { PopCodec } from "schema-pop";\n`;
+			if (moduleConfigured) {
+				h += `import * as __popUserMigrations from ${JSON.stringify(cfg.migrationsModule!)};\n`;
+			}
+			return h;
+		},
 		generate: (plan: LayoutPlan) => {
 			let code = "";
 			for (const t of plan.types) code += renderType(t) + "\n";
@@ -325,14 +438,56 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 			const toNs = toPlan.version;
 			const fns: string[] = [];
 			for (const td of diff.types) {
-				const code = renderMigrationFn(td, fromNs, toNs);
-				if (code) fns.push(code);
+				const code = renderMigrationFn(td, fromNs, toNs, moduleConfigured);
+				if (!code) continue;
+				fns.push(code);
+				const fromType = (td as any).from;
+				const toType = (td as any).to;
+				const tn = typeName(toType.name);
+				const fnName = `migrate_${tn}_${fromNs}_to_${toNs}`;
+				dispatchEntries.push({
+					typeName:
+						td.kind === "renamed" ? td.oldName : toType.name,
+					fromNs,
+					toNs,
+					fnName,
+					fromTypeRef: `${fromNs}.${typeName(fromType.name)}`,
+					toTypeRef: `${toNs}.${tn}`,
+					alsoUnderName:
+						td.kind === "renamed" && toType.name !== td.oldName
+							? toType.name
+							: undefined,
+				});
 			}
 			if (fns.length === 0) return "";
 			let out = `\nexport namespace migrations_${fromNs}_to_${toNs} {\n`;
 			for (const f of fns) out += f;
 			out += `}\n`;
 			return out;
+		},
+		getFileFooter: () => {
+			if (dispatchEntries.length === 0) return "";
+			let s = "\n";
+			s += `// schema-pop: type-narrowed dispatcher across every (typeName, from, to) pair.\n`;
+			// Overload signatures for type narrowing.
+			for (const e of dispatchEntries) {
+				s += `export function migrate(typeName: ${JSON.stringify(e.typeName)}, from: ${JSON.stringify(e.fromNs)}, to: ${JSON.stringify(e.toNs)}, value: ${e.fromTypeRef}): ${e.toTypeRef};\n`;
+				if (e.alsoUnderName) {
+					s += `export function migrate(typeName: ${JSON.stringify(e.alsoUnderName)}, from: ${JSON.stringify(e.fromNs)}, to: ${JSON.stringify(e.toNs)}, value: ${e.fromTypeRef}): ${e.toTypeRef};\n`;
+				}
+			}
+			// Implementation signature.
+			s += `export function migrate(typeName: string, from: string, to: string, value: unknown): unknown {\n`;
+			for (const e of dispatchEntries) {
+				const cond = `from === ${JSON.stringify(e.fromNs)} && to === ${JSON.stringify(e.toNs)}`;
+				const matchTypes = e.alsoUnderName
+					? `(typeName === ${JSON.stringify(e.typeName)} || typeName === ${JSON.stringify(e.alsoUnderName)})`
+					: `typeName === ${JSON.stringify(e.typeName)}`;
+				s += `${INDENT()}if (${matchTypes} && ${cond}) return migrations_${e.fromNs}_to_${e.toNs}.${e.fnName}(value as ${e.fromTypeRef});\n`;
+			}
+			s += `${INDENT()}throw new Error(\`schema-pop: no migration registered for \${typeName} \${from} → \${to}\`);\n`;
+			s += `}\n`;
+			return s;
 		},
 	};
 }
