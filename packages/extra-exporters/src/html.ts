@@ -84,15 +84,35 @@ function rangeFor(f: FieldPlan): string | undefined {
 	return undefined;
 }
 
+type LinkCtx = { knownNames: Set<string>; vid: string } | undefined;
+
+function fieldLabel(f: Field, linkCtx: LinkCtx): string {
+	return linkCtx
+		? fieldTypeHtml(f, linkCtx.knownNames, linkCtx.vid)
+		: fieldTypeLabel(f);
+}
+
+function renderFunctionSignature(
+	fn: { name: string; args: { name?: string; type: Field }[]; returnType: Field },
+	linkCtx: LinkCtx,
+): string {
+	const argParts = fn.args.map((a) => {
+		const t = fieldLabel(a.type, linkCtx);
+		return a.name ? `${a.name}: ${t}` : t;
+	});
+	const ret = fn.returnType.kind === "unit"
+		? "void"
+		: fieldLabel(fn.returnType, linkCtx);
+	return `${fn.name}(${argParts.join(", ")}) → ${ret}`;
+}
+
 function typeToDocs(
 	t: TypePlan,
 	svgBars: string | undefined,
 	svgGrid: string | undefined,
 	linkCtx?: { knownNames: Set<string>; vid: string },
 ): any {
-	const labelOf = linkCtx
-		? (f: Field) => fieldTypeHtml(f, linkCtx.knownNames, linkCtx.vid)
-		: fieldTypeLabel;
+	const labelOf = (f: Field) => fieldLabel(f, linkCtx);
 	const tAny = t as any;
 	const common = {
 		name: t.name,
@@ -328,6 +348,20 @@ export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
 						linkCtx,
 					),
 				),
+				functions: (plan.functions ?? []).map((fn) => ({
+					name: fn.name,
+					symbol: fn.symbol ?? fn.name,
+					abi: fn.abi,
+					description: fn.description,
+					obsolete: fn.obsolete,
+					obsoleteReason: fn.obsoleteReason,
+					signature: renderFunctionSignature(fn, linkCtx),
+					returnLabel: fieldLabel(fn.returnType as Field, linkCtx),
+					args: fn.args.map((a) => ({
+						name: a.name,
+						label: fieldLabel(a.type as Field, linkCtx),
+					})),
+				})),
 			};
 			return `<script>window.SCHEMA_POP_DATA.versions.push(${jsonScript(versionData)});</script>\n`;
 		},

@@ -329,6 +329,51 @@ function CommandPalette({ open, data, onClose, onPick }) {
   );
 }
 
+function FunctionsList({ functions }) {
+  return (
+    <section className="border border-ink/10 dark:border-paper/10 rounded-lg p-5 mt-6">
+      <header className="flex items-baseline gap-3 mb-4">
+        <h2 className="text-base font-bold tracking-tight">functions</h2>
+        <span className="text-[11px] opacity-60">{functions.length}</span>
+        <span className="flex-1" />
+      </header>
+      <div className="space-y-3">
+        {functions.map((fn) => (
+          <article key={fn.symbol} className="border-l-2 border-accent/40 pl-3 py-1">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <code className="font-mono text-[13px] font-semibold">{fn.name}</code>
+              {fn.abi && (
+                <span className="text-[10px] uppercase tracking-wider opacity-60 font-mono">extern "{fn.abi}"</span>
+              )}
+              {fn.symbol && fn.symbol !== fn.name && (
+                <span className="text-[10px] opacity-50 font-mono">{fn.symbol}</span>
+              )}
+              {fn.obsolete && (
+                <span className="text-[10px] uppercase tracking-wider text-bad font-mono">deprecated{fn.obsoleteReason ? ": " + fn.obsoleteReason : ""}</span>
+              )}
+            </div>
+            <div className="font-mono text-[12px] opacity-80 mt-0.5">
+              <span className="opacity-50">{fn.name}(</span>
+              {fn.args.length === 0 ? null : fn.args.map((a, i) => (
+                <span key={i}>
+                  {a.name && <span className="opacity-70">{a.name}: </span>}
+                  <span dangerouslySetInnerHTML={{ __html: a.label }} />
+                  {i < fn.args.length - 1 && <span className="opacity-50">, </span>}
+                </span>
+              ))}
+              <span className="opacity-50">) → </span>
+              <span dangerouslySetInnerHTML={{ __html: fn.returnLabel }} />
+            </div>
+            {fn.description && (
+              <p className="text-[11px] opacity-70 mt-1">{fn.description}</p>
+            )}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function DiffSummary({ diff, onJump }) {
   const stats = useMemo(() => {
     const s = { added:0, removed:0, modified:0, renamed:0, unchanged:0 };
@@ -566,6 +611,10 @@ function App() {
               <TypeCard key={t.name} type={t} version={activeV} mode={mode} onAnchor={handleAnchor} onJump={jumpTo} />
             ))}
           </div>
+
+          {activeV.functions && activeV.functions.length > 0 && (
+            <FunctionsList functions={activeV.functions} />
+          )}
         </section>
 
         {lastDiff && <DiffSummary diff={lastDiff} onJump={(name, vid) => jumpTo(name, vid)} />}
