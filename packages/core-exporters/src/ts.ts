@@ -30,6 +30,15 @@ export interface TsConfig extends Omit<BaseConfig, "commentStyle"> {
 	 * schema lands in the same `destDir`.
 	 */
 	withIndex?: boolean;
+	/**
+	 * `false` drops the per-schema `export namespace <name> { ... }`
+	 * wrapper so the emitted types are top-level (`export interface Foo`
+	 * instead of `<name>.Foo`). Only safe for single-version schemas —
+	 * multi-version output would collide on identical type names.
+	 *
+	 * Mirrors the rust / c exporters' option of the same name.
+	 */
+	versionNamespace?: false;
 }
 
 const PRIMITIVE_TS: Record<string, string> = {
@@ -441,11 +450,13 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 			if (cfg.withCodec) code += renderCodec(plan);
 			return code;
 		},
-		wrapVersion: (version, code) =>
-			wrapNamespace(version, code, {
+		wrapVersion: (version, code) => {
+			if (cfg.versionNamespace === false) return code;
+			return wrapNamespace(version, code, {
 				open: (mod) => `export namespace ${mod} {`,
 				close: "}",
-			}),
+			});
+		},
 		generateMigration: (fromPlan: LayoutPlan, toPlan: LayoutPlan) => {
 			const diff = diffPlans(fromPlan, toPlan);
 			const fromNs = fromPlan.version;
