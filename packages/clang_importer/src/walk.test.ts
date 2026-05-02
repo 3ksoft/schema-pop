@@ -202,15 +202,17 @@ describe("importFile", () => {
 		expect(dispatch.doc).toContain("@return");
 	});
 
-	test("edge cases — bitfields, fn pointers, multidim, forward decls, defines", async () => {
+	test("edge cases — fn pointers, multidim, forward decls, defines", async () => {
 		const ir = await importFile(path.join(FIXTURES, "edges.h"));
 		const names = ir.items.map((i) => `${i.kind}:${i.name}`).sort();
-		// Flags (all bitfields) and Grid (multidim) are skipped — empty
-		// structs are not emitted. Forward (forward + complete) appears
-		// once. Buffer takes its size from a #define expanded by clang.
+		// Grid (all multidim) is skipped (empty struct); Flags now emits
+		// because bitfields are first-class. Forward (forward + complete)
+		// appears once. Buffer takes its size from a #define expanded by
+		// clang.
 		expect(names).toEqual([
 			"struct:Buffer",
 			"struct:Callbacks",
+			"struct:Flags",
 			"struct:Forward",
 			"struct:Named",
 		]);
@@ -222,10 +224,126 @@ describe("importFile", () => {
 			if (bytes.type.kind === "array") expect(bytes.type.len).toBe(32);
 		}
 
-		// Skipped list captures bitfields, fn pointers, multidim arrays.
+		// Skipped list still captures fn pointers + multidim arrays.
 		const skipped = ir.skipped.map((s) => s.name).sort();
-		expect(skipped).toContain("Flags.a");
 		expect(skipped).toContain("Callbacks.on_start");
 		expect(skipped).toContain("Grid.cells");
+	});
+
+	test("unresolved refs downgrade to `unknown` — keep field, preserve original name", async () => {
+		const ir = await importFile(path.join(FIXTURES, "buffer.h"), {
+			lang: "c++",
+		});
+		const struct = ir.items.find((i) => i.name === "Buffer")!;
+		expect(struct.kind).toBe("struct");
+		if (struct.kind !== "struct") return;
+		const bufLen = struct.fields.find((f) => f.name === "bufLen")!;
+		// `size_t` is filtered out as a system typedef → ref → downgraded.
+		expect(bufLen.type.kind).toBe("unknown");
+		if (bufLen.type.kind === "unknown") expect(bufLen.type.raw).toBe("size_t");
+
+		// `domainLinkPos: std::vector<size_t>` becomes vec(unknown).
+		const linkPos = struct.fields.find((f) => f.name === "domainLinkPos")!;
+		expect(linkPos.type.kind).toBe("vec");
+		if (linkPos.type.kind === "vec") {
+			expect(linkPos.type.item.kind).toBe("unknown");
+		}
+
+		// Refs to types we DID emit stay as plain refs.
+		const result = struct.fields.find((f) => f.name === "bufResult")!;
+		expect(result.type).toEqual({ kind: "ref", name: "BufferResult" });
+	});
+
+	test("STL templates — string/vector/array/optional translated, others skipped", async () => {
+		const ir = await importFile(path.join(FIXTURES, "stl.hpp"));
+		const struct = ir.items.find((i) => i.name === "WithSTL")!;
+		expect(struct.kind).toBe("struct");
+		if (struct.kind !== "struct") return;
+		const fieldsByName = Object.fromEntries(
+			struct.fields.map((f) => [f.name, f.type] as const),
+		);
+		expect(fieldsByName.name).toEqual({ kind: "string" });
+		expect(fieldsByName.bytes).toEqual({
+			kind: "vec",
+			item: { kind: "primitive", name: "u8" },
+		});
+		expect(fieldsByName.packets).toEqual({
+			kind: "array",
+			item: { kind: "primitive", name: "u32" },
+			len: 16,
+		});
+		expect(fieldsByName.maybe_count).toEqual({
+			kind: "option",
+			inner: { kind: "primitive", name: "u32" },
+		});
+
+		// Nested templates and unknown ones (std::pair) → skipped, not
+		// emitted as broken refs.
+		const skippedNames = ir.skipped.map((s) => s.name);
+		expect(skippedNames).toContain("WithSTL.chunks");
+		expect(skippedNames).toContain("WithSTL.point");
+	});
+
+	test("packed / aligned attributes captured as repr", async () => {
+		const ir = await importFile(path.join(FIXTURES, "packed.h"));
+		const get = (n: string) =>
+			ir.items.find((i) => i.name === n && i.kind === "struct")!;
+
+		expect(get("Plain").kind).toBe("struct");
+		// Plain — no attributes, no repr.
+		if (get("Plain").kind === "struct") {
+			expect((get("Plain") as { repr?: string[] }).repr).toBeUndefined();
+		}
+
+		// Frame — packed.
+		if (get("Frame").kind === "struct") {
+			expect((get("Frame") as { repr?: string[] }).repr).toEqual(["packed"]);
+		}
+
+		// PageHeader — aligned(4096).
+		if (get("PageHeader").kind === "struct") {
+			expect((get("PageHeader") as { repr?: string[] }).repr).toEqual([
+				"aligned(4096)",
+			]);
+		}
+
+		// WireMsg — both packed and aligned.
+		if (get("WireMsg").kind === "struct") {
+			const repr = (get("WireMsg") as { repr?: string[] }).repr ?? [];
+			expect(repr).toContain("packed");
+			expect(repr.some((r) => r.startsWith("aligned"))).toBe(true);
+		}
+	});
+
+	test("bitfields emit as `bit` RustType — uN for N≤7, Bit<u32,N> wider", async () => {
+		const ir = await importFile(path.join(FIXTURES, "bits.h"));
+		const status = ir.items.find((i) => i.name === "StatusFlags")!;
+		expect(status.kind).toBe("struct");
+		if (status.kind === "struct") {
+			const enabled = status.fields.find((f) => f.name === "enabled")!;
+			expect(enabled.type.kind).toBe("bit");
+			if (enabled.type.kind === "bit") {
+				expect(enabled.type.widthBits).toBe(1);
+				expect(enabled.type.underlying).toBe("u8");
+			}
+		}
+
+		const ctrl = ir.items.find((i) => i.name === "ControlRegister")!;
+		if (ctrl.kind === "struct") {
+			const reserved = ctrl.fields.find((f) => f.name === "reserved")!;
+			if (reserved.type.kind === "bit") {
+				expect(reserved.type.widthBits).toBe(16);
+				expect(reserved.type.underlying).toBe("u32");
+			}
+		}
+
+		// Mix of bitfields + regular fields preserves both shapes.
+		const pkt = ir.items.find((i) => i.name === "PacketHeader")!;
+		if (pkt.kind === "struct") {
+			const version = pkt.fields.find((f) => f.name === "version")!;
+			expect(version.type.kind).toBe("bit");
+			const length = pkt.fields.find((f) => f.name === "length")!;
+			expect(length.type).toEqual({ kind: "primitive", name: "u16" });
+		}
 	});
 });

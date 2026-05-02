@@ -148,6 +148,57 @@ export function resolveQualType(
 		}
 	}
 
+	// std:: templates we model:
+	//   std::string                  → string
+	//   std::vector<T>               → T[]   (one level only)
+	//   std::array<T, N>             → T[] == N
+	//   std::optional<T>             → T | undefined
+	// Any other / multi-arg / nested template falls through as unsupported
+	// so the user gets a `// Skipped` note instead of a broken arktype
+	// expression.
+	if (qt === "std::string") return { kind: "string" };
+	const stl = qt.match(/^std::(\w+)\s*<(.+)>$/);
+	if (stl) {
+		const tplName = stl[1]!;
+		const args = parseTemplateArgs(stl[2]!);
+		if (tplName === "vector" && args.length === 1) {
+			const elem = resolveQualType(args[0]!, { lp64 });
+			if (
+				elem.kind === "unsupported" ||
+				elem.kind === "vec" ||
+				elem.kind === "array"
+			)
+				return { kind: "unsupported", raw: qualTypeRaw };
+			return { kind: "vec", item: elem };
+		}
+		if (tplName === "array" && args.length === 2) {
+			const elem = resolveQualType(args[0]!, { lp64 });
+			const len = parseInt(args[1]!, 10);
+			if (
+				Number.isNaN(len) ||
+				elem.kind === "unsupported" ||
+				elem.kind === "vec" ||
+				elem.kind === "array"
+			)
+				return { kind: "unsupported", raw: qualTypeRaw };
+			return { kind: "array", item: elem, len };
+		}
+		if (tplName === "optional" && args.length === 1) {
+			const inner = resolveQualType(args[0]!, { lp64 });
+			if (inner.kind === "unsupported")
+				return { kind: "unsupported", raw: qualTypeRaw };
+			return { kind: "option", inner };
+		}
+		return { kind: "unsupported", raw: qualTypeRaw };
+	}
+
+	// Anything else carrying template syntax we don't recognize — mark
+	// as unsupported (covers `std::pair<>`, `std::map<>`, project-local
+	// templates, etc.).
+	if (qt.includes("<") && qt.includes(">")) {
+		return { kind: "unsupported", raw: qualTypeRaw };
+	}
+
 	// stdint typedefs we understand directly.
 	const stdint = STDINT_ALIASES[qt];
 	if (stdint) return { kind: "primitive", name: stdint };
@@ -261,6 +312,13 @@ export interface WalkOptions {
 	/** Treat the entire AST as input (do not filter by file). Useful for tests. */
 	noFileFilter?: boolean;
 	lp64?: boolean;
+	/**
+	 * Extra type names that should resolve as `ref` (not get downgraded
+	 * to `unknown`). Pass the keys of any user-provided extras scope
+	 * spliced into the generated file — e.g. custom `Bit<u32, 9>` /
+	 * `Binary<...>` aliases.
+	 */
+	extraKnownNames?: readonly string[];
 }
 
 export function walkClangAst(
@@ -300,7 +358,67 @@ export function walkClangAst(
 		visitTopLevel(node, ctx, resolve);
 	}
 
+	// Final pass: downgrade refs whose target name doesn't exist in
+	// scope (typical for system typedefs we filtered out, like `size_t`).
+	// Without this, arktype throws ParseError("'size_t' is unresolvable")
+	// when the generated scope is loaded. Replacing with `unknown` keeps
+	// the field while preserving the original type name for the doc.
+	downgradeUnknownRefs(ctx.items, opts.extraKnownNames);
+
 	return { source: inputFile, items: ctx.items, skipped: ctx.skipped };
+}
+
+/** Names schema-pop's `binary` + `bitwise` scopes always provide, plus
+ *  the `string` keyword. Any ref to one of these resolves natively. */
+const SCHEMA_POP_KNOWN_NAMES: ReadonlySet<string> = new Set([
+	// arktype keywords schema-pop relies on
+	"string",
+	"unknown",
+	// binary primitives
+	"u8", "u16", "u32", "u64", "u128",
+	"i8", "i16", "i32", "i64", "i128",
+	"f32", "f64", "bool",
+	// bitwise primitives
+	"u1", "u2", "u3", "u4", "u5", "u6", "u7",
+]);
+
+function downgradeUnknownRefs(
+	items: RustItem[],
+	extra?: readonly string[],
+): void {
+	const known = new Set<string>(SCHEMA_POP_KNOWN_NAMES);
+	for (const item of items) known.add(item.name);
+	if (extra) for (const n of extra) known.add(n);
+
+	for (const item of items) {
+		if (item.kind === "struct") {
+			for (const f of item.fields) f.type = downgradeType(f.type, known);
+		} else if (item.kind === "alias") {
+			item.type = downgradeType(item.type, known);
+		} else if (item.kind === "function") {
+			item.returnType = downgradeType(item.returnType, known);
+			for (const a of item.args) a.type = downgradeType(a.type, known);
+		}
+	}
+}
+
+/** Recursively walk a RustType, replacing `ref` to unknown names with
+ *  the `unknown` variant. Compound types (array/vec/option) recurse
+ *  into their element/inner so e.g. `vec(ref("size_t"))` becomes
+ *  `vec(unknown("size_t"))`. */
+function downgradeType(t: RustType, known: Set<string>): RustType {
+	switch (t.kind) {
+		case "ref":
+			return known.has(t.name) ? t : { kind: "unknown", raw: t.name };
+		case "array":
+			return { ...t, item: downgradeType(t.item, known) };
+		case "vec":
+			return { ...t, item: downgradeType(t.item, known) };
+		case "option":
+			return { ...t, inner: downgradeType(t.inner, known) };
+		default:
+			return t;
+	}
 }
 
 function visitTopLevel(
@@ -459,23 +577,64 @@ function handleRecord(
 		return;
 	}
 
+	// Attributes attached to the struct itself live as child *Attr nodes:
+	//   __attribute__((packed))    → PackedAttr     → repr: ["packed"]
+	//   __attribute__((aligned(N))) → AlignedAttr   → repr: ["aligned(N)"]
+	// schema-pop's analyzer only acts on `packed` today; `aligned` is
+	// recorded for documentation so the user can see it in the output.
+	const repr: string[] = [];
+	for (const attr of node.inner ?? []) {
+		if (attr.kind === "PackedAttr") repr.push("packed");
+		else if (attr.kind === "MaxFieldAlignmentAttr") {
+			// `#pragma pack(push, N)` — clang emits MaxFieldAlignmentAttr
+			// without surfacing N in the JSON dump. We assume the common
+			// case (`pack(1)` = byte-tight) and mark as packed. For
+			// non-1 pack values the analyzer's auto-padding will be off
+			// — caller can override `repr` manually if needed.
+			if (!repr.includes("packed")) repr.push("packed");
+		} else if (attr.kind === "AlignedAttr") {
+			const n = extractIntegerLiteral(attr);
+			repr.push(n !== null ? `aligned(${n})` : "aligned");
+		}
+	}
+
 	const fields: RustField[] = [];
 	let skippedAnyField = false;
 	for (const child of node.inner ?? []) {
 		if (child.kind !== "FieldDecl") continue;
 		if (isImplicit(child)) continue;
-		// Bitfields: clang adds `isBitfield: true` on FieldDecl.
-		if (child.isBitfield === true) {
-			ctx.skipped.push({
-				name: `${name}.${child.name ?? "<anon>"}`,
-				reason: "bitfield",
-			});
-			skippedAnyField = true;
-			continue;
-		}
 		const fname = child.name;
 		const qt = child.type?.qualType ?? "";
 		if (!fname || !qt) continue;
+		// Bitfields: clang sets `isBitfield: true` and embeds the width
+		// as a `ConstantExpr.value` integer literal in the FieldDecl's
+		// `inner`. We resolve the storage type from qualType and emit a
+		// `bit`-kind RustType, which the emitter renders as `uN` (1..7)
+		// or `Bit<storage, N>` (wider) — both valid schema-pop forms.
+		if (child.isBitfield === true) {
+			const width = extractBitfieldWidth(child);
+			const storage = resolve(qt);
+			if (width === null || storage.kind !== "primitive") {
+				ctx.skipped.push({
+					name: `${name}.${fname}`,
+					reason: `bitfield with non-primitive storage (${qt})`,
+				});
+				skippedAnyField = true;
+				continue;
+			}
+			const fieldDoc = extractDoc(child);
+			fields.push({
+				name: fname,
+				type: {
+					kind: "bit",
+					widthBits: width,
+					underlying: storage.name,
+				},
+				pub: true,
+				doc: fieldDoc,
+			});
+			continue;
+		}
 		// Function pointer field: qualType looks like `T (*)(args)` or
 		// `T (*name)(args)`. We can't faithfully model these in
 		// schema-pop's binary layout — skip with a note.
@@ -517,9 +676,28 @@ function handleRecord(
 		kind: "struct",
 		name,
 		fields,
+		repr: repr.length ? repr : undefined,
 		doc: overrideDoc ?? extractDoc(node),
 		pub: true,
 	});
+}
+
+/**
+ * Extract a single positive integer literal from an attribute's inner
+ * `ConstantExpr`. Used for `aligned(N)`, `__attribute__((aligned(32)))`
+ * and similar attributes whose value lives in a child IntegerLiteral.
+ */
+function extractIntegerLiteral(node: ClangNode): number | null {
+	for (const c of node.inner ?? []) {
+		if (c.kind !== "ConstantExpr") continue;
+		const v = (c as { value?: string | number }).value;
+		if (typeof v === "number") return v;
+		if (typeof v === "string") {
+			const n = parseInt(v, 10);
+			if (!Number.isNaN(n)) return n;
+		}
+	}
+	return null;
 }
 
 /**
@@ -528,6 +706,47 @@ function handleRecord(
  */
 function isFunctionPointerType(qt: string): boolean {
 	return /\(\s*\*/.test(qt);
+}
+
+/**
+ * Split a template-argument string at top-level commas, respecting
+ * nested `<...>`. e.g. `std::vector<uint8_t>, size_t` →
+ * `["std::vector<uint8_t>", "size_t"]`.
+ */
+function parseTemplateArgs(args: string): string[] {
+	const out: string[] = [];
+	let depth = 0;
+	let buf = "";
+	for (const ch of args) {
+		if (ch === "<") depth++;
+		else if (ch === ">") depth = Math.max(0, depth - 1);
+		else if (ch === "," && depth === 0) {
+			if (buf.trim()) out.push(buf.trim());
+			buf = "";
+			continue;
+		}
+		buf += ch;
+	}
+	if (buf.trim()) out.push(buf.trim());
+	return out;
+}
+
+/**
+ * Pull a bitfield width from a FieldDecl's inner. Clang stores the
+ * width as a `ConstantExpr` whose `value` field is a stringified
+ * integer (e.g. `"3"`, `"20"`).
+ */
+function extractBitfieldWidth(node: ClangNode): number | null {
+	for (const c of node.inner ?? []) {
+		if (c.kind !== "ConstantExpr") continue;
+		const v = (c as { value?: string | number }).value;
+		if (typeof v === "number") return v;
+		if (typeof v === "string") {
+			const n = parseInt(v, 10);
+			if (!Number.isNaN(n)) return n;
+		}
+	}
+	return null;
 }
 
 function handleEnum(
