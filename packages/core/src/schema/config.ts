@@ -4,17 +4,23 @@ import type { BindingSpec } from "../bind";
 
 /**
  * The ground-truth shape for a schema file:
- *   `<name>.<version>.pop.ts(x)`
+ *   `<name>.pop.ts(x)`           → version defaults to "1"
+ *   `<name>.<version>.pop.ts(x)` → version explicit
  *
  * Examples:
+ *   konektor.pop.ts            → name="konektor", version="1"
  *   konektor.1.0.pop.ts        → name="konektor", version="1.0"
+ *   konektor.2.0.pop.ts        → name="konektor", version="2.0"
  *   wire.0.0.728.pop.ts        → name="wire",     version="0.0.728"
- *   telemetry.1.pop.ts         → name="telemetry", version="1"
  *
- * Schema name can't contain dots (everything before the first `.` is
- * the name; everything between that and the `.pop.ts` suffix is the
- * version). Returns `null` when the basename doesn't match — caller
- * decides whether to skip the file or surface an error.
+ * Single-version schemas don't need to type the version in the
+ * filename — it stays `<name>.pop.ts` until a second version is
+ * added (at which point the user renames v1 to `<name>.1.pop.ts`
+ * and adds `<name>.2.pop.ts`).
+ *
+ * Schema name can't contain dots. Returns `null` when the basename
+ * doesn't match — caller decides whether to skip the file or
+ * surface an error.
  */
 export function parseSchemaFilename(
 	filePath: string,
@@ -23,8 +29,10 @@ export function parseSchemaFilename(
 	const stripped = base.replace(/\.tsx?$/, "");
 	if (!stripped.endsWith(".pop")) return null;
 	const core = stripped.slice(0, -".pop".length);
+	if (!core) return null;
 	const dotIdx = core.indexOf(".");
-	if (dotIdx <= 0) return null;
+	if (dotIdx === -1) return { schemaName: core, version: "1" };
+	if (dotIdx === 0) return null;
 	const schemaName = core.slice(0, dotIdx);
 	const version = core.slice(dotIdx + 1);
 	if (!version) return null;

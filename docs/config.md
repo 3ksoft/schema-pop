@@ -34,31 +34,38 @@ Fields, all optional:
 The default discovery glob (`./**/*.pop.ts`) plus the basename rule below is **convention** — what the parser uses when nothing else tells it otherwise. Both layers can be overridden: the glob via `defineConfig.schemas`, and the parsed `schemaName` / `version` via the schema's own `schemaPop({ schemaName, version }, scope)` config (see section 3).
 
 ```
-<schemaName>.<version>.pop.ts(x)
+<schemaName>.pop.ts(x)             → version defaults to "1"
+<schemaName>.<version>.pop.ts(x)   → version explicit
 ```
 
 ```
+src/fields.pop.ts              → name "fields",   version "1"
 src/konektor.1.0.pop.ts        → name "konektor", version "1.0"
-src/konektor.1.1.pop.ts        → name "konektor", version "1.1"
 src/konektor.2.0.pop.ts        → name "konektor", version "2.0"
 schemas/wire.0.0.728.pop.ts    → name "wire",     version "0.0.728"
 ```
 
-Rule: split off `.tsx?$`, then `.pop$`, then everything before the first remaining `.` is the schema name; the rest is the version. Schema names can't contain dots.
+Single-version schemas don't need the version segment in the filename — leave it off until you need v2 (then rename v1 to `<name>.1.pop.ts` and add `<name>.2.pop.ts`).
+
+Rule: split off `.tsx?$`, then `.pop$`. If what's left has no dot it's the schema name (version defaults to `"1"`); otherwise everything before the first remaining `.` is the schema name and the rest is the version. Schema names can't contain dots.
 
 Files that don't match the pattern are logged and skipped **unless** their `schemaPop({...})` call sets both `schemaName` and `version` — in which case the config wins and the file joins the build as if it were named `<schemaName>.<version>.pop.ts`. Useful for importer-generated files (`wifi-types.gen.ts` etc.) you don't want to rename.
+
+### Single-version namespace
+
+When a schema has exactly one version, the generated wrapper namespace drops the version suffix: you get `pub mod fields { ... }` / `export namespace fields { ... }` instead of `fields_1`. Multi-version schemas keep the suffix (`fields_1`, `fields_2`) so the namespaces don't collide. Override either default with `versionNamespace` (see section 3).
 
 Multi-version: group by name, sort by version (semver, lexicographic fallback), migration emit between consecutive versions. Targets come from the highest-version file; older versions can stay plain `scope({})` exports.
 
 ## 3. Schema configuration
 
-Targets and per-schema flags live inside the schema file:
+Targets and per-schema flags live inside the schema file. The wrap can be exported as `$` (canonical) or as the module's default — pick whichever reads better:
 
 ```ts
 import { schemaPop, scope } from "schema-pop";
 import { rust, c, html } from "@schema-pop/core-exporters";
 
-export const $ = schemaPop(
+export default schemaPop(
 	{
 		targets: [
 			rust({ dest: "./dist/konektor.rs" }),
@@ -75,6 +82,8 @@ export const $ = schemaPop(
 ```
 
 `schemaPop` is callable AND spreadable: `schemaPop({}, scope)` wraps; `...schemaPop` is the alias bundle (binary primitives, bitwise primitives, Reserved/Scale/At/OriginalType generics).
+
+The loader looks for, in order: `$` named export, `default` export, then any other export that quacks like an arktype scope.
 
 `SchemaPopConfig` fields, all optional:
 

@@ -88,7 +88,15 @@ function resolveTargets(
 }
 
 function findScope(module: Record<string, unknown>): unknown {
-	if (module["$"]) return module["$"];
+	// Resolution order:
+	// 1. `export const $ = schemaPop(...)` — the canonical idiom.
+	// 2. `export default schemaPop(...)` — single-export ergonomics, lets
+	//    the consumer pick the alias at import site (`import fields from
+	//    "./fields.pop"`).
+	// 3. Duck-type any named export that quacks like an arktype Scope.
+	if (module["$"] && isArktypeScope(module["$"])) return module["$"];
+	if (module["default"] && isArktypeScope(module["default"]))
+		return module["default"];
 	for (const v of Object.values(module)) {
 		if (isArktypeScope(v)) return v;
 	}
@@ -251,12 +259,23 @@ export async function buildSchema(
 		const latest = loaded[loaded.length - 1]!;
 		const targets = resolveTargets(config, latest.fileCfg);
 
+		const isMultiVersion = loaded.length > 1;
+
 		let previousPlan: LayoutPlan | null = null;
 		for (let i = 0; i < loaded.length; i++) {
 			const v = loaded[i]!;
 			const isLatest = i === loaded.length - 1;
 			const eff = mergeConfigs(config, v.fileCfg);
+			// `safeVersion` keeps `<schemaName>_<version>` for plan
+			// uniqueness (migration tracking, header comments). The
+			// namespace passed to `wrapVersion` collapses to plain
+			// `<schemaName>` when there's only one version of this
+			// schema — gives users `import { Foo } from "./fields"`
+			// instead of `import { fields_1 } from ...; fields_1.Foo`
+			// for the common single-version case. Multi-version retains
+			// the suffix so the per-version namespaces don't collide.
 			const safeVersion = `${schemaName}_${v.version}`;
+			const wrapName = isMultiVersion ? safeVersion : schemaName;
 
 			const analyzer = new SchemaAnalyzer(v.scope, {
 				wordSize: eff.wordSize,
@@ -284,7 +303,7 @@ export async function buildSchema(
 				}
 				if (!dest) continue;
 
-				if (!instance.wrapVersion && loaded.length > 1) {
+				if (!instance.wrapVersion && isMultiVersion) {
 					if (!isLatest) continue;
 					console.warn(
 						`⚠️  [Schema-Pop] Exporter "${instance.name}" only supports a single version — only ${schemaName}@${v.version} (latest) emitted to ${dest}`,
@@ -308,7 +327,7 @@ export async function buildSchema(
 					entry.contributors.push({ schemaName, version: v.version });
 
 					if (instance.wrapVersion) {
-						content = instance.wrapVersion(safeVersion, content);
+						content = instance.wrapVersion(wrapName, content);
 					}
 					entry.body += `${content}\n`;
 
