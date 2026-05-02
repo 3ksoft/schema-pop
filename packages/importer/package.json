@@ -1,0 +1,36 @@
+{
+	"name": "@schema-pop/importer",
+	"version": "0.1.14",
+	"description": "Unified CLI dispatcher: schema-pop-import <file> picks tree-sitter (Rust) or system clang (C / C++) and writes an arktype scope.",
+	"type": "module",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"bun:main": "./src/index.ts",
+	"types": "./dist/index.d.ts",
+	"bin": {
+		"schema-pop-import": "./src/cli.ts"
+	},
+	"files": [
+		"dist",
+		"src",
+		"scripts"
+	],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"scripts": {
+		"build": "rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --packages external && tsc --declaration --emitDeclarationOnly --outDir dist --noEmit false",
+		"compile": "bash ./scripts/compile.sh",
+		"typecheck": "tsc --noEmit",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"@schema-pop/clang-importer": "0.1.14",
+		"@schema-pop/treesitter-importer": "0.1.14",
+		"jiti": "^2.0.0",
+		"schema-pop": "0.1.14"
+	}
+}
