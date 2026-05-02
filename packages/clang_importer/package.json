@@ -1,6 +1,6 @@
 {
 	"name": "@schema-pop/clang-importer",
-	"version": "0.1.27",
+	"version": "0.1.28",
 	"description": "Import C / C++ headers into schema-pop via the system clang's JSON AST dump (experimental).",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -26,7 +26,7 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"@schema-pop/treesitter-importer": "0.1.27",
-		"schema-pop": "0.1.27"
+		"@schema-pop/treesitter-importer": "0.1.28",
+		"schema-pop": "0.1.28"
 	}
 }
