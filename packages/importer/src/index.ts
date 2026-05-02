@@ -17,15 +17,19 @@ import {
 } from "@schema-pop/clang-importer";
 
 export type Engine = "treesitter" | "clang";
-export type Lang = "rust" | "c" | "c++";
+export type Lang = "rust" | "c" | "c++" | "typescript";
 export type { ExtraScope };
 
 /**
  * Pick a sensible default engine + language given the input file. Rust
- * always goes through tree-sitter (no clang Rust frontend in the wild).
- * C / C++ default to clang when available, since clang resolves
- * includes / macros / `#define` constants whereas the tree-sitter walker
- * is purely syntactic.
+ * and TypeScript always go through tree-sitter; C / C++ default to clang
+ * when available since clang resolves includes / macros / typedef
+ * chains, but `--engine treesitter` falls back to the syntactic walker
+ * when clang isn't installed.
+ *
+ * `.ts` files are NOT auto-mapped to the typescript walker — most `.ts`
+ * files in a schema-pop project are already arktype scopes, so we only
+ * dispatch when `--lang typescript` is explicit.
  */
 export function pickEngine(
 	filePath: string,
@@ -44,11 +48,14 @@ export function pickEngine(
 					: null);
 	if (!lang) {
 		throw new Error(
-			`schema-pop importer: cannot infer language from "${filePath}"; pass --lang rust|c|c++`,
+			`schema-pop importer: cannot infer language from "${filePath}"; pass --lang rust|c|c++|typescript`,
 		);
 	}
 	if (overrides.engine) return { engine: overrides.engine, lang };
-	const engine: Engine = lang === "rust" ? "treesitter" : "clang";
+	// TypeScript only has tree-sitter today; everything else picks the
+	// stronger backend (clang) when applicable.
+	const engine: Engine =
+		lang === "rust" || lang === "typescript" ? "treesitter" : "clang";
 	return { engine, lang };
 }
 
@@ -163,7 +170,13 @@ export async function importFile(
 		});
 	}
 	const tsLang =
-		lang === "rust" ? "rust" : lang === "c++" ? "cpp" : "c";
+		lang === "rust"
+			? "rust"
+			: lang === "c++"
+				? "cpp"
+				: lang === "typescript"
+					? "typescript"
+					: "c";
 	return treesitterImport(abs, tsLang);
 }
 

@@ -17,13 +17,18 @@ Usage:
   schema-pop-import <input> -o <output.ts> -- -I./inc -DFOO=1   # clang flags after \`--\`
 
 Engines:
-  Rust      → tree-sitter (bundled wasm grammar, zero runtime deps)
-  C / C++   → system clang (better — resolves #include, macros, attributes)
-              Tree-sitter is available as a fallback via \`-e treesitter\`.
+  Rust         → tree-sitter (bundled wasm grammar, zero runtime deps)
+  C / C++      → system clang (better — resolves #include, macros, attributes)
+                 Tree-sitter is available as a fallback via \`-e treesitter\`.
+  TypeScript   → tree-sitter (interfaces / type aliases / enums, hand-written
+                 \`.ts\` only — NOT for re-importing existing arktype scopes).
+                 Pass \`-l typescript\` explicitly; \`.ts\` extension is not
+                 auto-detected because most \`.ts\` files in a schema-pop
+                 project are already arktype scopes.
 
 Options:
   -o, --output <path>     Output .ts file (required)
-  -l, --lang <lang>       Force language: rust | c | c++ (default: from extension)
+  -l, --lang <lang>       Force language: rust | c | c++ | typescript (default: from extension)
   -e, --engine <engine>   Force engine: treesitter | clang (default: auto)
   -n, --scope <name>      Exported scope binding name (default: $)
   -x, --extras <spec>     Extra arktype scope to splice in. Repeatable. Spec
@@ -85,9 +90,12 @@ async function main() {
 
 	const langOverride = values.lang as Lang | undefined;
 	const engineOverride = values.engine as Engine | undefined;
-	if (langOverride && !["rust", "c", "c++"].includes(langOverride)) {
+	if (
+		langOverride &&
+		!["rust", "c", "c++", "typescript"].includes(langOverride)
+	) {
 		console.error(
-			`error: invalid --lang "${langOverride}" (expected: rust | c | c++)`,
+			`error: invalid --lang "${langOverride}" (expected: rust | c | c++ | typescript)`,
 		);
 		process.exit(2);
 	}
