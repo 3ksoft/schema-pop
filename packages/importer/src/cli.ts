@@ -2,6 +2,15 @@
 import { parseArgs } from "node:util";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+
+// Bun.Glob is provided by the bun runtime (this CLI runs only under
+// bun via the shebang). Declared inline so we don't pull @types/bun
+// into the importer package's devDeps just for one symbol.
+declare const Bun: {
+	Glob: new (pattern: string) => {
+		scan(opts: { cwd: string; onlyFiles?: boolean }): AsyncIterable<string>;
+	};
+};
 import {
 	type Engine,
 	type Lang,
@@ -13,8 +22,10 @@ import {
 const HELP = `schema-pop-import — import Rust / C / C++ source into an arktype scope.
 
 Usage:
-  schema-pop-import <input> -o <output.ts> [options]
-  schema-pop-import <input> -o <output.ts> -- -I./inc -DFOO=1   # clang flags after \`--\`
+  schema-pop-import <input> -o <output.ts> [options]                      # single file
+  schema-pop-import 'src/**/*.{h,hpp}' -o out/ [options]                   # glob → directory
+  schema-pop-import a.h b.h c.h -o out/ [options]                          # multi-arg → directory
+  schema-pop-import <input> -o <output.ts> -- -I./inc -DFOO=1              # clang flags after \`--\`
 
 Engines:
   Rust         → tree-sitter (bundled wasm grammar, zero runtime deps)
@@ -27,7 +38,11 @@ Engines:
                  project are already arktype scopes.
 
 Options:
-  -o, --output <path>     Output .ts file (required)
+  -o, --output <path>     Output path. A single \`.ts\` file when one input
+                          resolves; a DIRECTORY when the input is a glob,
+                          multiple positionals are passed, or the path
+                          ends with \`/\`. In directory mode each input
+                          \`<name>.<ext>\` becomes \`<outDir>/<name>.ts\`.
   -l, --lang <lang>       Force language: rust | c | c++ | typescript (default: from extension)
   -e, --engine <engine>   Force engine: treesitter | clang (default: auto)
   -n, --scope <name>      Exported scope binding name (default: $)
@@ -84,15 +99,58 @@ async function main() {
 		process.exit(values.help ? 0 : 1);
 	}
 
-	const input = positionals[0]!;
 	const output = values.output as string | undefined;
 	if (!output) {
 		console.error("error: --output is required");
 		process.exit(2);
 	}
-
-	const absInput = path.resolve(input);
 	const absOutput = path.resolve(output);
+
+	// Expand positionals: each entry is either a literal file or a glob
+	// pattern (presence of `*` / `?` / `[` / `{` triggers Bun.Glob expand).
+	const inputs: string[] = [];
+	for (const p of positionals) {
+		const expanded = await expandGlob(p);
+		if (expanded.length === 0) {
+			console.error(`error: no files matched "${p}"`);
+			process.exit(2);
+		}
+		inputs.push(...expanded);
+	}
+
+	// Output is a directory when explicitly slash-suffixed, when it
+	// already exists as a dir, or when the input fan-out is > 1.
+	const outputLooksLikeDir =
+		output.endsWith("/") ||
+		output.endsWith(path.sep) ||
+		(await isExistingDir(absOutput));
+	const isDirMode = inputs.length > 1 || outputLooksLikeDir;
+
+	if (!isDirMode && inputs.length === 1) {
+		await runOne(inputs[0]!, absOutput, values, passthrough);
+		return;
+	}
+
+	await fs.mkdir(absOutput, { recursive: true });
+	for (const inp of inputs) {
+		const absInp = path.resolve(inp);
+		const base = path.basename(absInp).replace(/\.[^.]+$/, "");
+		const dest = path.join(absOutput, `${base}.ts`);
+		try {
+			await runOne(inp, dest, values, passthrough);
+		} catch (e) {
+			console.error(`❌ ${inp}: ${(e as Error).message}`);
+		}
+	}
+}
+
+async function runOne(
+	input: string,
+	absOutput: string,
+	values: Record<string, unknown>,
+	passthrough: string[],
+): Promise<void> {
+	const absInput = path.resolve(input);
 
 	const langOverride = values.lang as Lang | undefined;
 	const engineOverride = values.engine as Engine | undefined;
@@ -193,6 +251,31 @@ async function maybeInjectStdint(
 	const hasInclude = /#\s*include\s*[<"](?:stdint|cstdint)\.?h?[>"]/.test(src);
 	if (hasInclude) return passthrough;
 	return ["-include", "stdint.h", ...passthrough];
+}
+
+/**
+ * Expand a positional argument as either a literal file path or a glob.
+ * Anything containing `*`, `?`, `[`, or `{` is treated as a glob and
+ * scanned via `Bun.Glob`. Literal paths are returned as a single-element
+ * array. Sorted output so multi-file runs are deterministic.
+ */
+async function expandGlob(pattern: string): Promise<string[]> {
+	if (!/[*?[\]{}]/.test(pattern)) return [pattern];
+	const out: string[] = [];
+	const g = new Bun.Glob(pattern);
+	for await (const f of g.scan({ cwd: process.cwd(), onlyFiles: true })) {
+		out.push(f);
+	}
+	return out.sort();
+}
+
+async function isExistingDir(p: string): Promise<boolean> {
+	try {
+		const st = await fs.stat(p);
+		return st.isDirectory();
+	} catch {
+		return false;
+	}
 }
 
 main().catch((e) => {
