@@ -578,10 +578,27 @@ export class SchemaAnalyzer {
 	private analyzeFields(node: BaseNode, parentName?: string): FieldPlan[] {
 		const props = getProps(node);
 		const propsWithMeta = props.map((p, i) => {
-			const hint = parentName
-				? `${parentName}_${String(p.key)}`
-				: String(p.key);
-			let type = this.resolveFieldType(p.value, undefined, hint);
+			const fieldKey = String(p.key);
+			const hint = parentName ? `${parentName}_${fieldKey}` : fieldKey;
+			// Look up what the user actually typed for this field. arktype
+			// preserves it on `scope.aliases[parent][field]` — a single
+			// identifier means "ref to that alias"; anything compound means
+			// the user wrote an inline shape and we must NOT collapse it
+			// onto a structurally-identical top-level alias.
+			const srcExpr =
+				parentName !== undefined
+					? ((this.aliases[parentName] as any)?.[fieldKey] as unknown)
+					: undefined;
+			const forbidIdentRef =
+				typeof srcExpr === "string" &&
+				srcExpr.trim().length > 0 &&
+				!/^[A-Za-z_]\w*$/.test(srcExpr.trim());
+			let type = this.resolveFieldType(
+				p.value,
+				undefined,
+				hint,
+				forbidIdentRef,
+			);
 			// ArkType `"T = value"` makes the prop optional with `inner.default`.
 			// In schema-pop the default is migration metadata only — the field
 			// stays required at the binary layout level.
@@ -915,6 +932,19 @@ export class SchemaAnalyzer {
 		node: BaseNode,
 		currentTypeName?: string,
 		pathHint?: string,
+		/**
+		 * When true, suppress structural-identity ref resolution for this
+		 * call. arktype dedupes internal nodes by shape, so a field
+		 * declared inline as `"u8[]<=6"` shares its node with any
+		 * top-level alias that has the same shape (e.g. `MacAddress`).
+		 * Without this flag we'd silently retype the field as `MacAddress`
+		 * — see docs/requests.md P17. The `analyzeFields` caller turns
+		 * this on for top-level fields whose source string isn't a pure
+		 * identifier; recursive calls (union branches, array items)
+		 * leave it off so legitimate `"A | B"` unions keep resolving
+		 * branches to refs A / B.
+		 */
+		forbidIdentRef = false,
 	): Field {
 		if (node.kind === "unit" || (node as any).unit !== undefined)
 			return { kind: "unit" };
@@ -1052,23 +1082,20 @@ export class SchemaAnalyzer {
 			: /^[A-Za-z_][\w]*$/.test(expr)
 				? expr
 				: undefined;
+		// Strict-identity match catches arktype-internal references — e.g.
+		// union branches in `"A | B"` whose AST nodes literally point at
+		// A's and B's internal nodes. We skip it when `forbidIdentRef` is
+		// set, because arktype also dedupes structurally-identical
+		// inline shapes onto the same node (`keys: "u8[]<=6"` shares its
+		// node with `MacAddress: "u8[]<=6"`), which would silently
+		// retype the field. See docs/requests.md P17.
 		let foundName: string | undefined;
 		if (refByName && this.scopeNames.includes(refByName)) {
 			foundName = refByName;
-		} else {
-			// Strict pass first: only trust strict internal-identity. Two
-			// different aliases can share `entry.expression` (e.g. Vec2 and
-			// Vec4 both report "number[]" — the length lives deeper in
-			// `inner.sequence.exactLength`), so an expression match would
-			// pick the first sibling instead of the right alias.
+		} else if (!forbidIdentRef) {
 			foundName = this.scopeNames.find(
 				(n) => this.module[n]?.internal === node,
 			);
-			if (!foundName) {
-				foundName = this.scopeNames.find(
-					(n) => this.module[n]?.expression === expr,
-				);
-			}
 		}
 
 		if (foundName && foundName !== currentTypeName) {
