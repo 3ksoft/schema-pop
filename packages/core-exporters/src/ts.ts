@@ -129,7 +129,12 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 		const namesUnion = t.variants.map((v) => `"${v.name}"`).join(" | ");
 		let s = jsdoc(t as any);
 		s += `export const ${name} = {\n`;
-		for (const v of t.variants) s += `${indent()}${v.name}: ${v.value},\n`;
+		for (const v of t.variants) {
+			const key = /^[A-Za-z_$][\w$]*$/.test(v.name)
+				? v.name
+				: JSON.stringify(v.name);
+			s += `${indent()}${key}: ${v.value},\n`;
+		}
 		s += `} as const;\n`;
 		s += `export type ${name} = ${namesUnion};\n`;
 		return s;
