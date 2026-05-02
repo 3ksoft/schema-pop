@@ -208,6 +208,23 @@ describe("ts exporter — user mapper integration", () => {
 		expect(code).not.toContain("requires a user-supplied impl"); // function-level throw is gone
 	});
 
+	test("withIndex: emits getIndex hook that re-exports each contributing schema", () => {
+		const exp = ts({ dest: "out.ts", withIndex: true });
+		expect(typeof exp.getIndex).toBe("function");
+		const idx = exp.getIndex!([
+			{ dest: "foo.ts", schemaName: "foo" },
+			{ dest: "bar.ts", schemaName: "bar" },
+		]);
+		expect(idx["index.ts"]).toBe(
+			'export * from "./foo";\nexport * from "./bar";\n',
+		);
+	});
+
+	test("withIndex unset: getIndex hook is absent so builder skips barrel emit", () => {
+		const exp = ts({ dest: "out.ts" });
+		expect(exp.getIndex).toBeUndefined();
+	});
+
 	test("renamed alias type: dispatcher registers both old and new names", () => {
 		const v1 = analyze(
 			scope({ ...binary.import(), DeviceStatus: "u8" }),

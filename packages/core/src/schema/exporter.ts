@@ -42,4 +42,15 @@ export interface ExporterPlugin<TConfig extends BaseConfig = BaseConfig> {
 	getFileFooter?: () => string;
 	generateMigration?: (fromPlan: LayoutPlan, toPlan: LayoutPlan) => string;
 	getHarness?: (plans: LayoutPlan[]) => Record<string, string>;
+	/**
+	 * Aggregate every per-schema file written by this plugin instance
+	 * into the same directory and return additional barrel files
+	 * (`{ filename: contents }`) to drop next to them. Used by the TS
+	 * exporter to emit `index.ts` so consumers can
+	 * `import { ... } from "./schema"` instead of cherry-picking each
+	 * `<schemaName>.ts` by hand.
+	 */
+	getIndex?: (
+		files: { dest: string; schemaName: string }[],
+	) => Record<string, string>;
 }

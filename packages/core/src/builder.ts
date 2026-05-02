@@ -446,6 +446,46 @@ export async function buildSchema(
 		}
 	}
 
+	// 5. Plugin-driven barrel files (e.g. TS `index.ts` re-exporting
+	//    every generated `<schemaName>.ts` in the same directory).
+	//    Group destinations by `(instance, dirname)` so each plugin
+	//    sees only the files it produced into a given directory.
+	const indexGroups = new Map<
+		string,
+		{
+			instance: ExporterPlugin<any>;
+			dir: string;
+			files: { dest: string; schemaName: string }[];
+		}
+	>();
+	for (const dest in targetContents) {
+		const entry = targetContents[dest]!;
+		if (!entry.targetInstance.getIndex) continue;
+		const absDest = path.resolve(rootDir, dest);
+		const dir = path.dirname(absDest);
+		const key = `${entry.targetInstance.name}::${dir}`;
+		let group = indexGroups.get(key);
+		if (!group) {
+			group = { instance: entry.targetInstance, dir, files: [] };
+			indexGroups.set(key, group);
+		}
+		const schemaName =
+			entry.contributors[0]?.schemaName ?? path.basename(dest);
+		group.files.push({ dest: path.basename(dest), schemaName });
+	}
+	for (const group of indexGroups.values()) {
+		const extras = group.instance.getIndex!(group.files);
+		for (const [filename, contents] of Object.entries(extras)) {
+			const indexDest = path.resolve(group.dir, filename);
+			if (!fs.existsSync(group.dir))
+				fs.mkdirSync(group.dir, { recursive: true });
+			fs.writeFileSync(indexDest, contents);
+			console.log(
+				`✅ [Schema-Pop] Generated: ${path.relative(rootDir, indexDest)}`,
+			);
+		}
+	}
+
 	if (migrationSummaries.length > 0) printMigrationSummary(migrationSummaries);
 }
 

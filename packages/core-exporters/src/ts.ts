@@ -22,6 +22,14 @@ export interface TsConfig extends Omit<BaseConfig, "commentStyle"> {
 	 * `defineMigration` from "schema-pop" for typed partial mappers.
 	 */
 	migrationsModule?: string;
+	/**
+	 * Emit an `index.ts` barrel next to the generated per-schema files
+	 * that re-exports every one of them (`export * from "./<schemaName>"`),
+	 * so consumers can `import { ... } from "./schemas"` instead of
+	 * spelling out each schema file. Only meaningful when more than one
+	 * schema lands in the same `destDir`.
+	 */
+	withIndex?: boolean;
 }
 
 const PRIMITIVE_TS: Record<string, string> = {
@@ -466,6 +474,19 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 			out += `}\n`;
 			return out;
 		},
+		getIndex: cfg.withIndex
+			? (files) => {
+					const lines = files
+						.map((f) => f.dest.replace(/\.[^./]+$/, ""))
+						.map((base) => {
+							const seg = base.includes("/")
+								? base.slice(base.lastIndexOf("/") + 1)
+								: base;
+							return `export * from "./${seg}";`;
+						});
+					return { "index.ts": lines.join("\n") + "\n" };
+				}
+			: undefined,
 		getFileFooter: () => {
 			if (dispatchEntries.length === 0) return "";
 			let s = "\n";

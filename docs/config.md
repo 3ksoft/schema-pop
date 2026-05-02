@@ -134,3 +134,13 @@ The builder picks targets from the highest-version file and emits migrations bet
 ### `dest` resolution
 
 Per-target `dest` wins when set. Otherwise the builder uses `<destDir>/<schemaName>.<extension>` where `extension` is each plugin's declared default (`rs` / `h` / `hpp` / `ts` / `html` / `wgsl` / etc.).
+
+### TS barrel (`withIndex`)
+
+When more than one schema lands in the same `destDir` and you want a single import surface:
+
+```ts
+ts({ withIndex: true })   // emits `<destDir>/index.ts`
+```
+
+The barrel re-exports every contributing file (`export * from "./<schemaName>";`) so consumers can `import { ... } from "./schemas"` instead of cherry-picking each `<schemaName>.ts`. TS-only — other exporters keep one-file-per-schema without aggregation.
