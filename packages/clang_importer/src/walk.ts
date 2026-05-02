@@ -6,6 +6,7 @@ import type {
 	RustPrimitive,
 	RustType,
 } from "@schema-pop/treesitter-importer";
+import { downgradeUnknownRefs } from "@schema-pop/treesitter-importer";
 import {
 	type ClangNode,
 	isFromInclude,
@@ -368,58 +369,9 @@ export function walkClangAst(
 	return { source: inputFile, items: ctx.items, skipped: ctx.skipped };
 }
 
-/** Names schema-pop's `binary` + `bitwise` scopes always provide, plus
- *  the `string` keyword. Any ref to one of these resolves natively. */
-const SCHEMA_POP_KNOWN_NAMES: ReadonlySet<string> = new Set([
-	// arktype keywords schema-pop relies on
-	"string",
-	"unknown",
-	// binary primitives
-	"u8", "u16", "u32", "u64", "u128",
-	"i8", "i16", "i32", "i64", "i128",
-	"f32", "f64", "bool",
-	// bitwise primitives
-	"u1", "u2", "u3", "u4", "u5", "u6", "u7",
-]);
-
-function downgradeUnknownRefs(
-	items: RustItem[],
-	extra?: readonly string[],
-): void {
-	const known = new Set<string>(SCHEMA_POP_KNOWN_NAMES);
-	for (const item of items) known.add(item.name);
-	if (extra) for (const n of extra) known.add(n);
-
-	for (const item of items) {
-		if (item.kind === "struct") {
-			for (const f of item.fields) f.type = downgradeType(f.type, known);
-		} else if (item.kind === "alias") {
-			item.type = downgradeType(item.type, known);
-		} else if (item.kind === "function") {
-			item.returnType = downgradeType(item.returnType, known);
-			for (const a of item.args) a.type = downgradeType(a.type, known);
-		}
-	}
-}
-
-/** Recursively walk a RustType, replacing `ref` to unknown names with
- *  the `unknown` variant. Compound types (array/vec/option) recurse
- *  into their element/inner so e.g. `vec(ref("size_t"))` becomes
- *  `vec(unknown("size_t"))`. */
-function downgradeType(t: RustType, known: Set<string>): RustType {
-	switch (t.kind) {
-		case "ref":
-			return known.has(t.name) ? t : { kind: "unknown", raw: t.name };
-		case "array":
-			return { ...t, item: downgradeType(t.item, known) };
-		case "vec":
-			return { ...t, item: downgradeType(t.item, known) };
-		case "option":
-			return { ...t, inner: downgradeType(t.inner, known) };
-		default:
-			return t;
-	}
-}
+// `downgradeUnknownRefs` lives in @schema-pop/treesitter-importer so
+// every walker (rust / c / cpp / ts / clang) shares one implementation.
+// Imported at the top of this file.
 
 function visitTopLevel(
 	node: ClangNode,

@@ -7,6 +7,13 @@ import type {
 	RustType,
 	RustEnumVariant,
 } from "./ir";
+import { downgradeUnknownRefs } from "./known-names";
+
+export interface WalkCOptions {
+	/** Extra type names that should resolve as `ref` (not get downgraded
+	 *  to `unknown`). Pass keys of any user-supplied extras scope. */
+	extraKnownNames?: readonly string[];
+}
 
 /**
  * tree-sitter-c walker. Handles three top-level shapes:
@@ -95,8 +102,12 @@ function resolveCPrimitive(text: string): RustPrimitive | null {
 	}
 }
 
-export function walkCFile(tree: Tree, sourcePath: string): RustModuleIR {
-	return walkCLike(tree, sourcePath, { allowClass: false });
+export function walkCFile(
+	tree: Tree,
+	sourcePath: string,
+	opts: WalkCOptions = {},
+): RustModuleIR {
+	return walkCLike(tree, sourcePath, { allowClass: false, ...opts });
 }
 
 /**
@@ -106,7 +117,7 @@ export function walkCFile(tree: Tree, sourcePath: string): RustModuleIR {
 export function walkCLike(
 	tree: Tree,
 	sourcePath: string,
-	opts: { allowClass: boolean },
+	opts: { allowClass: boolean; extraKnownNames?: readonly string[] },
 ): RustModuleIR {
 	const items: RustItem[] = [];
 	const skipped: { name: string; reason: string }[] = [];
@@ -212,6 +223,11 @@ export function walkCLike(
 	}
 
 	visit(tree.rootNode, "");
+	// Refs to types not declared in this file (often from `#include`d
+	// headers tree-sitter doesn't expand) become `unknown` IR variants
+	// preserving the original spelling — keeps the generated scope
+	// loadable instead of erroring at scope() time.
+	downgradeUnknownRefs(items, opts.extraKnownNames);
 	return { source: sourcePath, items, skipped };
 }
 

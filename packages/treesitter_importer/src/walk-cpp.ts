@@ -1,5 +1,5 @@
 import type { Tree } from "web-tree-sitter";
-import { walkCLike } from "./walk-c";
+import { walkCLike, type WalkCOptions } from "./walk-c";
 import type { RustModuleIR } from "./ir";
 
 /**
@@ -14,6 +14,10 @@ import type { RustModuleIR } from "./ir";
  * `struct` defaults to public, `class` defaults to private — the walker
  * stops at the first `private:` or `protected:` access label).
  */
-export function walkCppFile(tree: Tree, sourcePath: string): RustModuleIR {
-	return walkCLike(tree, sourcePath, { allowClass: true });
+export function walkCppFile(
+	tree: Tree,
+	sourcePath: string,
+	opts: WalkCOptions = {},
+): RustModuleIR {
+	return walkCLike(tree, sourcePath, { allowClass: true, ...opts });
 }

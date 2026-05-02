@@ -7,6 +7,13 @@ import type {
 	RustPrimitive,
 	RustType,
 } from "./ir";
+import { downgradeUnknownRefs } from "./known-names";
+
+export interface WalkRustOptions {
+	/** Extra type names that should resolve as `ref` (not get downgraded
+	 *  to `unknown`). Pass keys of any user-supplied extras scope. */
+	extraKnownNames?: readonly string[];
+}
 
 const PRIMITIVE_NAMES = new Set<RustPrimitive>([
 	"u8",
@@ -29,7 +36,11 @@ const PRIMITIVE_NAMES = new Set<RustPrimitive>([
  * we care about (struct / enum / type alias). `mod_item` descends into its
  * body. Everything else is silently skipped.
  */
-export function walkRustFile(tree: Tree, sourcePath: string): RustModuleIR {
+export function walkRustFile(
+	tree: Tree,
+	sourcePath: string,
+	opts: WalkRustOptions = {},
+): RustModuleIR {
 	const items: RustItem[] = [];
 	const skipped: { name: string; reason: string }[] = [];
 
@@ -115,6 +126,11 @@ export function walkRustFile(tree: Tree, sourcePath: string): RustModuleIR {
 	}
 
 	visit(tree.rootNode, "");
+	// Refs to types not declared in this file (cross-module imports
+	// tree-sitter doesn't follow) become `unknown` IR variants —
+	// generated scope stays loadable; original spelling preserved on
+	// each field's `originalType`.
+	downgradeUnknownRefs(items, opts.extraKnownNames);
 	return { source: sourcePath, items, skipped };
 }
 

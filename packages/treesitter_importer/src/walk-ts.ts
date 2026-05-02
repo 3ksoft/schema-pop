@@ -6,6 +6,13 @@ import type {
 	RustModuleIR,
 	RustType,
 } from "./ir";
+import { downgradeUnknownRefs } from "./known-names";
+
+export interface WalkTsOptions {
+	/** Extra type names that should resolve as `ref` (not get downgraded
+	 *  to `unknown`). Pass keys of any user-supplied extras scope. */
+	extraKnownNames?: readonly string[];
+}
 
 /**
  * tree-sitter-typescript walker. Pulls plain interface / type alias /
@@ -39,7 +46,11 @@ const TS_PRIMITIVE_KEYWORDS: Record<string, RustType> = {
 	string: { kind: "string" },
 };
 
-export function walkTsFile(tree: Tree, sourcePath: string): RustModuleIR {
+export function walkTsFile(
+	tree: Tree,
+	sourcePath: string,
+	opts: WalkTsOptions = {},
+): RustModuleIR {
 	const items: RustItem[] = [];
 	const skipped: { name: string; reason: string }[] = [];
 
@@ -77,6 +88,10 @@ export function walkTsFile(tree: Tree, sourcePath: string): RustModuleIR {
 	}
 
 	visit(tree.rootNode);
+	// Refs to types not declared in this file (cross-module imports,
+	// referenced-but-undefined names) become `unknown` so the generated
+	// scope stays loadable.
+	downgradeUnknownRefs(items, opts.extraKnownNames);
 	return { source: sourcePath, items, skipped };
 }
 

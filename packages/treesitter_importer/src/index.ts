@@ -24,6 +24,7 @@ export { walkCFile } from "./walk-c";
 export { walkCppFile } from "./walk-cpp";
 export { walkTsFile } from "./walk-ts";
 export { emitArktypeScope } from "./emit";
+export { downgradeUnknownRefs, SCHEMA_POP_KNOWN_NAMES } from "./known-names";
 
 /**
  * Pick the language from a file extension. Returns `null` for unknown extensions.
@@ -50,15 +51,27 @@ export function langFromPath(filePath: string): Lang | null {
 	return null;
 }
 
+export interface ImportFileOptions {
+	lang?: Lang;
+	/** Extra type names that should resolve as `ref` (not get downgraded
+	 *  to `unknown`). Used by the unified importer to forward the user's
+	 *  `--extras` scope keys into every backend. */
+	extraKnownNames?: readonly string[];
+}
+
 /**
  * One-shot: read a source file, parse it with the matching grammar, return IR.
  */
 export async function importFile(
 	filePath: string,
-	lang?: Lang,
+	langOrOpts?: Lang | ImportFileOptions,
 ): Promise<RustModuleIR> {
 	const abs = path.resolve(filePath);
-	const resolved = lang ?? langFromPath(abs);
+	const opts: ImportFileOptions =
+		typeof langOrOpts === "string"
+			? { lang: langOrOpts }
+			: (langOrOpts ?? {});
+	const resolved = opts.lang ?? langFromPath(abs);
 	if (!resolved) {
 		throw new Error(
 			`schema-pop importer: cannot infer language from ${filePath}; pass an explicit lang`,
@@ -67,10 +80,11 @@ export async function importFile(
 	const source = await fs.readFile(abs, "utf8");
 	const tree = await parseSource(resolved, source);
 	const rel = path.relative(process.cwd(), abs);
-	if (resolved === "rust") return walkRustFile(tree, rel);
-	if (resolved === "c") return walkCFile(tree, rel);
-	if (resolved === "cpp") return walkCppFile(tree, rel);
-	return walkTsFile(tree, rel);
+	const walkOpts = { extraKnownNames: opts.extraKnownNames };
+	if (resolved === "rust") return walkRustFile(tree, rel, walkOpts);
+	if (resolved === "c") return walkCFile(tree, rel, walkOpts);
+	if (resolved === "cpp") return walkCppFile(tree, rel, walkOpts);
+	return walkTsFile(tree, rel, walkOpts);
 }
 
 /**

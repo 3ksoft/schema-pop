@@ -177,7 +177,10 @@ export async function importFile(
 				: lang === "typescript"
 					? "typescript"
 					: "c";
-	return treesitterImport(abs, tsLang);
+	return treesitterImport(abs, {
+		lang: tsLang,
+		extraKnownNames: extraKnownNames.length ? extraKnownNames : undefined,
+	});
 }
 
 /**
