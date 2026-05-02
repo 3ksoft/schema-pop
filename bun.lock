@@ -20,9 +20,20 @@
         "schema-pop": "workspace:*",
       },
     },
+    "packages/clang_importer": {
+      "name": "@schema-pop/clang-importer",
+      "version": "0.1.14",
+      "bin": {
+        "schema-pop-clang-import": "./src/cli.ts",
+      },
+      "dependencies": {
+        "@schema-pop/treesitter-importer": "0.1.14",
+        "schema-pop": "0.1.14",
+      },
+    },
     "packages/core": {
       "name": "schema-pop",
-      "version": "0.1.13",
+      "version": "0.1.14",
       "bin": {
         "schema-pop": "./dist/cli.js",
       },
@@ -39,14 +50,14 @@
     },
     "packages/core-exporters": {
       "name": "@schema-pop/core-exporters",
-      "version": "0.1.13",
+      "version": "0.1.14",
       "dependencies": {
         "schema-pop": "workspace:*",
       },
     },
     "packages/create": {
       "name": "create-schema-pop",
-      "version": "0.1.13",
+      "version": "0.1.14",
       "bin": {
         "create-schema-pop": "bin.ts",
       },
@@ -63,19 +74,20 @@
     },
     "packages/extra-exporters": {
       "name": "@schema-pop/extra-exporters",
-      "version": "0.1.13",
+      "version": "0.1.14",
       "dependencies": {
         "schema-pop": "workspace:*",
       },
     },
     "packages/treesitter_importer": {
       "name": "@schema-pop/treesitter-importer",
-      "version": "0.1.13",
+      "version": "0.1.14",
       "bin": {
+        "schema-pop-import": "./src/cli.ts",
         "schema-pop-import-rust": "./src/cli.ts",
       },
       "dependencies": {
-        "schema-pop": "workspace:*",
+        "schema-pop": "0.1.14",
         "web-tree-sitter": "^0.25.0",
       },
     },
@@ -283,6 +295,8 @@
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.0-rc.13", "http://localhost:4873/@rolldown/pluginutils/-/pluginutils-1.0.0-rc.13.tgz", {}, "sha512-3ngTAv6F/Py35BsYbeeLeecvhMKdsKm4AoOETVhAA+Qc8nrA2I0kF7oa93mE9qnIurngOSpMnQ0x2nQY2FPviA=="],
 
     "@schema-pop-monorepo/web": ["@schema-pop-monorepo/web@workspace:packages/web"],
+
+    "@schema-pop/clang-importer": ["@schema-pop/clang-importer@workspace:packages/clang_importer"],
 
     "@schema-pop/core-exporters": ["@schema-pop/core-exporters@workspace:packages/core-exporters"],
 

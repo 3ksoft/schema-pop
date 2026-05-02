@@ -151,7 +151,7 @@ function emitItem(item: RustItem): string {
 		const lines = item.fields
 			.filter((f) => emittableField(f))
 			.map((f) => emitField(f));
-		return `${quoteTypeName(item.name)}: {\n${lines.join(",\n")}\n}`;
+		return `${jsdoc(item.doc)}${quoteTypeName(item.name)}: {\n${lines.join(",\n")}\n}`;
 	}
 	if (item.kind === "enum") {
 		// All unit variants → string literal union; carry tag size via
@@ -159,7 +159,7 @@ function emitItem(item: RustItem): string {
 		const allUnit = item.variants.every((v) => v.kind === "unit");
 		if (allUnit) {
 			const lits = item.variants.map((v) => `'${v.name}'`).join(" | ");
-			return `${quoteTypeName(item.name)}: ${JSON.stringify(lits)}`;
+			return `${jsdoc(item.doc)}${quoteTypeName(item.name)}: ${JSON.stringify(lits)}`;
 		}
 		// Discriminated tagged union: emit each variant as a struct ref then
 		// a union of those refs. For MVP keep it simple: emit per-variant
@@ -207,7 +207,7 @@ function emitItem(item: RustItem): string {
 		return all.join(",\n");
 	}
 	if (item.kind === "alias") {
-		return `${quoteTypeName(item.name)}: ${emitTypeAsString(item.type)}`;
+		return `${jsdoc(item.doc)}${quoteTypeName(item.name)}: ${emitTypeAsString(item.type)}`;
 	}
 	// function items are emitted via emitFunctions, not inside the scope.
 	return "";
@@ -219,12 +219,33 @@ function emittableField(f: RustField): boolean {
 
 function emitField(f: RustField): string {
 	// Option<T> at field level → "name?": "T" (arktype optional-key form).
+	const docPrefix = jsdoc(f.doc, "\t");
 	if (f.type.kind === "option") {
 		const innerExpr = emitTypeAsString(f.type.inner);
 		const key = f.name + "?";
-		return `\t${JSON.stringify(key)}: ${innerExpr}`;
+		return `${docPrefix}\t${JSON.stringify(key)}: ${innerExpr}`;
 	}
-	return `\t${quoteFieldName(f.name)}: ${emitTypeAsString(f.type)}`;
+	return `${docPrefix}\t${quoteFieldName(f.name)}: ${emitTypeAsString(f.type)}`;
+}
+
+/**
+ * Render a doc-string as a JSDoc-style block comment, emitted inline
+ * before the entry it documents. Returns "" when the doc is empty.
+ *
+ * Single-line docs collapse to `/** text *​/`. Multi-line docs use the
+ * three-line block form. The output ends with `\n${pad}` so the next
+ * line lines up with the entry's indentation.
+ */
+function jsdoc(text: string | undefined, pad: string = ""): string {
+	if (!text) return "";
+	const trimmed = text.trim();
+	if (!trimmed) return "";
+	const lines = trimmed.split("\n").map((l) => l.trim());
+	if (lines.length === 1) {
+		return `${pad}/** ${escapeJsBlock(lines[0]!)} */\n`;
+	}
+	const body = lines.map((l) => `${pad} * ${escapeJsBlock(l)}`).join("\n");
+	return `${pad}/**\n${body}\n${pad} */\n`;
 }
 
 function emitTypeAsString(t: RustType): string {
