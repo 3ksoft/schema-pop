@@ -2,6 +2,7 @@ export * from "./html";
 export * from "./md";
 export * from "./nuxt-ui";
 export * from "./openapi";
+export * from "./json-schema";
 export * from "./bf";
 export * from "./glsl";
 export * from "./wgsl";
