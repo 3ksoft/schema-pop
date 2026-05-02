@@ -478,7 +478,7 @@ async function main() {
  * flags live inside each \`<name>.<version>.pop.ts\` file via
  * \`schemaPop({...}, scope({...}))\`.
  *
- * Reference: https://github.com/3ksoft/schema-pop/blob/main/docs/config-v2-spec.md
+ * Reference: https://github.com/3ksoft/schema-pop/blob/main/docs/config.md
  */
 import { defineConfig } from "schema-pop";
 
