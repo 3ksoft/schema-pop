@@ -10,8 +10,18 @@
 // fields — we mirror that here.
 
 import { schemaPop, scope } from "schema-pop";
+import { html, wgsl } from "@schema-pop/extra-exporters";
 
-export const $ = scope({
+export const $ = schemaPop(
+	{
+		layout: "std430",
+		autoLayout: false,
+		targets: [
+			wgsl({ dest: "./gpu-physics.wgsl" }),
+			html({ dest: "./gpu-physics.html" }),
+		],
+	},
+	scope({
 	...schemaPop,
 
 	// ---- shared vector aliases (vec2<f32>, vec4<f32>) -----------------
@@ -131,4 +141,5 @@ export const $ = scope({
 		// fixed-length array; lowers to `array<i32, 16>` in WGSL.
 		hits: "i32[] == 16",
 	},
-});
+}),
+);

@@ -15,8 +15,14 @@
 // in the HTML viewer.
 
 import { migrations, schemaPop, scope } from "schema-pop";
+import { html } from "@schema-pop/extra-exporters";
 
-export const $ = scope({
+export const $ = schemaPop(
+	{
+		// Showcase HTML doubles as the dogfood landing page.
+		targets: [html({ dest: "./index.html" })],
+	},
+	scope({
 	...schemaPop,
 	...migrations.import(),
 
@@ -131,4 +137,5 @@ export const $ = scope({
 	},
 
 	Telemetry: "BatteryInfo | SampleBatch | PinnedRegisters | Heartbeat",
-});
+}),
+);
