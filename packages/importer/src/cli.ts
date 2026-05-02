@@ -31,6 +31,11 @@ Options:
   -l, --lang <lang>       Force language: rust | c | c++ | typescript (default: from extension)
   -e, --engine <engine>   Force engine: treesitter | clang (default: auto)
   -n, --scope <name>      Exported scope binding name (default: $)
+  -t, --type <kind>       Filter the emitted IR: \`types\` (drop function
+                          declarations) | \`functions\` (drop data shapes) |
+                          \`all\` (default). Handy for headers that are mostly
+                          function-pointer vtables when you only want the
+                          struct surface.
   -x, --extras <spec>     Extra arktype scope to splice in. Repeatable. Spec
                           form: \`<path>[#exportName]\` — defaults to first
                           arktype scope export found in the file. Aliases
@@ -64,6 +69,7 @@ async function main() {
 			lang: { type: "string", short: "l" },
 			engine: { type: "string", short: "e" },
 			scope: { type: "string", short: "n" },
+			type: { type: "string", short: "t" },
 			extras: { type: "string", short: "x", multiple: true },
 			clang: { type: "string" },
 			"no-auto-stdint": { type: "boolean" },
@@ -106,6 +112,15 @@ async function main() {
 		process.exit(2);
 	}
 
+	const filterRaw = values.type as string | undefined;
+	if (filterRaw && !["all", "types", "functions"].includes(filterRaw)) {
+		console.error(
+			`error: invalid --type "${filterRaw}" (expected: all | types | functions)`,
+		);
+		process.exit(2);
+	}
+	const filter = (filterRaw ?? "all") as "all" | "types" | "functions";
+
 	let engine: Engine;
 	let lang: Lang;
 	try {
@@ -142,6 +157,7 @@ async function main() {
 		clangBin: values.clang as string | undefined,
 		extraClangArgs: extraArgs,
 		extras,
+		filter,
 	});
 
 	await fs.mkdir(path.dirname(absOutput), { recursive: true });

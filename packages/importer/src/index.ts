@@ -72,6 +72,19 @@ export interface ImportOptions {
 	 * like `u9` / `fp16` aren't downgraded to `unknown`.
 	 */
 	extras?: ExtraScope[];
+	/**
+	 * Restrict what ends up in the emitted IR:
+	 *  - `"all"` (default): every struct / enum / alias / function.
+	 *  - `"types"`: drop function declarations — keep only data shapes.
+	 *  - `"functions"`: keep only `FunctionPlan` entries (alongside any
+	 *    refs they need; the analyzer still resolves those at scope load).
+	 *
+	 * Useful when an importer pulls a header that's mostly fn-pointer
+	 * vtables you don't care about (`schema-pop-import esp_now.h -t types`)
+	 * or, conversely, when you only want the function list to bind FFI
+	 * (`-t functions`).
+	 */
+	filter?: "all" | "types" | "functions";
 }
 
 /**
@@ -162,12 +175,13 @@ export async function importFile(
 	const extraKnownNames = (opts.extras ?? []).flatMap((e) => e.aliases);
 	if (engine === "clang") {
 		const clLang: ClangLang = lang === "c++" ? "c++" : "c";
-		return clangImport(abs, {
+		const ir = await clangImport(abs, {
 			lang: clLang,
 			clangBin: opts.clangBin,
 			extraArgs: opts.extraClangArgs,
 			walk: extraKnownNames.length ? { extraKnownNames } : undefined,
 		});
+		return applyFilter(ir, opts.filter);
 	}
 	const tsLang =
 		lang === "rust"
@@ -177,10 +191,24 @@ export async function importFile(
 				: lang === "typescript"
 					? "typescript"
 					: "c";
-	return treesitterImport(abs, {
+	const ir = await treesitterImport(abs, {
 		lang: tsLang,
 		extraKnownNames: extraKnownNames.length ? extraKnownNames : undefined,
 	});
+	return applyFilter(ir, opts.filter);
+}
+
+function applyFilter(
+	ir: RustModuleIR,
+	filter: "all" | "types" | "functions" | undefined,
+): RustModuleIR {
+	if (!filter || filter === "all") return ir;
+	if (filter === "types") {
+		ir.items = ir.items.filter((i) => i.kind !== "function");
+	} else if (filter === "functions") {
+		ir.items = ir.items.filter((i) => i.kind === "function");
+	}
+	return ir;
 }
 
 /**
