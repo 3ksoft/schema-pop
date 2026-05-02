@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type Lang = "rust" | "c" | "cpp";
+export type Lang = "rust" | "c" | "cpp" | "typescript";
 
 let initialized = false;
 const parsers = new Map<Lang, Parser>();

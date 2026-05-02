@@ -80,16 +80,24 @@ export function emitArktypeScope(
 	// Bitwise types (`u1`..`u7`, `Bit<u32, N>`) need the `bitwise` scope
 	// to be in scope, otherwise arktype throws on `'u3' is unresolvable`.
 	// `schemaPop` is the convenience bundle that covers binary + bitwise
-	// + Reserved/Scale/At — switch to it when any `bit` IR variant is in
-	// play. Plain binary stays the default for cheaper TS inference.
-	const usesBitwise = anyTypeMatches(typeItems, (t) => t.kind === "bit");
+	// + Reserved/Scale/At/OriginalType — switch to it when any `bit`,
+	// `unknown`, or `unsupported` IR variant is in play (any of those
+	// renders as an `OriginalType<...>` generic in scope source). Plain
+	// binary stays the default for cheaper TS inference.
+	const needsSchemaPopBundle = anyTypeMatches(
+		typeItems,
+		(t) =>
+			t.kind === "bit" || t.kind === "unknown" || t.kind === "unsupported",
+	);
 	const fnsImport = fnItems.length
 		? `\nimport type { FunctionPlan } from "schema-pop";`
 		: "";
-	const importBlock = usesBitwise
+	const importBlock = needsSchemaPopBundle
 		? `import { scope, schemaPop } from "schema-pop";${fnsImport}`
 		: `import { scope, binary } from "schema-pop";${fnsImport}`;
-	const baseSpread = usesBitwise ? "...schemaPop," : "...binary.import(),";
+	const baseSpread = needsSchemaPopBundle
+		? "...schemaPop,"
+		: "...binary.import(),";
 
 	const extraImports = extras
 		.map((e) => `\nimport { ${e.importName} } from ${JSON.stringify(e.importPath)};`)
@@ -201,13 +209,13 @@ function emitFieldLiteral(t: RustType): string {
 			return `{ kind: "primitive", name: ${JSON.stringify(t.underlying)}, size: 0, align: 1, paddedSize: 0, popKind: "bitwise" /* bit width: ${t.widthBits} */ }`;
 		}
 		case "unknown":
-			return `{ kind: "any" /* originally: ${escapeJsBlock(t.raw)} */ }`;
+			return `{ kind: "any", originalType: ${JSON.stringify(t.raw)} }`;
 		case "unsupported":
 			// `()` (Rust unit) and `void` (C) → encode as `unit` field.
 			if (t.raw === "()" || t.raw === "void") {
 				return `{ kind: "unit" }`;
 			}
-			return `{ kind: "any" /* unsupported: ${escapeJsBlock(t.raw)} */ }`;
+			return `{ kind: "any", originalType: ${JSON.stringify(t.raw)} }`;
 	}
 }
 
@@ -361,11 +369,28 @@ function emitTypeAsString(t: RustType): string {
 		case "bit":
 			return JSON.stringify(bitTypeString(t.widthBits, t.underlying));
 		case "unknown":
-			return `"unknown" /* originally: ${escapeJsBlock(t.raw)} */`;
+			// schema-pop's `OriginalType<unknown, 'X'>` generic materialises
+			// as an `unknown`-shaped Type carrying `meta.originalType = 'X'`,
+			// which the analyzer surfaces on the resulting Field. Binary
+			// exporters with `useOriginalType: true` then splat the original
+			// spelling. Available via the `schemaPop` bundle (binary
+			// scope users would need to import OriginalType separately).
+			return JSON.stringify(`OriginalType<unknown, ${quoteForArktype(t.raw)}>`);
 		case "unsupported":
-			// arktype has no `"any"` keyword — `"unknown"` is the top type.
-			return `"unknown" /* unsupported: ${escapeJsBlock(t.raw)} */`;
+			return JSON.stringify(`OriginalType<unknown, ${quoteForArktype(t.raw)}>`);
 	}
+}
+
+/**
+ * Quote a string for use inside an arktype expression. Picks single-
+ * quotes when safe, falls back to double-quotes otherwise. Used for the
+ * `'X'` argument of generics like `OriginalType<unknown, 'X'>` and
+ * `Describe<T, 'X'>`.
+ */
+function quoteForArktype(s: string): string {
+	if (!s.includes("'")) return `'${s}'`;
+	if (!s.includes('"')) return `"${s}"`;
+	return `'${s.replace(/'/g, "\\'")}'`;
 }
 
 /**

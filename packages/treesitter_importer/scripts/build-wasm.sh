@@ -35,11 +35,15 @@ else
 	exit 1
 fi
 
-# Each grammar entry: <lang>|<repo-url>|<env-var-for-rev>
+# Each grammar entry: <lang>|<repo-url>|<env-var-for-rev>|<sub-dir-or-empty>
+# Some grammar repos host multiple grammars in subdirectories (e.g.
+# tree-sitter-typescript ships both `typescript/` and `tsx/`); the
+# fourth field tells the build step which subdir to `cd` into.
 GRAMMARS=(
-	"rust|https://github.com/tree-sitter/tree-sitter-rust|RUST_REV"
-	"c|https://github.com/tree-sitter/tree-sitter-c|C_REV"
-	"cpp|https://github.com/tree-sitter/tree-sitter-cpp|CPP_REV"
+	"rust|https://github.com/tree-sitter/tree-sitter-rust|RUST_REV|"
+	"c|https://github.com/tree-sitter/tree-sitter-c|C_REV|"
+	"cpp|https://github.com/tree-sitter/tree-sitter-cpp|CPP_REV|"
+	"typescript|https://github.com/tree-sitter/tree-sitter-typescript|TYPESCRIPT_REV|typescript"
 )
 
 check_prereqs() {
@@ -59,9 +63,10 @@ check_prereqs() {
 }
 
 build_grammar() {
-	local lang="$1" url="$2" rev_var="$3"
+	local lang="$1" url="$2" rev_var="$3" subdir="${4:-}"
 	local rev="${!rev_var:-}"
 	local dir="$BUILD_DIR/tree-sitter-$lang"
+	local build_dir="$dir${subdir:+/$subdir}"
 
 	if [[ -d "$dir/.git" ]]; then
 		echo "→ updating tree-sitter-$lang"
@@ -85,12 +90,12 @@ build_grammar() {
 	local resolved
 	resolved=$(git -C "$dir" describe --tags --always)
 
-	echo "  building @ $resolved"
+	echo "  building @ $resolved${subdir:+ (subdir: $subdir)}"
 	# `tree-sitter generate` first to make sure parser.c is up to date,
 	# then build wasm. Some grammar repos ship with a stale parser.c so
 	# regenerating is the safe default.
 	(
-		cd "$dir"
+		cd "$build_dir"
 		"${TS[@]}" generate --quiet 2>/dev/null || true
 		"${TS[@]}" build --wasm -o "$WASM_DIR/tree-sitter-$lang.wasm"
 	)
@@ -131,8 +136,8 @@ check_prereqs
 mkdir -p "$WASM_DIR" "$BUILD_DIR"
 
 for entry in "${GRAMMARS[@]}"; do
-	IFS='|' read -r lang url rev_var <<<"$entry"
-	build_grammar "$lang" "$url" "$rev_var"
+	IFS='|' read -r lang url rev_var subdir <<<"$entry"
+	build_grammar "$lang" "$url" "$rev_var" "$subdir"
 done
 
 write_manifest

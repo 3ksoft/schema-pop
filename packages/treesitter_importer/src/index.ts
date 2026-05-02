@@ -4,6 +4,7 @@ import { parseSource, type Lang } from "./parser";
 import { walkRustFile } from "./walk-rust";
 import { walkCFile } from "./walk-c";
 import { walkCppFile } from "./walk-cpp";
+import { walkTsFile } from "./walk-ts";
 import { emitArktypeScope, type EmitOptions } from "./emit";
 import type { RustModuleIR } from "./ir";
 
@@ -21,10 +22,17 @@ export { parseRust, parseSource, getParser } from "./parser";
 export { walkRustFile } from "./walk-rust";
 export { walkCFile } from "./walk-c";
 export { walkCppFile } from "./walk-cpp";
+export { walkTsFile } from "./walk-ts";
 export { emitArktypeScope } from "./emit";
 
 /**
  * Pick the language from a file extension. Returns `null` for unknown extensions.
+ *
+ * `.ts` / `.tsx` are NOT auto-mapped to typescript: most `.ts` files in a
+ * schema-pop project are already arktype scopes, and silently treating
+ * them as importable interfaces would surprise the user. Pass
+ * `--lang typescript` (or `lang: "typescript"` to `importFile`)
+ * explicitly when you do want TS interface ingestion.
  */
 export function langFromPath(filePath: string): Lang | null {
 	const ext = path.extname(filePath).toLowerCase();
@@ -61,7 +69,8 @@ export async function importFile(
 	const rel = path.relative(process.cwd(), abs);
 	if (resolved === "rust") return walkRustFile(tree, rel);
 	if (resolved === "c") return walkCFile(tree, rel);
-	return walkCppFile(tree, rel);
+	if (resolved === "cpp") return walkCppFile(tree, rel);
+	return walkTsFile(tree, rel);
 }
 
 /**
