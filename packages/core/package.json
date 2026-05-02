@@ -17,7 +17,9 @@
 	},
 	"scripts": {
 		"build": "rm -rf dist && bun build ./src/index.ts ./src/cli.ts ./src/node.ts --outdir ./dist --target node --packages external && tsc --declaration --emitDeclarationOnly --outDir dist --noEmit false",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"test": "bun test",
+		"bench": "bun run src/codec/pop.bench.ts"
 	},
 	"dependencies": {
 		"arktype": "2.2.0",

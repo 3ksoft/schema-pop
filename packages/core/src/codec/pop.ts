@@ -80,7 +80,14 @@ export class PopCodec {
 				throw new Error(`Unknown union variant: ${variantName}`);
 			const variant = plan.variants[variantIndex];
 
-			view.setUint8(baseOffset + plan.tagOffset, variantIndex + 1);
+			// Tag is the variant's index in the (alphabetically sorted)
+			// `plan.variants`, matching the analyzer's synthesised
+			// `${UnionName}Tag` enum and what the Rust exporter emits as
+			// `#[repr(C, u8)]` discriminants — both start at 0. We used
+			// to write `variantIndex + 1` here (reserving 0 for an
+			// implicit "Unknown"), which silently shifted every variant
+			// off by one relative to Rust. See docs/requests.md P16.
+			view.setUint8(baseOffset + plan.tagOffset, variantIndex);
 			if (variant && variant.type.kind !== "unit") {
 				// Payload offset respects alignment of the union payload
 				const payloadOffset = baseOffset + plan.align;
@@ -118,8 +125,11 @@ export class PopCodec {
 			return variant ? variant.name : "Unknown";
 		} else if (plan.kind === "union") {
 			const tag = view.getUint8(baseOffset + plan.tagOffset);
-			if (tag === 0) return "Unknown";
-			const variant = plan.variants[tag - 1];
+			// Tag is a 0-based index into `plan.variants` — see the
+			// matching write path above. No reserved "Unknown" slot:
+			// out-of-range tags surface as `UnknownTag(N)` so a corrupt
+			// frame doesn't pretend to decode as the first variant.
+			const variant = plan.variants[tag];
 			if (!variant) return `UnknownTag(${tag})`;
 			if (variant.type.kind === "unit") return variant.name;
 			const payload = this.readField(
