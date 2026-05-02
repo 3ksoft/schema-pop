@@ -285,7 +285,8 @@ ${bold("Usage:")}
 
 ${bold("Options:")}
   --name <name>           Project name (directory to create)
-  --type <type>           Project type: ${cyan("monorepo")} (default) or ${cyan("project")}
+  --type <type>           Project type: ${cyan("monorepo")} (default), ${cyan("project")}, or ${cyan("all")}
+                          ${dim("all = monorepo + every harness + every exporter")}
   --harnesses <list>      Comma-separated harness languages: ${cyan("ts,rust,cpp,zig")} (monorepo only)
   --schemas <list>        Comma-separated schema names to include from bundled schemas/
   -h, --help              Show this help message
@@ -293,6 +294,7 @@ ${bold("Options:")}
 ${bold("Examples:")}
   bunx create-schema-pop --name my-project --type monorepo --harnesses ts,rust
   bunx create-schema-pop --name my-project --type project --schemas pin-status
+  bunx create-schema-pop --name kitchen-sink --type all   ${dim("# every harness + exporter")}
   bunx create-schema-pop   ${dim("# interactive mode")}
 `);
 }
