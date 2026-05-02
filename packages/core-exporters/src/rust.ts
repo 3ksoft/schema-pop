@@ -212,6 +212,28 @@ impl<T, const N: usize> SharedVec<T, N> {
 	#[inline] pub fn capacity(&self) -> usize { N }
 	#[inline] pub fn iter(&self) -> core::slice::Iter<'_, T> { self.data[..self.len as usize].iter() }
 	#[inline] pub fn as_slice(&self) -> &[T] { &self.data[..self.len as usize] }
+
+	/// Empty constructor without the \`T: Copy + Default\` bound that
+	/// \`new()\` carries. Useful for generated types whose fields contain
+	/// enums (which can't have a meaningful Default) — every variant of
+	/// schema-pop's wire-format types is valid as zero bytes (\`#[repr(C, u8)]\`
+	/// enums encode tag 0 as a real variant; struct fields are FFI-shaped
+	/// primitives), so a \`mem::zeroed\` blob is always safe to construct
+	/// even though it's not generally observable until \`push()\` advances
+	/// \`self.len\`.
+	#[inline]
+	pub fn empty() -> Self {
+		Self {
+			len: 0,
+			// SAFETY: \`len = 0\` means callers never observe the
+			// zero-initialised \`data\` directly — only \`push()\` writes
+			// real values, and \`as_slice()\` / \`iter()\` bound their
+			// view to \`..self.len\`. Schema-pop generates only types
+			// whose all-zero bit pattern is a valid representation
+			// (FFI structs, repr(C, u8) enums with variant 0 valid).
+			data: unsafe { core::mem::zeroed() },
+		}
+	}
 }
 
 impl<T: Default + Copy, const N: usize> Default for SharedVec<T, N> { fn default() -> Self { Self::new() } }
@@ -323,6 +345,46 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 		return undefined;
 	}
 
+	/**
+	 * True if a struct can be safely `derive(Default)`-ed: every field's
+	 * type recurses to a primitive / string / SharedVec-of-primitive
+	 * without crossing into an enum or union (which can't have a
+	 * meaningful Default). Walks references through `plan.types`.
+	 *
+	 * Plain structs get `Default` added to their derive list so callers
+	 * can use `..Default::default()` to zero out the `_pad_*` fields the
+	 * codegen inserts — see docs/requests.md P11.
+	 */
+	function isPlainStruct(t: any, plan: LayoutPlan): boolean {
+		const seen = new Set<string>();
+		const containsEnumRef = (f: any): boolean => {
+			if (!f) return false;
+			switch (f.kind) {
+				case "reference": {
+					if (seen.has(f.name)) return false;
+					seen.add(f.name);
+					const ref = plan.types.find((x) => x.name === f.name);
+					if (!ref) return false;
+					if (ref.kind === "enum" || ref.kind === "union") return true;
+					if (ref.kind === "struct")
+						return ref.fields.some((ff: any) => containsEnumRef(ff.type));
+					if (ref.kind === "alias") return containsEnumRef(ref.type);
+					return false;
+				}
+				case "array":
+					return containsEnumRef(f.item);
+				case "optional":
+					return containsEnumRef(f.inner);
+				default:
+					return false;
+			}
+		};
+		for (const f of t.fields) {
+			if (containsEnumRef(f.type)) return false;
+		}
+		return true;
+	}
+
 	return {
 		name: "rust",
 		extension: "rs",
@@ -352,7 +414,9 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 					tAny.obsoleteReason,
 				);
 				if (t.kind === "struct") {
-					code += `${typeDeprecate}#[repr(C, align(${t.align}))]\n#[derive(Clone, Copy, Debug, PartialEq)]\npub struct ${tn} {\n`;
+					const derives = ["Clone", "Copy", "Debug", "PartialEq"];
+					if (isPlainStruct(t, plan)) derives.push("Default");
+					code += `${typeDeprecate}#[repr(C, align(${t.align}))]\n#[derive(${derives.join(", ")})]\npub struct ${tn} {\n`;
 					if (t.fields.length === 0)
 						code += `${indent()}pub _pad: [u8; ${t.paddedSize}],\n`;
 					let currentBitfieldOffset = -1;
@@ -381,6 +445,26 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 						}
 					}
 					code += `}\n\n`;
+					// `boxed_zeroed` for any struct whose all-zero bit
+					// pattern is a valid representation — for our wire
+					// types that's always true (FFI-shaped, no internal
+					// pointer-with-meaning, repr(C, u8) enums treat
+					// variant 0 as a real variant). Gated on `alloc`
+					// so the no_std embedded path stays clean. See
+					// docs/requests.md P4.
+					code += `#[cfg(feature = "alloc")]\nimpl ${tn} {\n`;
+					code += `${indent()}/// Heap-allocate a zeroed instance. Useful when a stack\n`;
+					code += `${indent()}/// allocation would overflow (sizeof(${tn}) is large).\n`;
+					code += `${indent()}pub fn boxed_zeroed() -> alloc::boxed::Box<Self> {\n`;
+					code += `${indent(2)}use alloc::alloc::{alloc_zeroed, handle_alloc_error, Layout};\n`;
+					code += `${indent(2)}// SAFETY: \`Self\` is repr(C) with FFI-safe fields; an\n`;
+					code += `${indent(2)}// all-zero bit pattern is a valid value for every field\n`;
+					code += `${indent(2)}// schema-pop generates.\n`;
+					code += `${indent(2)}let layout = Layout::new::<Self>();\n`;
+					code += `${indent(2)}let ptr = unsafe { alloc_zeroed(layout) } as *mut Self;\n`;
+					code += `${indent(2)}if ptr.is_null() { handle_alloc_error(layout); }\n`;
+					code += `${indent(2)}unsafe { alloc::boxed::Box::from_raw(ptr) }\n`;
+					code += `${indent()}}\n}\n\n`;
 				} else if (t.kind === "enum") {
 					// Emit a real `#[repr(uN)] enum` so consumers get exhaustive
 					// match warnings + type-safe construction. Wire format is
@@ -391,6 +475,18 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 						code += `${indent()}${typeName(v.name)} = ${v.value},\n`;
 					}
 					code += `}\n\n`;
+					// `as_str()` on plain enums — handy for logging,
+					// telemetry, web UI labels. Returns the schema's
+					// variant name verbatim.
+					code += `impl ${tn} {\n`;
+					code += `${indent()}pub const fn as_str(&self) -> &'static str {\n`;
+					code += `${indent(2)}match self {\n`;
+					for (const v of t.variants) {
+						const variantId = typeName(v.name);
+						code += `${indent(3)}${tn}::${variantId} => ${JSON.stringify(v.name)},\n`;
+					}
+					code += `${indent(2)}}\n`;
+					code += `${indent()}}\n}\n\n`;
 				} else if (t.kind === "union") {
 					// `#[repr(C, u8)] enum` matches our wire format only when
 					// the tag is a single byte at offset 0 (which is the
@@ -424,6 +520,25 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 							}
 						}
 						code += `}\n\n`;
+						// `as_str()` returning the active variant's tag
+						// name. Mirrors the plain-enum impl above and
+						// gives consumers a single reflection point for
+						// debug logs / telemetry / UI labels — works
+						// against the tag without forcing the caller to
+						// pattern-match every variant by hand.
+						code += `impl ${tn} {\n`;
+						code += `${indent()}pub const fn as_str(&self) -> &'static str {\n`;
+						code += `${indent(2)}match self {\n`;
+						for (const v of t.variants) {
+							const variantName = typeName(v.name);
+							const arm =
+								v.type.kind === "unit"
+									? `${tn}::${variantName}`
+									: `${tn}::${variantName}(_)`;
+							code += `${indent(3)}${arm} => ${JSON.stringify(v.name)},\n`;
+						}
+						code += `${indent(2)}}\n`;
+						code += `${indent()}}\n}\n\n`;
 					} else {
 						code += `${typeDeprecate}#[repr(C, align(${t.align}))]\n#[derive(Clone, Copy, Debug, PartialEq)]\npub struct ${tn} { pub _bytes: [u8; ${t.paddedSize}] }\n\n`;
 					}
