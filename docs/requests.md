@@ -198,6 +198,300 @@ Suggestions (any one):
 
 ---
 
+## P16 — PopCodec decoded payloads are byte-misaligned vs Rust `#[repr(C)]` ✅ 0.1.15
+
+Fixed in `packages/core/src/codec/pop.ts`. Encoder writes
+`variantIndex` (was `variantIndex + 1`); decoder reads
+`plan.variants[tag]` (was `plan.variants[tag - 1]`); the implicit
+"reserve tag=0 for Unknown" short-circuit is gone. Tag space now
+matches what the Rust exporter emits for `#[repr(C, u8)]`. Out-of-range
+tags still surface as `UnknownTag(N)` — a corrupt frame won't pretend
+to decode as the first variant.
+
+Round-trip verified on a 3-variant fixture: `tagOf("A")=0`,
+`tagOf("B")=1`, `tagOf("C")=2`, matching the analyzer's
+alphabetically-sorted variant order.
+
+For konektor's repro:  `SystemHealth` is variant index 12 (alphabetical
+position in `WsMessage`); codec now writes 12 to byte 0, matching
+Rust's `WsMessageTag::SystemHealth = 12`.
+
+
+
+🛠 **Diagnostic available — `schema-pop layout`.** 0.1.15 ships a
+`schema-pop layout [config-path] [--type T] [--schema S] [--version V]`
+subcommand that prints the analyzer's view of every struct / union:
+total size, align, per-field offset / size / padding, and the union's
+payload offset. Paste it next to a Rust `core::mem::offset_of!`
+printout to find the divergence in one shot.
+
+### ✅ Root cause confirmed (2026-05-02): tag base off-by-one between codec and Rust generator
+
+Ran the diagnostic on konektor's real `WsMessage`. Result:
+
+| | analyzer (`schema-pop layout`) | Rust (`core::mem::offset_of!`) | match |
+|---|---|---|---|
+| `WsMessage` total size | 412 | 412 | ✅ |
+| `WsMessage` align | 4 | 4 | ✅ |
+| `SharedString<32>` size | 36 | 36 | ✅ |
+| `SystemHealth` field order | alphabetical | alphabetical | ✅ |
+| `SystemHealth.boot_slot` offset | 4 (=4 + 0 within payload) | 0 | ✅ |
+| `SystemHealth.heap_free` offset | 40 | 36 | ✅ |
+| every other field | matches | matches | ✅ |
+
+**Layout is byte-perfect.** The bug is in **tag dispatch**, not layout.
+
+Repro: encode SystemHealth in TS via `codec.encode("WsMessage", {...})`
+and inspect byte 0. Result: `0x0d` (= 13). Then encode via Rust
+(`&WsMessage::SystemHealth(...) as *const u8`). Result: `0x0c` (= 12).
+Same data, same field order, **different tag byte** — Rust 12 / TS 13.
+
+Source of the divergence:
+
+```ts
+// schema-pop/packages/core/src/codec/pop.ts
+83:   view.setUint8(baseOffset + plan.tagOffset, variantIndex + 1);
+//                                                              ^^^ +1
+120:  const tag = view.getUint8(baseOffset + plan.tagOffset);
+121:  if (tag === 0) return "Unknown";
+122:  const variant = plan.variants[tag - 1];
+//                                       ^^^ -1
+```
+
+PopCodec **reserves `tag = 0` for "Unknown"** and emits / consumes
+`variantIndex + 1`. The Rust exporter emits the tag enum starting at 0
+without that reservation:
+
+```rust
+// generated:
+pub enum WsMessageTag {
+    BleAuthRequest = 0,    // ← starts at 0, no Unknown reserved
+    BleBindings = 1,
+    ...
+    PeripheralList = 11,
+    SystemHealth = 12,     // ← codec writes 13 for this variant
+    TaskList = 13,
+    ...
+}
+```
+
+So when firmware broadcasts a SystemHealth (Rust writes tag = 12),
+PopCodec reads `tag = 12`, computes `plan.variants[12 - 1] = plan.variants[11]`,
+and decodes the payload through the **PeripheralList** struct layout.
+That's why konektor's GUI saw "version=nvs_writer" / "role=io_out_p0":
+the `attached: AttachedDevice[]<=4` field of PeripheralList laid over
+the SystemHealth bytes happens to interpret `boot_slot.len + first
+chars of "BOOT"` as a couple of `pid`/`vid` u16s — pure coincidence
+that it parses without error.
+
+### Fix options (pick one and align both sides)
+
+1. **Codec drops the +1.** `setUint8(..., variantIndex)` /
+   `plan.variants[tag]`. No "Unknown" sentinel. Cleanest, but anyone
+   who had `if (tag === 0)` semantics breaks.
+2. **Rust generator adds `Unknown = 0` and shifts all variants by 1.**
+   `BleAuthRequest = 1`, ..., `SystemHealth = 13`, etc. Matches current
+   codec. The `Unknown = 0` arm is also handy for forward-compat
+   (decoder sees a tag from a newer schema, falls into Unknown).
+   This also implies the same change for the C/C++ exporters.
+3. **Plan stores explicit tag value per variant** (`{ name, tag }` not
+   just an array index), and both codec and Rust/C exporters read from
+   it. Most robust, decouples wire-format tag values from declaration
+   order so future variant reordering doesn't shift the wire format.
+
+**Recommendation:** option (2) — keeps the Unknown forward-compat
+sentinel that's already in the codec, just propagates the same
+convention into the generators. Option (3) is nicer but bigger.
+
+For konektor we're going to apply (2) locally as a sed (add
+`Unknown = 0` to the head of each `*Tag` enum, increment all variant
+discriminants by 1, plus a matching `WsMessage::Unknown` arm whose
+payload is `()` or `[u8; max_payload_size]`) — but this is fragile
+without upstream support.
+
+Original report below for context:
+
+
+Distinct from P15. Even when PopCodec picks (apparently) the right variant,
+the decoded field values are scrambled — strongly suggesting the analyzer's
+field layout doesn't match what the Rust `#[repr(C)]` emitter generates.
+
+### Concrete repro
+
+Firmware (Rust, layer 1) builds and broadcasts a `WsMessage::SystemHealth(...)`
+every second:
+
+```rust
+let health = SystemHealth {
+    uptime_secs: 2932,
+    heap_free: ~200_000,
+    heap_free_internal: ~150_000,
+    nvm_free: ~24_000,
+    nvm_total: 24576,
+    ws_dropped: 0,
+    version: "0.0.728".into(),
+    role: "Master".into(),
+    reset_reason: 0,
+    boot_slot: "".into(),
+};
+registry.broadcast(&WsMessage::SystemHealth(health));
+```
+
+`SystemHealth` is `#[repr(C)]` (or part of `#[repr(C, u8)]` enum
+`WsMessage`) with fields exactly as schema-pop generated. Wire encoding
+is just `&raw const health as *const u8` for `sizeof(WsMessage)` bytes.
+
+GUI (TS) decodes via `codec.decode("WsMessage", arrayBuffer)`. The decoded
+JS object is:
+
+```js
+{
+  uptime_secs: 2932,                    // ✅ correct
+  heap_free: 1_700_754_546,             // ❌ garbage (real value ~200k)
+  heap_free_internal: 1_852_401_518,    // ❌ garbage
+  nvm_free: 101,                        // ❌ garbage
+  nvm_total: 0,                         // ❌ should be 24576
+  ws_dropped: 121,                      // ❌ should be 0
+  version: "nvs_writer",                // ❌ should be "0.0.728" — this is a FreeRTOS task name string from a different message!
+  role: "io_out_p0",                    // ❌ should be "Master" — also a task name
+  reset_reason: 1596,                   // ❌ should be 0
+  boot_slot: "  ", // ❌ should be ""
+}
+```
+
+`uptime_secs` — the very first field — is the only one that decodes
+correctly. Everything after it is shifted/wrong.
+
+### What "version=nvs_writer" tells us
+
+`"nvs_writer"` and `"io_out_p0"` are **FreeRTOS task names** that only
+appear inside `WsMessage::TaskList { tasks: Vec<TaskStatus { name, heap_free }> }`.
+That message is broadcast on the same WS connection, immediately after the
+`SystemHealth`. So one of two things:
+
+1. **Wrong variant detection.** PopCodec read the leading tag byte, picked
+   the wrong arm of `WsMessage`, and parsed `TaskList` bytes through the
+   `SystemHealth` field layout. Result: task-name strings appear in
+   `version`/`role` positions.
+2. **Stale buffer reuse.** Decoder reused a buffer from a previous frame
+   (TaskList) and overlaid SystemHealth fields onto it without zeroing.
+
+Either way, **schemes that work in isolation break under multi-variant
+traffic on the same channel**, which is the normal case.
+
+### Layout assumptions that may be diverging
+
+- `WsMessage` is `#[repr(C, u8)]` on Rust → 1-byte tag at offset 0,
+  followed by the largest variant payload, padded to total `sizeof`.
+- The Rust generator emits each variant as its own `#[repr(C)]` struct
+  inside the union. Fields are laid out in declaration order with natural
+  alignment.
+- PopCodec's analyzer needs to apply the **same** alignment rules to
+  reach the same offsets. If the analyzer thinks `SharedString<32>` is
+  N bytes but Rust thinks it's M bytes (e.g. different len-prefix size,
+  different padding around the inner array), every subsequent field
+  shifts.
+
+In our case `SharedString<N>` is generated as something like
+`{ len: u32, data: [u8; N] }` or `{ len: u32, data: [u8; N], _pad: [u8; P] }`
+to satisfy alignment of the next field. If TS analyzer computes a different
+`P` than Rust does, all later fields slide.
+
+### Suggestions
+
+- **Cross-validation test in schema-pop CI.** For each multi-variant union
+  in a fixture schema: encode in Rust (`as_bytes`), decode in TS
+  (`PopCodec.decode`), assert deep-equal. This would have caught this
+  immediately. Same in reverse (TS encode → Rust decode). Conceptually
+  the same as a fuzz test but with hand-picked representative inputs.
+- **Layout dump tool.** A `pop-layout WsMessage` CLI command that prints
+  exactly what PopCodec thinks each field's offset and size is. Then a
+  Rust-side `layout::<WsMessage>()` helper that prints the equivalent
+  from `core::mem::offset_of!` and `core::mem::size_of`. Diff the two
+  to find the misalignment instantly.
+- **Document the "no padding holes" assumption**, if there is one. If
+  the TS analyzer assumes the Rust compiler will pack a certain way and
+  that ever diverges (e.g. `repr(C)` on different targets, or with
+  `align(N)` modifiers), document the contract.
+- **Variant-tag dispatch must match.** P15 already noted PopCodec drops
+  the `kind` field; the deeper issue here is whether PopCodec is even
+  reading the tag byte from the correct offset. If `WsMessage` total
+  size is 448 B and the tag is at offset 0, decoding `decode("WsMessage", buf)`
+  needs to read `buf[0]`, look up the variant, and parse from offset 1
+  (or wherever the variant payload starts after alignment padding).
+  Verify this is what's happening.
+
+This is the highest-impact one for konektor right now: until decoded
+payloads match what the firmware sends, the e2e test harness can't
+assert anything meaningful.
+
+---
+
+## P17 — Distinct `T[]<=N` schema entries collapse to the same Rust type ✅ 0.1.15
+
+Fixed in analyzer: when looking up a field's type, we now consult the
+user-typed source string in `scope.aliases[parent][field]`. A pure
+identifier (`"MacAddress"`) resolves to a ref; anything compound
+(`"u8[]<=6"`, `"A | B"`, `"{ x: u8 }"`) skips strict-identity matching
+at the top level so arktype's structural-dedupe doesn't silently
+collapse the field onto a same-shape alias. Inline branches inside
+unions still resolve to refs because recursive calls leave the gate
+off.
+
+Result for the original repro: `KeyboardData.keys` emits as
+`SharedVec<u8, 6>` (inline), `MacAddress` stays a distinct top-level
+type, and `Pkt { mac: "MacAddress" }` keeps its named ref.
+
+Original report below for context:
+
+
+Two unrelated schema entries with structurally-identical bodies share a
+generated type. Schema:
+
+```ts
+MacAddress: "u8[]<=6",
+KeyboardData: { keys: "u8[]<=6", modifiers: "u8" },
+```
+
+Generated Rust:
+
+```rust
+pub struct MacAddress { pub _bytes: [u8; 12] }
+// ...
+pub struct KeyboardData {
+    pub keys: MacAddress,            // ← reused alias
+    pub modifiers: u8,
+    pub _pad_modifiers: [u8; 3],
+}
+```
+
+Wire layout is unaffected (both are 6 bytes + length prefix), but
+**semantically** `KeyboardData.keys: MacAddress` is wrong — keys are
+keyboard usage codes, not a MAC. Caller code sees the wrong type
+annotation, and any helper methods or trait impls scoped to `MacAddress`
+("nice to have: `.octets()`, `.to_hex_string()`") leak onto unrelated
+fields.
+
+The collision is structural: any two `T[]<=N` with the same `T` and `N`
+get unified. Inline-defined `u8[]<=6` field (no top-level alias) doesn't
+trigger this; the moment a top-level entry exists the collision starts.
+
+Suggestions:
+- Don't unify field types with top-level aliases unless the field's
+  schema entry literally references the alias by name. Treat
+  `keys: "u8[]<=6"` (inline) as anonymous, distinct from
+  `keys: "MacAddress"` (named reference).
+- Or: document this so consumers know to inline `u8[]<=6` everywhere
+  except the one place they want the alias.
+- Or: emit each occurrence as its own newtype (`pub struct
+  KeyboardKeys(pub [u8; 6+padding]);`) so type identity matches field
+  identity.
+
+Workaround for konektor: change one of the two bounds (`u8[]<=8` for
+keys?) — but that ripples into wire-format size choices. Not a clean fix.
+
+---
+
 ## P14 — Generator crashes on `'A' | 'B' | 'C'` lifted to top-level type alias
 
 Adding a top-level inline string union as a schema entry:

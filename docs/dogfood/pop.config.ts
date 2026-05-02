@@ -36,5 +36,10 @@ export default defineConfig({
 				html({ dest: "./gpu-physics.html" }),
 			],
 		},
+		{
+			name: "showcase",
+			versions: [{ version: "1.0", source: "./showcase.ts" }],
+			targets: [html({ dest: "./showcase.html" })],
+		},
 	],
 });

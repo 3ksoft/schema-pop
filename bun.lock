@@ -79,11 +79,23 @@
         "schema-pop": "workspace:*",
       },
     },
+    "packages/importer": {
+      "name": "@schema-pop/importer",
+      "version": "0.1.14",
+      "bin": {
+        "schema-pop-import": "./src/cli.ts",
+      },
+      "dependencies": {
+        "@schema-pop/clang-importer": "0.1.14",
+        "@schema-pop/treesitter-importer": "0.1.14",
+        "jiti": "^2.0.0",
+        "schema-pop": "0.1.14",
+      },
+    },
     "packages/treesitter_importer": {
       "name": "@schema-pop/treesitter-importer",
       "version": "0.1.14",
       "bin": {
-        "schema-pop-import": "./src/cli.ts",
         "schema-pop-import-rust": "./src/cli.ts",
       },
       "dependencies": {
@@ -301,6 +313,8 @@
     "@schema-pop/core-exporters": ["@schema-pop/core-exporters@workspace:packages/core-exporters"],
 
     "@schema-pop/extra-exporters": ["@schema-pop/extra-exporters@workspace:packages/extra-exporters"],
+
+    "@schema-pop/importer": ["@schema-pop/importer@workspace:packages/importer"],
 
     "@schema-pop/treesitter-importer": ["@schema-pop/treesitter-importer@workspace:packages/treesitter_importer"],
 

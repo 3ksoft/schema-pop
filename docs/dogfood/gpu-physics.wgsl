@@ -98,8 +98,8 @@ struct QueryResult {
 	@size(8) hit_idx: i32,
 	hit_normal: Vec2,
 	hit_pos: Vec2,
-	@size(8) hit_type: u32,
-	hits: IVec2,
+	hit_type: u32,
+	@size(68) hits: array<i32, 16>,
 };
 
 
