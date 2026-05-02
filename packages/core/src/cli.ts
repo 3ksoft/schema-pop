@@ -27,7 +27,7 @@ Usage:
   schema-pop --help                   Show this help.
 
 Emit flags:
-  -t, --type <name>    Target language: rust | c | cpp | ts | zig | md |
+  -t, --type <name>    Target language: rust | c | cpp | go | ts | zig | md |
                        html | wgsl | glsl | svg | openapi | nuxt-ui | mermaid.
                        Inferred from --output extension when omitted.
   -o, --output <path>  Output file (default: stdout).
@@ -56,6 +56,7 @@ const EMIT_TYPE_BY_EXT: Record<string, string> = {
 	cc: "cpp",
 	ts: "ts",
 	zig: "zig",
+	go: "go",
 	md: "md",
 	html: "html",
 	wgsl: "wgsl",
@@ -65,6 +66,7 @@ const EMIT_TYPE_BY_EXT: Record<string, string> = {
 	yml: "openapi",
 	mmd: "mermaid",
 	bf: "brainfuck",
+	json: "json-schema",
 };
 
 const EMIT_PACKAGE_BY_TYPE: Record<string, "core" | "extra"> = {
@@ -73,8 +75,9 @@ const EMIT_PACKAGE_BY_TYPE: Record<string, "core" | "extra"> = {
 	cpp: "core",
 	ts: "core",
 	zig: "core",
-	md: "core",
+	go: "core",
 	random: "core",
+	md: "extra",
 	html: "extra",
 	wgsl: "extra",
 	glsl: "extra",
@@ -85,11 +88,14 @@ const EMIT_PACKAGE_BY_TYPE: Record<string, "core" | "extra"> = {
 	nuxtUi: "extra",
 	brainfuck: "extra",
 	bf: "extra",
+	jsonSchema: "extra",
+	"json-schema": "extra",
 };
 
 const EMIT_FACTORY_BY_TYPE: Record<string, string> = {
 	"nuxt-ui": "nuxtUi",
 	bf: "brainfuck",
+	"json-schema": "jsonSchema",
 };
 
 async function loadEmitExporter(
