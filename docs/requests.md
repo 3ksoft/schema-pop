@@ -36,7 +36,14 @@ renames it. Single-version files can drop the indirection entirely.
 
 ---
 
-## P3 — `SharedVec::new()` requires `T: Copy + Default`
+## P3 — `SharedVec::new()` requires `T: Copy + Default` ✅ 0.1.18
+
+`SharedVec::empty()` added to the Rust runtime prelude — uses
+`mem::zeroed()` internally with a `len = 0`, so the user never
+observes the zero-initialised data. Safe for every type schema-pop
+generates (FFI-shaped, repr(C, u8) variant 0 is valid). Unblocks
+empty-construction of `SharedVec<Layer, 16>` etc. without the
+`Default` bound that `new()` carries.
 
 Generated complex types (`Layer`, `Macro`, `Binding`, etc.) don't `derive(Default)`
 because their unions/enums can't have a meaningful default. Result:
@@ -58,7 +65,20 @@ Options:
 
 ---
 
-## P4 — Large structs blow up host-stack instantiation
+## P4 — Large structs blow up host-stack instantiation ✅ 0.1.18
+
+Every generated struct now has an alloc-gated `boxed_zeroed()`
+constructor:
+
+```rust
+#[cfg(feature = "alloc")]
+impl BindingProfile {
+    pub fn boxed_zeroed() -> alloc::boxed::Box<Self> { ... }
+}
+```
+
+Wraps `alloc::alloc::alloc_zeroed` + `Box::from_raw`. Stack-overflow on
+big top-level types becomes a one-call fix.
 
 `BindingProfile` lays out to ~400 KB. Constructing on the stack in test
 helpers (`let p = profile(...);`) overflows the default thread stack and
@@ -147,7 +167,23 @@ consumption only, not a drop-in replacement for ArkType.
 
 ---
 
-## P11 — Breaking-change migration path between exporter generations
+## P11 — Breaking-change migration path between exporter generations ✅ 0.1.18
+
+Two of the three remaining items shipped:
+
+- ✅ `enum.as_str()` — generated for every plain enum and tagged-union
+  enum (the latter returns the active variant's tag name). `const fn`
+  body, no allocation, no_std-friendly. Wires straight into debug
+  logging / telemetry / web UI labels.
+- ✅ `derive(Default)` on plain structs — added to the derive list
+  when no field's type recurses into an enum / union. `..Default::default()`
+  now papers over `_pad_*` fields for the easy case, removing the
+  noise from struct literals.
+
+Still open: third-party constructor functions like `T::new(field1, field2)`
+that hide padding entirely (alternative to `Default`). Skipped for now
+because `Default` covers the most common case and the constructor
+form would need per-struct field analysis. Revisit if it bites again.
 
 Status update for 0.1.14:
 - ✅ `EnumName::Variant` access — restored by P7 (real enum emission).
@@ -169,7 +205,18 @@ Remaining suggestions:
 
 ---
 
-## P15 — PopCodec.decode loses the variant discriminator on tagged unions
+## P15 — PopCodec.decode loses the variant discriminator on tagged unions ✅ 0.1.18
+
+Resolved transitively by P16 fix. The codec already wraps decoded
+union payloads as `{ kind: variantName, ...payload }`, but pre-P16
+the wrong variant was being selected because of the tag base
+off-by-one — once the tag dispatch matches Rust, the schema's
+declared `kind` literal field surfaces from the payload bytes (and
+overrides the synthesised variantName via spread, so users see the
+schema's spelling, e.g. `'taskList'`).
+
+Round-trip locked in by the codec test suite added with P16
+(`packages/core/src/codec/pop.test.ts`).
 
 When decoding a `WsMessage` (`#[repr(C, u8)]` enum on Rust side), PopCodec
 returns the active variant's payload **without** the `kind` string field
@@ -492,7 +539,11 @@ keys?) — but that ripples into wire-format size choices. Not a clean fix.
 
 ---
 
-## P14 — Generator crashes on `'A' | 'B' | 'C'` lifted to top-level type alias
+## P14 — Generator crashes on `'A' | 'B' | 'C'` lifted to top-level type alias ✅ (not a bug)
+
+Root cause was version skew between sibling packages, not a generator
+bug. Already addressed by the 0.1.14 split (workspace deps pinned to
+the same version on every release). Documented for posterity.
 
 Adding a top-level inline string union as a schema entry:
 
@@ -530,7 +581,22 @@ the `ExporterTools` it imported has the methods it expects.
 
 ---
 
-## P13 — `versionNamespace: false` only honored by Rust exporter
+## P13 — `versionNamespace: false` only honored by Rust exporter ✅ 0.1.18
+
+C exporter now mirrors the Rust signature: `versionNamespace: false`
+drops the prefix entirely, `string` overrides it. CPP exporter still
+wraps via `namespace { ... }` (different mechanism — the C-style
+prefix isn't there to begin with).
+
+```c
+// versionNamespace: false →
+typedef uint8_t BleMode;
+#define BLE_MODE_OFF ((BleMode)1)
+
+// versionNamespace: "ws" →
+typedef uint8_t ws_BleMode;
+#define WS_BLE_MODE_OFF ((ws_BleMode)1)
+```
 
 `rust({ versionNamespace: false })` (P2 fix) skips the `pub mod konektor_1_0`
 wrap. The C exporter however still prefixes every symbol with the version
