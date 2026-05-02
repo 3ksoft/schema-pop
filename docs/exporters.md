@@ -25,7 +25,34 @@ Exporters translate the **Linear Layout Plan (LLP)** into source code or auxilia
 | `wgsl`      | `.wgsl` storage/uniform struct  | `std140` / `std430` layout strategies                                |
 | `openapi`   | OpenAPI 3.0 component schemas   | `deprecated: true` for obsolete types                                |
 | `nuxt-ui`   | Form-component example          | Demonstrates schema → UI mapping                                     |
-| `brainfuck` | `.bf` + interpreter harness     | Yes, really. Layout-only ABI check via shell wrapper.                |
+| `brainfuck` | `.bf` + interpreter checked     | Yes, really. Layout-only ABI check via shell wrapper.                |
+
+## TypeScript exporter scope
+
+The `ts` exporter emits **type-level** declarations: `interface`s,
+`type` aliases for unions, and an optional `LAYOUT_PLAN` JSON dump.
+It is NOT a drop-in replacement for the source arktype scope:
+
+- **No runtime validators.** The generated file has no `.assert(...)`
+  / `.allows(...)` methods. If you need runtime shape-checking (e.g.
+  validating a JSON payload before binary-encoding it), keep using
+  arktype directly:
+  ```ts
+  import { type } from "arktype";
+  import { WsMessage } from "./generated";  // type-only
+  import * as schema from "./schema";        // runtime arktype
+  schema.WsMessage.assert(input);            // validate at runtime
+  ```
+- **No codec methods on the types.** Binary encode/decode goes
+  through `PopCodec`, not on the generated interface.
+- **No description-string runtime preservation.** `Describe<T, "doc">`
+  surfaces as a TS JSDoc comment but isn't introspectable at runtime
+  through the generated interface.
+
+The exporter exists for **type-level ergonomics in downstream code**
+(GUI props, function signatures) and **JSON-structure documentation**.
+For the binary side, pair it with `PopCodec`; for runtime validation,
+pair it with the original arktype scope.
 
 ## Concepts
 

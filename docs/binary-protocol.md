@@ -58,7 +58,67 @@ The analyzer supports four layout modes (configurable via `layout` in `pop.confi
 
 See [`analyzer/layouts.md`](./analyzer/layouts.md) for the full rules.
 
-## Cross-language verification
+## Trust boundary
+
+`schema-pop`'s binary tier is a **memory-layout contract**, not a
+validating wire format. Decoding is a `*const T → &T` reinterpretation
+in native targets, and a typed-array read in the TypeScript codec.
+Neither pass validates field values — that's the producer's job.
+
+### Producer responsibilities
+
+A producer is **trusted** when it writes bytes through generated
+schema-pop types (`PopCodec.encode`, Rust `as_bytes(&val)`, etc.). The
+contract:
+
+- Every `#[repr(C, u8)]` enum byte is a real variant — never construct
+  `WsMessage` from arbitrary memory; always go through a constructor
+  or `PopCodec`. Reading bytes into `&Action` whose tag is
+  out-of-range is **undefined behaviour** in Rust.
+- Every `SharedString<N>` / `SharedVec<T, N>` length prefix is `≤ N`.
+  The codec clamps; the Rust runtime trusts.
+- Every `_pad_*` byte is zero. Generated `Default` (P11) and
+  `boxed_zeroed()` (P4) handle this; manual struct literals must not
+  leak stack noise into padding (use `..Default::default()`).
+
+### Consumer responsibilities
+
+When bytes come from the **outside** (network, file, IPC from an
+untrusted peer), the consumer is responsible for:
+
+1. **Discriminant validation** — for every `#[repr(C, u8)]` enum in
+   the schema, check the tag byte is in range before reinterpreting.
+   `schema-pop`'s `as_str()` impl on enums (P11) returns
+   `"UnknownTag(N)"` for out-of-range tags via the `PopCodec`
+   read path; raw casts skip this check.
+2. **Length-prefix validation** — `SharedString<N>` / `SharedVec<T, N>`
+   length must be `≤ N`. PopCodec clamps; Rust raw access doesn't.
+3. **Layout pinning** — bytes only round-trip when both sides use the
+   same `schema-pop` version + the same exporter config (`autoLayout`,
+   `versionNamespace`, `layout`). Use the `schema-pop layout`
+   subcommand to dump the analyzer's view; pair with
+   `core::mem::offset_of!` on the producer side to lock alignment.
+
+### Helpful commands
+
+- `schema-pop layout [config-path] [--type T]` — prints exact
+  field offsets / sizes the analyzer computed. Diff against
+  `core::mem::offset_of!` output to find drift across language
+  boundaries (see docs/requests.md P16).
+- Generated `Type::as_str()` — schema variant name, useful for
+  debug-logging unrecognised tags.
+
+### What schema-pop deliberately does not do
+
+- **No on-the-wire validation.** A decoder reads what's there; no
+  checksums, no per-field bounds re-check, no schema-version probing.
+  Wrap in your own framing if you need one.
+- **No runtime type-checking on the codec output.** PopCodec returns
+  whatever the bytes say. Combine with arktype's runtime validators
+  on the TypeScript side if you need shape checks (see TS exporter
+  notes in [`exporters.md`](./exporters.md)).
+
+
 
 The `--type all` scaffold ships a TypeScript driver that:
 

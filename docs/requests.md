@@ -6,7 +6,20 @@ Vue/TS GUI). Roughly priority-ordered.
 
 ---
 
-## P1 — Wire format strategy needs documentation + alternative
+## P1 — Wire format strategy needs documentation + alternative — out of scope
+
+Closed as out-of-scope. schema-pop's value is the memory-layout
+contract; for compact wire formats users have serde / Borsh / postcard
+/ etc. that already do this well. Building a parallel codec to compete
+in that space dilutes focus without a clear win for konektor or any
+other consumer.
+
+The size implications stay documented in
+[`docs/binary-protocol.md`](./binary-protocol.md) so users picking
+schema-pop know what they're getting up front.
+
+Original report below for context:
+
 
 PopCodec emits **fixed memory-layout** encoding: every `WsMessage` instance
 takes `sizeof(WsMessage) = 448 B` regardless of which variant is active.
@@ -123,7 +136,12 @@ the old `MACRO_LOOP_MODE_*` consts — see P11 for migration notes.
 
 ---
 
-## P8 — `c` exporter regressions to watch for
+## P8 — `c` exporter regressions to watch for — won't fix proactively
+
+We'll add a regression test the next time one of these surfaces (one
+test per real bug, not speculative coverage). Filed for visibility:
+
+
 
 Earlier in this integration we hit:
 - Identifiers with dots (`default_1.0_*`)
@@ -138,7 +156,15 @@ regression breaks downstream compilation.
 
 ---
 
-## P9 — Document the trust model around enum discriminants
+## P9 — Document the trust model around enum discriminants ✅ 0.1.19
+
+New "Trust boundary" section in
+[`docs/binary-protocol.md`](./binary-protocol.md) covers producer +
+consumer responsibilities, what schema-pop deliberately doesn't
+validate, and the diagnostic commands (`schema-pop layout`,
+`as_str()`) consumers should use when bytes come from outside.
+
+
 
 Generated `#[repr(C, u8)] enum Action { ... }` — reading raw bytes into
 `&Action` is UB if the discriminant byte is out of range. Konektor's
@@ -154,7 +180,16 @@ explaining:
 
 ---
 
-## P10 — TS exporter shape vs ArkType runtime types
+## P10 — TS exporter shape vs ArkType runtime types ✅ 0.1.19
+
+New "TypeScript exporter scope" section in
+[`docs/exporters.md`](./exporters.md): explicitly documents that the
+`ts` exporter is type-level only (no runtime validators, no codec
+methods on the types, no Describe-string introspection) and shows
+the recommended pairing with arktype for runtime validation +
+PopCodec for binary work.
+
+
 
 GUI uses `konektor.export()` from ArkType to get runtime validators
 (`WsMessage.assert(...)`). The schema-pop `ts` exporter generates static
