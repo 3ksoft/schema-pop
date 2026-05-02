@@ -23,7 +23,7 @@ fi
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-PACKAGES=(packages/core packages/core-exporters packages/extra-exporters packages/treesitter_importer packages/clang_importer packages/importer packages/create)
+PACKAGES=(packages/core packages/core-exporters packages/extra-exporters packages/treesitter_importer packages/clang_importer packages/importer packages/import-cli packages/create)
 
 if [ -z "$DRY_RUN" ]; then
 	echo "==> Bumping all packages to $VERSION (and pinning workspace deps)"
@@ -83,7 +83,7 @@ done
 
 if [ -z "$DRY_RUN" ]; then
 	echo "==> Verifying versions on npm"
-	for p in schema-pop @schema-pop/core-exporters @schema-pop/extra-exporters @schema-pop/treesitter-importer @schema-pop/clang-importer @schema-pop/importer create-schema-pop; do
+	for p in schema-pop @schema-pop/core-exporters @schema-pop/extra-exporters @schema-pop/treesitter-importer @schema-pop/clang-importer @schema-pop/importer schema-pop-import create-schema-pop; do
 		printf "    %-35s " "$p"
 		npm view "$p" version 2>/dev/null
 	done
