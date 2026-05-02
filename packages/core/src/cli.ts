@@ -17,6 +17,9 @@ Usage:
                                       pipe. Output goes to stdout if -o omitted;
                                       type inferred from the -o extension when
                                       -t is missing. Bypasses pop.config.ts.
+  schema-pop emit '<glob>' -t <type> -o <dir>/
+                                      Batch mode. Globs and multi-arg inputs
+                                      both fan out to \`<dir>/<name>.<ext>\`.
   schema-pop bind <source> [--out <dest>]
                                       Append destructured exports + type aliases
                                       from arktype scope(s) to a copy of <source>.
@@ -136,7 +139,7 @@ async function loadEmitExporter(
 }
 
 async function emitCommand(args: string[]) {
-	let input: string | undefined;
+	const inputs: string[] = [];
 	let output: string | undefined;
 	let typeName: string | undefined;
 	let nameOverride: string | undefined;
@@ -149,15 +152,77 @@ async function emitCommand(args: string[]) {
 		else if (a === "--help" || a === "-h") {
 			printHelp();
 			return;
-		} else if (!input) input = a;
-		else {
-			console.error(`schema-pop emit: unexpected argument "${a}"`);
-			process.exit(2);
-		}
+		} else inputs.push(a);
 	}
 
-	// Stdin support: explicit `-` or no positional arg + non-TTY stdin.
+	// Expand globs in positionals. `-` (stdin sentinel) skips expansion.
 	const fs = await import("node:fs");
+	const expandedInputs: string[] = [];
+	for (const p of inputs) {
+		if (p === "-") {
+			expandedInputs.push(p);
+			continue;
+		}
+		const matched = await emitExpandGlob(p);
+		if (matched.length === 0) {
+			console.error(`schema-pop emit: no files matched "${p}"`);
+			process.exit(2);
+		}
+		expandedInputs.push(...matched);
+	}
+
+	// Dir-mode triggers when there are >1 inputs, the output ends with
+	// a separator, or it already exists as a directory. In that case
+	// each input lands at `<output>/<basename>.<ext>` and `-o` is
+	// required (we can't pipe a fan-out to stdout).
+	const outputLooksLikeDir =
+		!!output &&
+		(output.endsWith("/") ||
+			output.endsWith(path.sep) ||
+			(fs.existsSync(path.resolve(process.cwd(), output)) &&
+				fs.statSync(path.resolve(process.cwd(), output)).isDirectory()));
+	const isDirMode = expandedInputs.length > 1 || outputLooksLikeDir;
+
+	if (isDirMode) {
+		if (!output) {
+			console.error(
+				"schema-pop emit: batch mode needs -o <dir>/ (can't pipe N files to stdout).",
+			);
+			process.exit(2);
+		}
+		if (!typeName) {
+			console.error(
+				"schema-pop emit: batch mode needs -t <type> (no per-file extension to infer from).",
+			);
+			process.exit(2);
+		}
+		const exporter = await loadEmitExporter(typeName);
+		if (!exporter) {
+			const known = Object.keys(EMIT_PACKAGE_BY_TYPE).sort().join(", ");
+			console.error(
+				`schema-pop emit: unknown target "${typeName}". Known: ${known}`,
+			);
+			process.exit(2);
+		}
+		const ext = exporter.instance.extension ?? typeName;
+		const absOutDir = path.resolve(process.cwd(), output);
+		fs.mkdirSync(absOutDir, { recursive: true });
+		for (const inp of expandedInputs) {
+			const absInp = path.resolve(process.cwd(), inp);
+			const base = path.basename(absInp).replace(/\.(pop\.)?tsx?$/, "");
+			const dest = path.join(absOutDir, `${base}.${ext}`);
+			try {
+				await emitOne(absInp, typeName, nameOverride, false, dest);
+			} catch (e) {
+				console.error(`❌ ${inp}: ${(e as Error).message}`);
+			}
+		}
+		return;
+	}
+
+	// Single-file path (back-compat). Falls through to original behaviour
+	// — stdin, type inference from -o extension, all of it.
+	const input = expandedInputs[0];
 	const useStdin =
 		input === "-" || (!input && !process.stdin.isTTY);
 	let absInput: string;
@@ -199,52 +264,68 @@ async function emitCommand(args: string[]) {
 		process.exit(2);
 	}
 
+	const content = await emitOne(absInput, typeName, nameOverride, useStdin);
+
+	if (output) {
+		const absOut = path.resolve(process.cwd(), output);
+		fs.mkdirSync(path.dirname(absOut), { recursive: true });
+		fs.writeFileSync(absOut, content);
+		console.error(
+			`✅ [Schema-Pop] Generated: ${path.relative(process.cwd(), absOut)}`,
+		);
+	} else {
+		process.stdout.write(content);
+	}
+	cleanupTmp?.();
+}
+
+/**
+ * Render one schema file to a string. Used by both single-file and
+ * batch (`-o <dir>/`) emit paths. `dest` is only used by the batch
+ * path — when present we write the rendered content there and log,
+ * mirroring what the single-file path does inline. Throws on bad
+ * input / missing exporter / no scope so the caller can decide
+ * whether to abort the run or just log + continue (batch).
+ */
+async function emitOne(
+	absInput: string,
+	typeName: string,
+	nameOverride: string | undefined,
+	useStdin: boolean,
+	dest?: string,
+): Promise<string> {
+	const fs = await import("node:fs");
 	if (!fs.existsSync(absInput)) {
-		console.error(`schema-pop emit: input not found: ${absInput}`);
-		process.exit(2);
+		throw new Error(`input not found: ${absInput}`);
 	}
 
 	const exporter = await loadEmitExporter(typeName);
 	if (!exporter) {
 		const known = Object.keys(EMIT_PACKAGE_BY_TYPE).sort().join(", ");
-		console.error(
-			`schema-pop emit: unknown target "${typeName}". Known: ${known}`,
-		);
-		process.exit(2);
+		throw new Error(`unknown target "${typeName}". Known: ${known}`);
 	}
 
 	const jiti = createJiti(import.meta.url);
 	const mod = (await jiti.import(absInput)) as Record<string, unknown>;
-	const { findScopeForEmit, parseSchemaFilenameLocal } = await import(
-		"./schema/index"
-	).then(async () => {
-		const { isArktypeScope } = await import("./bind");
-		const { parseSchemaFilename } = await import("./schema/config");
-		return {
-			findScopeForEmit: (m: Record<string, unknown>): unknown => {
-				if (m["$"] && isArktypeScope(m["$"])) return m["$"];
-				if (m["default"] && isArktypeScope(m["default"]))
-					return m["default"];
-				for (const v of Object.values(m)) if (isArktypeScope(v)) return v;
-				return undefined;
-			},
-			parseSchemaFilenameLocal: parseSchemaFilename,
-		};
-	});
+	const { isArktypeScope } = await import("./bind");
+	const { parseSchemaFilename } = await import("./schema/config");
+	const findScope = (m: Record<string, unknown>): unknown => {
+		if (m["$"] && isArktypeScope(m["$"])) return m["$"];
+		if (m["default"] && isArktypeScope(m["default"])) return m["default"];
+		for (const v of Object.values(m)) if (isArktypeScope(v)) return v;
+		return undefined;
+	};
 
-	const scope = findScopeForEmit(mod);
+	const scope = findScope(mod);
 	if (!scope) {
-		console.error(
-			`schema-pop emit: no arktype scope export in ${path.relative(process.cwd(), absInput)}.`,
+		throw new Error(
+			`no arktype scope export in ${path.relative(process.cwd(), absInput)}.`,
 		);
-		process.exit(2);
 	}
 
 	const { getSchemaPopConfig } = await import("./schema/schema-pop");
 	const fileCfg = getSchemaPopConfig(scope) ?? {};
-	// Stdin input has no meaningful filename — skip parsing so the
-	// throwaway temp basename doesn't become the schema name.
-	const parsed = useStdin ? null : parseSchemaFilenameLocal(absInput);
+	const parsed = useStdin ? null : parseSchemaFilename(absInput);
 	const schemaName =
 		nameOverride ??
 		fileCfg.schemaName ??
@@ -269,26 +350,39 @@ async function emitCommand(args: string[]) {
 	const instance = exporter.instance;
 	let content = instance.generate(plan);
 	if (typeof content !== "string") {
-		console.error(
-			`schema-pop emit: ${typeName} exporter produces multiple files — write a config + run \`schema-pop\` instead.`,
+		throw new Error(
+			`${typeName} exporter produces multiple files — write a config + run \`schema-pop\` instead.`,
 		);
-		process.exit(2);
 	}
 	if (instance.wrapVersion) content = instance.wrapVersion(schemaName, content);
 	if (instance.getFileHeader) content = instance.getFileHeader() + content;
 	if (instance.getFileFooter) content += instance.getFileFooter();
 
-	if (output) {
-		const absOut = path.resolve(process.cwd(), output);
-		fs.mkdirSync(path.dirname(absOut), { recursive: true });
-		fs.writeFileSync(absOut, content);
+	if (dest) {
+		fs.mkdirSync(path.dirname(dest), { recursive: true });
+		fs.writeFileSync(dest, content);
 		console.error(
-			`✅ [Schema-Pop] Generated: ${path.relative(process.cwd(), absOut)}`,
+			`✅ [Schema-Pop] Generated: ${path.relative(process.cwd(), dest)}`,
 		);
-	} else {
-		process.stdout.write(content);
 	}
-	cleanupTmp?.();
+	return content;
+}
+
+/**
+ * Glob expansion for `schema-pop emit` positionals. Literal paths pass
+ * through as a single-element array; anything containing `*?[]{}` is
+ * fed through `Bun.Glob`. Sorted so multi-file runs are deterministic.
+ */
+async function emitExpandGlob(pattern: string): Promise<string[]> {
+	if (!/[*?[\]{}]/.test(pattern)) return [pattern];
+	const Bun = (globalThis as { Bun?: any }).Bun;
+	if (!Bun?.Glob) return [pattern];
+	const out: string[] = [];
+	const g = new Bun.Glob(pattern);
+	for await (const f of g.scan({ cwd: process.cwd(), onlyFiles: true })) {
+		out.push(f as string);
+	}
+	return out.sort();
 }
 
 async function layoutCommand(args: string[]) {
