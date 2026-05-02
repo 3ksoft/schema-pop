@@ -102,16 +102,21 @@ function applyFlag(opts: CliOptions, key: string, value: string) {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Schema templates use the canonical `<name>.<version>.pop.ts` naming
+ * (config v2). For the picker we only show unique schema names —
+ * picking one copies every version file matching `<name>.*.pop.ts`.
+ */
 function getAvailableSchemas(): string[] {
 	const schemasDir = join(__dirname, "schemas");
 	if (!existsSync(schemasDir)) return [];
-	return readdirSync(schemasDir)
-		.filter(
-			(f) =>
-				statSync(join(schemasDir, f)).isFile() &&
-				[".ts", ".js"].includes(extname(f)),
-		)
-		.map((f) => basename(f, extname(f)));
+	const names = new Set<string>();
+	for (const f of readdirSync(schemasDir)) {
+		if (!statSync(join(schemasDir, f)).isFile()) continue;
+		const m = f.match(/^(.+?)\.[0-9][0-9.]*\.pop\.tsx?$/);
+		if (m) names.add(m[1]!);
+	}
+	return [...names].sort();
 }
 
 function getAvailableHarnesses(): string[] {
@@ -123,27 +128,152 @@ function getAvailableHarnesses(): string[] {
 }
 
 /**
- * Group schema files by base name, treating `<base>V<n>.ts` as version <n>.0
- * and bare `<base>.ts` as version 1.0. Returns groups keyed by base name with
- * versions sorted ascending.
+ * Parse a `<name>.<version>.pop.ts(x)` filename into its parts. Mirrors
+ * core's `parseSchemaFilename` but local to the scaffold so we don't
+ * import schema-pop at scaffold-build time. Returns null when the
+ * basename doesn't match the convention.
  */
-function groupSchemaVersions(
-	files: string[],
-): { name: string; versions: { version: string; file: string }[] }[] {
-	const groups = new Map<string, { version: string; file: string }[]>();
-	for (const file of files) {
-		const m = file.match(/^(.+?)V(\d+)$/);
-		const base = m ? m[1]! : file;
-		const version = m ? `${m[2]}.0` : "1.0";
-		if (!groups.has(base)) groups.set(base, []);
-		groups.get(base)!.push({ version, file });
+function parsePopFilename(
+	file: string,
+): { schemaName: string; version: string } | null {
+	const m = file.match(/^(.+?)\.([0-9][0-9.]*)\.pop\.tsx?$/);
+	if (!m) return null;
+	return { schemaName: m[1]!, version: m[2]! };
+}
+
+function compareVersions(a: string, b: string): number {
+	const sa = a.split(".");
+	const sb = b.split(".");
+	const max = Math.max(sa.length, sb.length);
+	for (let i = 0; i < max; i++) {
+		const na = Number(sa[i] ?? "0");
+		const nb = Number(sb[i] ?? "0");
+		if (Number.isFinite(na) && Number.isFinite(nb)) {
+			if (na !== nb) return na - nb;
+		}
 	}
-	return Array.from(groups.entries()).map(([name, versions]) => ({
-		name,
-		versions: versions.sort(
-			(a, b) => parseFloat(a.version) - parseFloat(b.version),
-		),
-	}));
+	return 0;
+}
+
+/**
+ * Build the target-import + target-instantiation lines that the schema
+ * file's `schemaPop({...}, scope({...}))` wrap will reference. Shared
+ * across every emitted schema since one project usually wants the same
+ * exporter set for all of them.
+ *
+ * Returns: `{ targetImports }` is the list of `import {...} from ...`
+ * lines; `{ targetLines }` is the body that goes inside the
+ * `targets: [ ... ]` array, indented one level for inline embedding.
+ */
+function computeTargetsBlock(
+	pType: "monorepo" | "project" | "all",
+	harnesses: string[],
+): { targetImports: string[]; targetLines: string[] } {
+	const importsSet = new Set<string>();
+	const lines: string[] = [];
+
+	if (pType === "monorepo" || pType === "all") {
+		if (harnesses.includes("ts")) {
+			importsSet.add(`import { ts } from "@schema-pop/core-exporters";`);
+			lines.push(
+				`\t\tts({ dest: "../../packages/ts/src/schema.ts", exportJsonPlan: true }),`,
+			);
+		}
+		if (harnesses.includes("rust")) {
+			importsSet.add(`import { rust } from "@schema-pop/core-exporters";`);
+			lines.push(
+				`\t\trust({ dest: "../../packages/rust/src/schema.rs", harness: true }),`,
+			);
+		}
+		if (harnesses.includes("cpp")) {
+			importsSet.add(`import { cpp, c } from "@schema-pop/core-exporters";`);
+			lines.push(
+				`\t\tcpp({ dest: "../../packages/cpp/src/schema.hpp", harness: true }),`,
+			);
+			lines.push(`\t\tc({ dest: "../../packages/cpp/src/schema.h" }),`);
+		}
+		if (harnesses.includes("zig")) {
+			importsSet.add(`import { zig } from "@schema-pop/core-exporters";`);
+			lines.push(
+				`\t\tzig({ dest: "../../packages/zig/src/schema.zig", pub: true, harness: true }),`,
+			);
+		}
+		if (pType === "all") {
+			importsSet.add(`import { random } from "@schema-pop/core-exporters";`);
+			importsSet.add(
+				`import { brainfuck, glsl, html, nuxtUi, openapi, svg, wgsl } from "@schema-pop/extra-exporters";`,
+			);
+			lines.push(
+				`\t\tbrainfuck({ dest: "../../packages/bf/schema.bf", harness: true }),`,
+			);
+			lines.push(`\t\tglsl({}),`);
+			lines.push(`\t\thtml({}),`);
+			lines.push(`\t\tnuxtUi({}),`);
+			lines.push(`\t\topenapi({}),`);
+			lines.push(`\t\trandom({}),`);
+			lines.push(`\t\tsvg({}),`);
+			lines.push(`\t\twgsl({}),`);
+		}
+	} else {
+		// Standalone project: ts + rust by default.
+		importsSet.add(`import { ts, rust } from "@schema-pop/core-exporters";`);
+		lines.push(`\t\tts({ dest: "./dist/schema.ts", exportJsonPlan: true }),`);
+		lines.push(`\t\trust({ dest: "./dist/schema.rs" }),`);
+	}
+
+	return { targetImports: [...importsSet], targetLines: lines };
+}
+
+/**
+ * For each schema name in `dir`, find the highest-version file and
+ * inject a `schemaPop({ targets: [...] }, scope({...}))` wrap around
+ * its existing `scope({...})` export. Older versions stay plain.
+ *
+ * The transform is a string replacement (no AST) — relies on the
+ * scaffold templates having a literal `export const $ = scope(`
+ * opening and a final `})` close. Templates are co-owned by this
+ * package so we can guarantee the shape.
+ */
+function injectSchemaPopWraps(
+	dir: string,
+	targetImports: string[],
+	targetLines: string[],
+): void {
+	if (!existsSync(dir)) return;
+	const groups = new Map<string, { version: string; file: string }[]>();
+	for (const f of readdirSync(dir)) {
+		const parsed = parsePopFilename(f);
+		if (!parsed) continue;
+		const list = groups.get(parsed.schemaName) ?? [];
+		list.push({ version: parsed.version, file: f });
+		groups.set(parsed.schemaName, list);
+	}
+
+	for (const [, files] of groups) {
+		files.sort((a, b) => compareVersions(a.version, b.version));
+		const latest = files[files.length - 1]!;
+		const path = join(dir, latest.file);
+		const original = readFileSync(path, "utf-8");
+		// Skip if already wrapped (idempotent).
+		if (/schemaPop\(\s*\{/.test(original)) continue;
+
+		const importsBlock = targetImports.join("\n");
+		const targetsBody =
+			targetLines.length > 0
+				? `\n${targetLines.join("\n")}\n\t`
+				: "";
+		const wrapped = original
+			.replace(
+				/import \{ schemaPop, scope \} from "schema-pop";/,
+				`import { schemaPop, scope } from "schema-pop";\n${importsBlock}`,
+			)
+			.replace(
+				/export const \$ = scope\(/,
+				`export const $ = schemaPop(\n\t{\n\t\ttargets: [${targetsBody}],\n\t},\n\tscope(`,
+			)
+			.replace(/\}\);(\s*)$/, "}),\n);$1");
+		writeFileSync(path, wrapped);
+	}
 }
 
 function printHelp() {
@@ -339,119 +469,24 @@ async function main() {
 			content = content.replace(/schema-pop-test/g, `${pName}-schema`);
 
 			if (filePath.endsWith("pop.config.ts")) {
-				const imports = new Set<string>();
-				const sharedLines: string[] = [];
-				const docLines: ((schemaName: string) => string)[] = [];
+				// Config v2: pop.config.ts is just discovery + global flags.
+				// Targets live in each schema file's `schemaPop({...}, scope({...}))`
+				// wrap, injected during the schema-copy pass below.
+				content = `/**
+ * schema-pop config (v2). The discovery glob defaults to
+ * \`./**/*.pop.ts\` when omitted; per-schema targets and layout
+ * flags live inside each \`<name>.<version>.pop.ts\` file via
+ * \`schemaPop({...}, scope({...}))\`.
+ *
+ * Reference: https://github.com/3ksoft/schema-pop/blob/main/docs/config-v2-spec.md
+ */
+import { defineConfig } from "schema-pop";
 
-				if (pType === "monorepo" || pType === "all") {
-					if (selectedHarnesses.includes("ts")) {
-						imports.add(`import { ts } from "@schema-pop/core-exporters";`);
-						sharedLines.push(
-							`                ts({ dest: "../../packages/ts/src/schema.ts", exportJsonPlan: true }),`,
-						);
-					}
-					if (selectedHarnesses.includes("rust")) {
-						imports.add(`import { rust } from "@schema-pop/core-exporters";`);
-						sharedLines.push(
-							`                rust({ dest: "../../packages/rust/src/schema.rs", harness: true }),`,
-						);
-					}
-					if (selectedHarnesses.includes("cpp")) {
-						imports.add(`import { cpp, c } from "@schema-pop/core-exporters";`);
-						sharedLines.push(
-							`                cpp({ dest: "../../packages/cpp/src/schema.hpp", harness: true }),`,
-						);
-						sharedLines.push(
-							`                c({ dest: "../../packages/cpp/src/schema.h" }),`,
-						);
-					}
-					if (selectedHarnesses.includes("zig")) {
-						imports.add(`import { zig } from "@schema-pop/core-exporters";`);
-						sharedLines.push(
-							`                zig({ dest: "../../packages/zig/src/schema.zig", pub: true, harness: true }),`,
-						);
-					}
-
-					if (pType === "all") {
-						imports.add(`import { random } from "@schema-pop/core-exporters";`);
-						imports.add(
-							`import { brainfuck, glsl, html, nuxtUi, openapi, svg, wgsl } from "@schema-pop/extra-exporters";`,
-						);
-						sharedLines.push(
-							`                brainfuck({ dest: "../../packages/bf/schema.bf", harness: true }),`,
-						);
-						docLines.push(
-							(n) => `                glsl({ dest: "./dist/${n}.glsl" }),`,
-						);
-						docLines.push(
-							(n) => `                html({ dest: "./dist/${n}.html" }),`,
-						);
-						docLines.push(
-							(n) => `                nuxtUi({ dest: "./dist/${n}-nuxt.ts" }),`,
-						);
-						docLines.push(
-							(n) =>
-								`                openapi({ dest: "./dist/${n}-openapi.json" }),`,
-						);
-						docLines.push(
-							(n) =>
-								`                random({ dest: "./dist/${n}-random.json" }),`,
-						);
-						docLines.push(
-							(n) => `                svg({ dest: "./dist/${n}-svg/" }),`,
-						);
-						docLines.push(
-							(n) => `                wgsl({ dest: "./dist/${n}.wgsl" }),`,
-						);
-					}
-				} else {
-					// Standalone project: always include core-exporters targets
-					imports.add(`import { ts, rust } from "@schema-pop/core-exporters";`);
-					sharedLines.push(
-						`                ts({ dest: "./dist/schema.ts", exportJsonPlan: true }),`,
-					);
-					sharedLines.push(
-						`                rust({ dest: "./dist/schema.rs" }),`,
-					);
-				}
-
-				const renderTargets = (name: string) => {
-					const lines = [...sharedLines, ...docLines.map((f) => f(name))];
-					return "\n" + lines.join("\n") + "\n";
-				};
-
-				const importsStr =
-					Array.from(imports).join("\n") +
-					'\nimport { defineConfig } from "schema-pop";\n';
-				let schemaEntries: string;
-				if (selectedSchemas.length > 0) {
-					const groups = groupSchemaVersions(selectedSchemas);
-					schemaEntries = groups
-						.map((g) => {
-							const versionsBody = g.versions
-								.map(
-									(v) =>
-										`                { version: "${v.version}", source: "./src/schema/${v.file}.ts" },`,
-								)
-								.join("\n");
-							return `        {\n            name: "${g.name}",\n            versions: [\n${versionsBody}\n            ],\n            targets: [${renderTargets(g.name).trimEnd()}\n            ]\n        }`;
-						})
-						.join(",\n");
-				} else {
-					// No preset chosen — emit a single "default" entry pointing at
-					// default.ts (created by the post-copy cleanup further down).
-					schemaEntries = `        {\n            name: "default",\n            versions: [\n                { version: "1.0", source: "./src/schema/default.ts" },\n            ],\n            targets: [${renderTargets("default").trimEnd()}\n            ]\n        }`;
-				}
-				content = content.replace(
-					/^\s*\/\/ SCHEMAS_PLACEHOLDER\s*$/m,
-					schemaEntries,
-				);
-				content =
-					importsStr +
-					"\n" +
-					content
-						.replace(/export default \{/, "export default defineConfig({")
-						.replace(/\};\s*$/, "});");
+export default defineConfig({
+\tendian: "le",
+\twordSize: 64,
+});
+`;
 			}
 
 			if (filePath.endsWith("package.json")) {
@@ -504,20 +539,30 @@ async function main() {
 				? join(targetDir, "packages", "schema", "src", "schema")
 				: join(targetDir, "src", "schema");
 
+		// Compute target imports + list once — same set across every
+		// schema this project ships (config v2 puts targets in each
+		// schema file's `schemaPop({...}, scope({...}))` wrap).
+		const { targetImports, targetLines } = computeTargetsBlock(
+			projectType,
+			selectedHarnesses,
+		);
+
 		if (selectedSchemas.length > 0 && existsSync(schemasDir)) {
 			mkdirSync(schemaDestDir, { recursive: true });
 			for (const schemaName of selectedSchemas) {
-				const schemaSrc = join(schemasDir, `${schemaName}.ts`);
-				if (existsSync(schemaSrc))
-					copyFileSync(schemaSrc, join(schemaDestDir, `${schemaName}.ts`));
+				// Copy every version file matching `<schemaName>.*.pop.ts`.
+				for (const f of readdirSync(schemasDir)) {
+					const parsed = parsePopFilename(f);
+					if (parsed?.schemaName !== schemaName) continue;
+					copyFileSync(join(schemasDir, f), join(schemaDestDir, f));
+				}
 			}
 		} else {
 			// No preset picked — strip the test-schema fixtures the scaffold
-			// ships by default and drop a minimal default.ts in their place.
-			// pop.config.ts already points at default.ts (see replacer above).
+			// ships by default and drop a minimal default.1.0.pop.ts.
 			if (existsSync(schemaDestDir)) {
 				for (const f of readdirSync(schemaDestDir)) {
-					if (f.startsWith("test-schema")) {
+					if (parsePopFilename(f)?.schemaName === "test-schema") {
 						rmSync(join(schemaDestDir, f));
 					}
 				}
@@ -525,10 +570,16 @@ async function main() {
 				mkdirSync(schemaDestDir, { recursive: true });
 			}
 			writeFileSync(
-				join(schemaDestDir, "default.ts"),
+				join(schemaDestDir, "default.1.0.pop.ts"),
 				`import { schemaPop, scope } from "schema-pop";\n\nexport const $ = scope({\n\t...schemaPop,\n\thasSchema: "boolean",\n});\n`,
 			);
 		}
+
+		// Wrap the LATEST version of each schema with schemaPop({ targets },
+		// scope({...})) so the build picks up exporters. Older versions in a
+		// chain stay as plain `scope({})` exports — they inherit defaults
+		// and only contribute to migration emit between consecutive versions.
+		injectSchemaPopWraps(schemaDestDir, targetImports, targetLines);
 
 		s.stop("Project structure created!");
 		if (isInteractive) {
