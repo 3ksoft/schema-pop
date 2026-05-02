@@ -1,14 +1,15 @@
 # Schema-Pop Roadmap
 
-## Current Version: 0.1.0
+## Current Version: 0.1.35
 
-With version 0.1.0, the core foundation of Schema-Pop is set:
+The 0.1.x line set the core foundation of Schema-Pop:
 * **ArkType** constraint-based binary inference.
 * Advanced layout strategies (`aligned`, `zero-padding`, `std140`, `std430`).
-* Universal Exporter API and multi-language support (Rust, C/C++, Zig, TS, WGSL, GLSL).
+* Universal Exporter API and multi-language support (Rust, C/C++, Go, Zig, TS, WGSL, GLSL).
 * Bit-packing and tagged unions.
-* Auto-generated cross-language migrations.
+* Auto-generated cross-language migrations (Rust, C++, Zig, Go).
 * Test harness scaffolding.
+* `INDENT` / `indentBlock` collapsed into a single `indent()` helper.
 
 ---
 
@@ -22,9 +23,13 @@ The next major milestone focuses on stabilization and internal schemas finalizat
 * **Custom Migration Hooks:** Allow developers to inject custom transformation logic into the auto-generated migration functions.
 
 ### 2. More core languages
-* Go, CPython, whatever is fancy ...
+* CPython, whatever is fancy ...
 
-### 3. Test suite improvement
+### 3. Better support for type metadata
+* Use arktype discriminated union for binary/bitwise/reserver/...
+* Better integration with IR schema
+
+### 4. Test suite improvement
 * Add more test schemas
 * Add benchmarks
 * Unit tests coverage for analyzer
@@ -51,3 +56,4 @@ Here's some loose ideas we might pursue in no particular order.
 * **binary protocol debugger** with live schema modification support
 * **more gpu types support** add support for textures etc.
 * **gpu packing code generators** for different targets
+* **introspectable exporter configs** Each exporter ships its `XConfig` interface as a runtime arktype scope (codegen'd at exporter build time via `schema-pop-import` on its own `*.ts` source — importer stays a separate package). CLI / docs / IDE plugins can then validate `--target c.dest=foo.h --target c.versionNamespace=false`-style flags, generate `schema-pop --help <target>` tables, and catch typos before the build runs. Single source of truth = the TS interface; runtime cost = a small generated scope object.
