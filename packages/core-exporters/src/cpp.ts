@@ -18,6 +18,13 @@ export interface CppConfig
 	commentStyle?: "star";
 	namespace?: string;
 	harness?: boolean;
+	/**
+	 * If `true` (default), fields whose `Field.originalType` is set are
+	 * emitted with the original C / C++ spelling instead of falling
+	 * back to a `uint8_t name[size]` byte blob. See c.ts CConfig for
+	 * the full tradeoff — same idea here.
+	 */
+	useOriginalType?: boolean;
 }
 
 const CPP_PRIMITIVES: Record<string, string> = {
@@ -51,6 +58,17 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
 	): { type: string; suffix?: string } {
 		const scalar = mapScalarField(field, CPP_PRIMITIVES, typeName);
 		if (scalar !== undefined) return { type: scalar };
+		if (
+			cfg.useOriginalType !== false &&
+			field.kind === "any" &&
+			typeof field.originalType === "string" &&
+			field.originalType.length > 0
+		) {
+			// Same array-suffix split as the C exporter — see c.ts splitCType.
+			const m = field.originalType.match(/^(.+?)\s*((?:\[\d*\])+)\s*$/);
+			if (m) return { type: m[1]!.trim(), suffix: m[2] };
+			return { type: field.originalType.trim() };
+		}
 		return { type: "uint8_t", suffix: `[${fieldSize}]` };
 	}
 
@@ -67,8 +85,9 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
 						? `[[deprecated(${JSON.stringify(reason)})]] `
 						: `[[deprecated]] `
 					: "";
+			const richOpts = { allowOriginalType: cfg.useOriginalType !== false };
 			for (const t of plan.types) {
-				if (isRichType(t)) {
+				if (isRichType(t, richOpts)) {
 					console.warn(
 						`  ⚠ cpp: skipping "${t.name}" — contains rich-tier types`,
 					);

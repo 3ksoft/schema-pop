@@ -29,6 +29,97 @@ export interface RustConfig
 	 *  - `string`: use the given name verbatim (e.g., `pub mod ws { ... }`).
 	 */
 	versionNamespace?: false | string;
+	/**
+	 * If `true`, fields whose `Field.originalType` is set are emitted
+	 * with a Rust equivalent of the original C / C++ spelling instead
+	 * of falling back to a `[u8; N]` byte blob. Common platform
+	 * typedefs map to `core::ffi` / Rust primitives:
+	 *   `size_t / uintptr_t` → `usize`,
+	 *   `ssize_t / ptrdiff_t / intptr_t` → `isize`,
+	 *   `off_t / time_t` → `i64` (LP64 assumption),
+	 *   `const char *` → `*const core::ffi::c_char`,
+	 *   `char *` → `*mut core::ffi::c_char`,
+	 *   `void *` → `*mut core::ffi::c_void`,
+	 *   `T *` / `const T *` → `*mut T` / `*const T` for known refs.
+	 *
+	 * Names we don't recognise stay as a `[u8; N]` byte blob — we
+	 * never emit a raw C identifier into Rust source, since it would
+	 * fail to compile.
+	 *
+	 * Defaults to `false` because the resulting fields aren't
+	 * round-trippable through schema-pop's binary codec (no layout
+	 * known to it). Opt in for FFI bridge / sys-crate generation.
+	 */
+	useOriginalType?: boolean;
+}
+
+/**
+ * Map a C / C++ type spelling (carried through Field.originalType
+ * by importers when they couldn't resolve the source type) to a
+ * sensible Rust equivalent. LP64 assumption for `long`-shaped types.
+ * Returns null when the spelling is too project-specific to handle
+ * safely (the caller falls back to a `[u8; N]` byte blob).
+ *
+ * `typeName(name)` is used for known user-types so pointer-to-T
+ * preserves the casing convention of the rest of the generated code.
+ */
+function mapOriginalTypeToRust(
+	spelling: string,
+	typeName: (n: string) => string,
+): string | null {
+	let s = spelling
+		.replace(/\brestrict\b/g, "")
+		.replace(/\b__restrict\b/g, "")
+		.replace(/\s+/g, " ")
+		.trim();
+
+	// Direct platform-typedef aliases.
+	const flat: Record<string, string> = {
+		size_t: "usize",
+		uintptr_t: "usize",
+		ssize_t: "isize",
+		ptrdiff_t: "isize",
+		intptr_t: "isize",
+		off_t: "i64",
+		time_t: "i64",
+		clock_t: "i64",
+		pid_t: "i32",
+		uid_t: "u32",
+		gid_t: "u32",
+		mode_t: "u32",
+	};
+	if (flat[s] !== undefined) return flat[s]!;
+
+	// Pointer forms: peel off trailing `*` and pick a c_char / c_void / ref
+	// based on what's left.
+	const ptr = s.match(/^(.*?)\s*\*+\s*$/);
+	if (ptr) {
+		const innerRaw = ptr[1]!.trim();
+		const isConst = /\bconst\b/.test(innerRaw);
+		const inner = innerRaw.replace(/\bconst\b/g, "").replace(/\s+/g, " ").trim();
+		const mut = isConst ? "*const" : "*mut";
+		if (inner === "char" || inner === "signed char" || inner === "unsigned char") {
+			return `${mut} core::ffi::c_char`;
+		}
+		if (inner === "void" || inner === "") {
+			return `${mut} core::ffi::c_void`;
+		}
+		// Recurse for typedef aliases (e.g. `size_t *`).
+		const innerMapped = mapOriginalTypeToRust(inner, typeName);
+		if (innerMapped) return `${mut} ${innerMapped}`;
+		// Bare identifier → assume it's a user-named type referenced
+		// elsewhere in the generated module.
+		if (/^[A-Za-z_]\w*$/.test(inner)) return `${mut} ${typeName(inner)}`;
+		return null;
+	}
+
+	// `const X` / qualifier-only forms — strip and recurse.
+	if (/\bconst\b/.test(s)) {
+		const stripped = s.replace(/\bconst\b/g, "").trim();
+		if (stripped !== s) return mapOriginalTypeToRust(stripped, typeName);
+	}
+
+	return null;
 }
 
 const RUST_PRIMITIVES: Record<string, string> = {
@@ -196,6 +287,10 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 	function fieldRustType(field: Field, fieldSize: number): string {
 		const t = fieldInnerType(field);
 		if (t !== undefined) return t;
+		if (cfg.useOriginalType && field.kind === "any" && field.originalType) {
+			const mapped = mapOriginalTypeToRust(field.originalType, typeName);
+			if (mapped) return mapped;
+		}
 		return `[u8; ${fieldSize}]`;
 	}
 
@@ -241,8 +336,9 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 						? `#[deprecated(note = ${JSON.stringify(reason)})]\n`
 						: `#[deprecated]\n`
 					: "";
+			const richOpts = { allowOriginalType: !!cfg.useOriginalType };
 			for (const t of plan.types) {
-				if (isRichType(t)) {
+				if (isRichType(t, richOpts)) {
 					console.warn(
 						`  ⚠ rust: skipping "${t.name}" — contains rich-tier types (Record / unknown / unbounded number)`,
 					);

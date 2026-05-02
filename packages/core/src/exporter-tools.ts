@@ -58,18 +58,34 @@ function mapScalarField(
 	return undefined;
 }
 
+export interface RichTierOptions {
+	/**
+	 * Treat `kind: "any"` fields as non-rich when they carry an
+	 * `originalType` spelling. Used by binary-language exporters that
+	 * opt into the "splat the original type verbatim" cheat path
+	 * (c / cpp / rust with `useOriginalType: true`) — those exporters
+	 * can still emit the field meaningfully, just without round-trip
+	 * through schema-pop's binary codec.
+	 */
+	allowOriginalType?: boolean;
+}
+
 /**
  * True if a Field carries no fixed memory layout (rich-tier). Recursive:
  * an array of unbounded items is rich, an optional<rich> is rich, etc.
  * Binary-tier exporters use this to skip types they can't honestly emit.
  */
-function isRichField(f: Field): boolean {
-	if (f.kind === "map" || f.kind === "any") return true;
+function isRichField(f: Field, opts: RichTierOptions = {}): boolean {
+	if (f.kind === "any") {
+		if (opts.allowOriginalType && (f as any).originalType) return false;
+		return true;
+	}
+	if (f.kind === "map") return true;
 	if (f.kind === "primitive" && (f as any).popKind === "rich") return true;
-	if (f.kind === "array") return isRichField(f.item);
-	if (f.kind === "optional") return isRichField(f.inner);
+	if (f.kind === "array") return isRichField(f.item, opts);
+	if (f.kind === "optional") return isRichField(f.inner, opts);
 	if (f.kind === "inlineStruct")
-		return f.fields.some((fp) => isRichField(fp.type));
+		return f.fields.some((fp) => isRichField(fp.type, opts));
 	return false;
 }
 
@@ -78,11 +94,12 @@ function isRichField(f: Field): boolean {
  * fields/variants so an exporter can decide to skip the whole type with a
  * single check.
  */
-function isRichType(t: TypePlan): boolean {
-	if (t.kind === "struct") return t.fields.some((f) => isRichField(f.type));
+function isRichType(t: TypePlan, opts: RichTierOptions = {}): boolean {
+	if (t.kind === "struct")
+		return t.fields.some((f) => isRichField(f.type, opts));
 	if (t.kind === "union")
-		return t.variants.some((v) => isRichField(v.type as Field));
-	if (t.kind === "alias") return isRichField(t.type);
+		return t.variants.some((v) => isRichField(v.type as Field, opts));
+	if (t.kind === "alias") return isRichField(t.type, opts);
 	return false;
 }
 
