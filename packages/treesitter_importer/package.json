@@ -1,6 +1,6 @@
 {
 	"name": "@schema-pop/treesitter-importer",
-	"version": "0.1.34",
+	"version": "0.1.35",
 	"description": "Import Rust / C / C++ source files into schema-pop via tree-sitter (experimental).",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -28,7 +28,7 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"schema-pop": "0.1.34",
+		"schema-pop": "0.1.35",
 		"web-tree-sitter": "^0.25.0"
 	}
 }
