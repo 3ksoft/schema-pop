@@ -9,3 +9,6 @@ build
 manual_test
 .obsidian
 web
+.claude
+# tree-sitter grammar build cache used by packages/treesitter_importer/scripts/build-wasm.sh
+packages/treesitter_importer/.build
