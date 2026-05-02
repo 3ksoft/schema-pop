@@ -13,6 +13,7 @@ export {
 	Describe,
 	Obsolete,
 	Renamed,
+	OriginalType,
 } from "./schema/core";
 export * from "./layout/analyzer";
 export * from "./migrations";

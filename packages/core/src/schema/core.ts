@@ -141,6 +141,34 @@ export const Renamed = generic(["t", "unknown"], ["oldName", "string"])(
 	},
 );
 
+/**
+ * Records the source-language spelling for a type the schema-pop pipeline
+ * couldn't resolve into a native shape — typically set by importers
+ * (clang_importer / treesitter_importer) when they hit a system typedef
+ * outside the bundled scopes (`size_t`, `const char *`, project-local
+ * templates, etc.).
+ *
+ * Round-trips as arktype meta `originalType: 'X'`. Binary-language
+ * exporters (c, cpp, rust) with `useOriginalType: true` use it as the
+ * "splat the original spelling verbatim" cheat path so the output
+ * compiles against the original headers, even though schema-pop has
+ * no honest layout for the field.
+ *
+ * Usage:
+ * ```ts
+ * Buf: { handle: "OriginalType<unknown, 'void *'>" }
+ * ```
+ */
+export const OriginalType = generic(["t", "unknown"], ["name", "string"])(
+	(args) =>
+		(args.t as Type).configure({
+			originalType: String((args.name as any).unit),
+		} as any),
+	class extends Hkt<[t: unknown, name: string]> {
+		declare body: this[0];
+	},
+);
+
 export const $schemaPop = scope({
 	Describe,
 	Binary,
@@ -150,4 +178,5 @@ export const $schemaPop = scope({
 	At,
 	Obsolete,
 	Renamed,
+	OriginalType,
 });

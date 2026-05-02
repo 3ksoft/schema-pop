@@ -49,9 +49,18 @@ export const $layout = scope({
 	 * arktype `unknown` / `any` / `unknown.any`. Carries no shape info;
 	 * exporters that can render an opaque value (TS `unknown`, JSON `any`)
 	 * may emit it; binary-tier exporters skip with a warning.
+	 *
+	 * Importers that fall back to `any` because they couldn't resolve a
+	 * source type (e.g. clang_importer hitting `size_t` with no
+	 * `<stddef.h>` available, or `const char *` which has no schema-pop
+	 * equivalent) attach the original spelling on `originalType` so
+	 * downstream tooling can recover the user's intent later — pop it
+	 * back to a real type once we model that shape, drive a manual
+	 * binding emit, render in HTML viewer, etc.
 	 */
 	AnyField: {
 		kind: "'any'",
+		"originalType?": "string",
 	},
 
 	ReferenceField: {

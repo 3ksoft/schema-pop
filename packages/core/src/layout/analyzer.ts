@@ -968,6 +968,16 @@ export class SchemaAnalyzer {
 			(node as any).expression === "unknown" &&
 			Object.keys((node as any).inner ?? {}).length === 0
 		) {
+			// `OriginalType<unknown, 'X'>` materialises as `unknown` with
+			// `meta.originalType` set — surface it on the Field so binary
+			// exporters with `useOriginalType: true` can splat the source
+			// spelling instead of falling back to a byte blob. We treat
+			// originalType-tagged unknowns as non-rich (the cheat path
+			// CAN emit them honestly), bypassing the rich-mode check.
+			const originalType = (node as any).meta?.originalType;
+			if (typeof originalType === "string" && originalType.length > 0) {
+				return { kind: "any", originalType };
+			}
 			if (!richAllowed) {
 				this.error(
 					`unknown / any type is rich-tier — set mode: 'rich' on the version config to allow it`,

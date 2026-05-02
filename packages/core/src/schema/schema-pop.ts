@@ -1,11 +1,12 @@
 import { binary } from "./binary";
 import { bitwise } from "./bitwise";
-import { Reserved, Scale, At } from "./core";
+import { Reserved, Scale, At, OriginalType } from "./core";
 
 /**
  * Convenience alias bundle merging everything schema-pop offers in one go:
  * `binary` (bool, u8..u128/i8..i128, f32/f64, plus Binary/Describe/Obsolete generics),
- * `bitwise` (u1..u7, plus Bit), and the standalone generics `Reserved`, `Scale`, `At`.
+ * `bitwise` (u1..u7, plus Bit), and the standalone generics `Reserved`, `Scale`,
+ * `At`, `OriginalType`.
  *
  * Use it when you want full coverage without juggling individual imports:
  * ```ts
@@ -23,4 +24,5 @@ export const schemaPop = {
 	"#Reserved": Reserved,
 	"#Scale": Scale,
 	"#At": At,
+	"#OriginalType": OriginalType,
 };
