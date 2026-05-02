@@ -323,6 +323,7 @@ export function svg(config: SvgConfig = {}): ExporterPlugin<SvgConfig> {
 
 	return {
 		name: "svg",
+		extension: "svg",
 		config: cfg,
 		generate: (plan: LayoutPlan) => {
 			const results: Record<string, string> = {};

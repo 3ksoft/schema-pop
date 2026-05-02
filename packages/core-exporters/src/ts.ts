@@ -409,6 +409,7 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 
 	return {
 		name: "ts",
+		extension: "ts",
 		config: cfg,
 		getFileHeader: () => {
 			let h = "";

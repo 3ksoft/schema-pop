@@ -325,6 +325,7 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 
 	return {
 		name: "rust",
+		extension: "rs",
 		config: cfg,
 		getFileHeader: () =>
 			`#![allow(dead_code, unused_imports, non_camel_case_types, non_snake_case)]\n${RUST_RUNTIME_PRELUDE}\n`,

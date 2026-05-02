@@ -174,6 +174,7 @@ export function md(config: MdConfig = {}): ExporterPlugin<MdConfig> {
 
 	return {
 		name: "md",
+		extension: "md",
 		config: cfg,
 		wrapVersion: (version, code) =>
 			`# v${version}\n\n${code}\n`,

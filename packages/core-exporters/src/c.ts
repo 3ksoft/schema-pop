@@ -75,6 +75,7 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 		ExporterTools(cfg);
 	return {
 		name: "c",
+		extension: "h",
 		config: cfg,
 		getFileHeader: () =>
 			"#pragma once\n#include <stdint.h>\n#include <stdbool.h>\n\n",

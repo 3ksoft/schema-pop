@@ -42,6 +42,7 @@ export function glsl(config: GlslConfig): ExporterPlugin<GlslConfig> {
 	} as GlslConfig;
 	return {
 		name: "glsl",
+		extension: "glsl",
 		config: cfg,
 		generate: (plan: LayoutPlan) => {
 			const { isRichType } = ExporterTools(cfg);

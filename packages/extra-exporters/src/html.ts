@@ -283,6 +283,7 @@ export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
 
 	return {
 		name: "html",
+		extension: "html",
 		config: cfg,
 		getFileHeader: () => {
 			return `<!DOCTYPE html>

@@ -6,6 +6,7 @@ export function openapi(config: OpenApiConfig): ExporterPlugin<OpenApiConfig> {
 	const cfg = { commentStyle: "none", ...config } as OpenApiConfig;
 	return {
 		name: "openapi",
+		extension: "yaml",
 		config: cfg,
 		generate: (plan: LayoutPlan) => {
 			const doc = {

@@ -38,6 +38,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 	} as WgslConfig;
 	return {
 		name: "wgsl",
+		extension: "wgsl",
 		config: cfg,
 		generate: (plan: LayoutPlan) => {
 			const { isRichType } = ExporterTools(cfg);

@@ -14,6 +14,7 @@ export function nuxtUi(config: NuxtUiConfig): ExporterPlugin<NuxtUiConfig> {
 	} as NuxtUiConfig;
 	return {
 		name: "nuxt-ui",
+		extension: "vue",
 		config: cfg,
 		generate: (plan: LayoutPlan) => {
 			let script = `<script setup lang="ts">\nimport { reactive } from 'vue';\n\n`;

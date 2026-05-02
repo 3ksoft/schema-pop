@@ -76,6 +76,7 @@ export function mermaid(
 
 	return {
 		name: "mermaid",
+		extension: "mmd",
 		config: cfg,
 		generate: (plan: LayoutPlan) => {
 			const known = new Set(plan.types.map((t) => t.name));

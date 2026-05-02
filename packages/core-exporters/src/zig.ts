@@ -61,6 +61,7 @@ export function zig(config: ZigConfig): ExporterPlugin<ZigConfig> {
 
 	return {
 		name: "zig",
+		extension: "zig",
 		config: cfg,
 		getFileHeader: () => 'const std = @import("std");\n\n',
 		generate: (plan: LayoutPlan) => {

@@ -12,6 +12,7 @@ export function md(config: MdConfig): ExporterPlugin<MdConfig> {
 
 	return {
 		name: "md",
+		extension: "md",
 		config: cfg,
 		generate: (plan: LayoutPlan) => {
 			let out = `# Schema Report - ${plan.version}\n\n`;

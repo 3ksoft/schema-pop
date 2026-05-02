@@ -27,6 +27,7 @@ export function brainfuck(
 	const cfg = { commentStyle: "none", ...config } as BrainfuckConfig;
 	return {
 		name: "brainfuck",
+		extension: "bf",
 		config: cfg,
 		generate: (plan: LayoutPlan) => {
 			const { toSafeVersionIdentifier } = ExporterTools({});

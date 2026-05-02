@@ -74,6 +74,7 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
 
 	return {
 		name: "cpp",
+		extension: "hpp",
 		config: cfg,
 		getFileHeader: () =>
 			"#pragma once\n#include <stdint.h>\n#include <string>\n#include <vector>\n#include <array>\n\n",
