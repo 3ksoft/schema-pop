@@ -17,6 +17,18 @@ export interface CConfig
 	commentStyle?: "star";
 	prefix?: string;
 	/**
+	 * Controls the per-version prefix on every typedef and `#define`.
+	 *  - `undefined` (default): prefix with the safe version identifier
+	 *    (e.g. `konektor_1_0_BleMode`). Required when multiple versions
+	 *    of the same schema land in one header.
+	 *  - `false`: drop the prefix. Single-version schemas get the
+	 *    natural `BleMode` / `BLE_MODE_OFF` names. Mirrors the Rust
+	 *    exporter's `versionNamespace: false` opt-out — see P13.
+	 *  - `string`: use the given prefix verbatim (e.g. `"ws"` →
+	 *    `ws_BleMode`).
+	 */
+	versionNamespace?: false | string;
+	/**
 	 * If `true` (default), fields whose `Field.originalType` is set are
 	 * emitted with the original C spelling instead of falling back to a
 	 * `uint8_t name[size]` byte blob. The original spelling comes from
@@ -81,8 +93,17 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 			"#pragma once\n#include <stdint.h>\n#include <stdbool.h>\n\n",
 		generate: (plan: LayoutPlan) => {
 			let code = "";
-			const mod = toSafeVersionIdentifier(plan.version);
-			const refName = (n: string) => `${mod}_${typeName(n)}`;
+			// Resolve prefix per `versionNamespace`. Empty string when
+			// disabled — the join logic below skips the leading
+			// underscore so we emit `BleMode` instead of `_BleMode`.
+			const mod =
+				cfg.versionNamespace === false
+					? ""
+					: typeof cfg.versionNamespace === "string"
+						? cfg.versionNamespace
+						: toSafeVersionIdentifier(plan.version);
+			const join = (a: string, b: string) => (a ? `${a}_${b}` : b);
+			const refName = (n: string) => join(mod, typeName(n));
 
 			// C has no native array-of-T field declaration that fits our
 			// `mapScalarField` shape (it returns just a type token). Mirror
@@ -113,7 +134,7 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 					);
 					continue;
 				}
-				const tn = `${mod}_${typeName(t.name)}`;
+				const tn = join(mod, typeName(t.name));
 				if (t.kind === "struct") {
 					code += `typedef struct ${tn} {\n`;
 					if (t.fields.length === 0)
