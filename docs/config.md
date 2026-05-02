@@ -29,6 +29,18 @@ Fields, all optional:
 
 `bunx schema-pop` works without a config — defaults above kick in.
 
+### One-shot emit (no config)
+
+For ad-hoc renders bypassing `pop.config.ts` entirely:
+
+```sh
+schema-pop emit fields.pop.ts -t md > docs/fields.md
+schema-pop emit fields.pop.ts -o dist/fields.rs    # type inferred from .rs
+cat fields.pop.ts | schema-pop emit -t html -n widgets > widgets.html
+```
+
+Reads stdin when input is `-` or omitted on a pipe. `-t` accepts `rust | c | cpp | ts | zig | md | html | wgsl | glsl | svg | openapi | nuxt-ui | mermaid` (inferred from `-o` extension when missing). The exporter package (`@schema-pop/core-exporters` or `@schema-pop/extra-exporters`) must be installed in the project.
+
 ## 2. Schema filenames
 
 The default discovery glob (`./**/*.pop.ts`) plus the basename rule below is **convention** — what the parser uses when nothing else tells it otherwise. Both layers can be overridden: the glob via `defineConfig.schemas`, and the parsed `schemaName` / `version` via the schema's own `schemaPop({ schemaName, version }, scope)` config (see section 3).
