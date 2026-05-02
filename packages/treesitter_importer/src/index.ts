@@ -8,6 +8,7 @@ import { emitArktypeScope, type EmitOptions } from "./emit";
 import type { RustModuleIR } from "./ir";
 
 export type { RustModuleIR, EmitOptions, Lang };
+export type { ExtraScope } from "./emit";
 export type {
 	RustField,
 	RustItem,

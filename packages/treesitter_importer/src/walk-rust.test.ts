@@ -148,7 +148,7 @@ describe("rust importer — emit arktype scope", () => {
             pub type Id = u32;
         `);
 		const out = emitArktypeScope(r);
-		expect(out).toContain('import { scope } from "schema-pop"');
+		expect(out).toMatch(/import \{ scope,\s+binary \} from "schema-pop"/);
 		expect(out).toContain("Battery: {");
 		expect(out).toContain('voltage_mv: "u32"');
 		expect(out).toContain('flags: "u8"');

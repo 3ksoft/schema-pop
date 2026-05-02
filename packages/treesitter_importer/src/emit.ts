@@ -23,7 +23,23 @@ import type {
 export type EmitOptions = {
 	scopeName?: string; // default: "$"
 	header?: string; // raw text prepended to file (e.g., a banner)
+	/**
+	 * User-provided extra scopes spliced into the generated output.
+	 * Each entry produces an extra `import { <importName> } from "<importPath>"`
+	 * line plus a `...<importName>.import()` spread inside the `scope({...})`.
+	 * Names listed in `aliases` shadow generated items: if our IR happens
+	 * to define one too (typically a typedef in source code), we skip our
+	 * version and surface it in the `// Skipped` block so the user's
+	 * definition wins without duplicate-key conflicts.
+	 */
+	extras?: ExtraScope[];
 };
+
+export interface ExtraScope {
+	importPath: string;
+	importName: string;
+	aliases: string[];
+}
 
 export function emitArktypeScope(
 	ir: RustModuleIR,
@@ -32,32 +48,98 @@ export function emitArktypeScope(
 	const scopeName = opts.scopeName ?? "$";
 	const header = opts.header ?? defaultHeader(ir.source);
 
-	const typeItems = ir.items.filter((i) => i.kind !== "function");
-	const fnItems = ir.items.filter(
-		(i): i is Extract<RustItem, { kind: "function" }> => i.kind === "function",
+	const extras = opts.extras ?? [];
+	const shadowed = new Set<string>();
+	for (const e of extras) for (const a of e.aliases) shadowed.add(a);
+
+	const typeItems = ir.items.filter(
+		(i) => i.kind !== "function" && !shadowed.has(i.name),
 	);
+	const fnItems = ir.items.filter(
+		(i): i is Extract<RustItem, { kind: "function" }> =>
+			i.kind === "function" && !shadowed.has(i.name),
+	);
+
+	const shadowedItems = ir.items
+		.filter((i) => shadowed.has(i.name))
+		.map((i) => ({ name: i.name, reason: "shadowed by --extras" }));
+	const allSkipped = [...shadowedItems, ...ir.skipped];
 
 	const aliases: string[] = [];
 	for (const item of typeItems) aliases.push(emitItem(item));
 
 	const skipped =
-		ir.skipped.length > 0
-			? `\n// Skipped (unsupported by tree-sitter MVP):\n${ir.skipped
+		allSkipped.length > 0
+			? `\n// Skipped (unsupported by tree-sitter MVP):\n${allSkipped
 					.map((s) => `//   ${s.name} — ${s.reason}`)
 					.join("\n")}\n`
 			: "";
 
 	const fnsBlock = fnItems.length ? emitFunctions(fnItems) : "";
 
+	// Bitwise types (`u1`..`u7`, `Bit<u32, N>`) need the `bitwise` scope
+	// to be in scope, otherwise arktype throws on `'u3' is unresolvable`.
+	// `schemaPop` is the convenience bundle that covers binary + bitwise
+	// + Reserved/Scale/At — switch to it when any `bit` IR variant is in
+	// play. Plain binary stays the default for cheaper TS inference.
+	const usesBitwise = anyTypeMatches(typeItems, (t) => t.kind === "bit");
+	const fnsImport = fnItems.length
+		? `\nimport type { FunctionPlan } from "schema-pop";`
+		: "";
+	const importBlock = usesBitwise
+		? `import { scope, schemaPop } from "schema-pop";${fnsImport}`
+		: `import { scope, binary } from "schema-pop";${fnsImport}`;
+	const baseSpread = usesBitwise ? "...schemaPop," : "...binary.import(),";
+
+	const extraImports = extras
+		.map((e) => `\nimport { ${e.importName} } from ${JSON.stringify(e.importPath)};`)
+		.join("");
+	const extraSpreads = extras
+		.map((e) => `\n\t...${e.importName}.import(),`)
+		.join("");
+
 	return `${header}
-import { scope } from "schema-pop";
-import { binary } from "schema-pop";${fnItems.length ? `\nimport type { FunctionPlan } from "schema-pop";` : ""}
+${importBlock}${extraImports}
 
 export const ${scopeName} = scope({
-\t...binary.import(),
+\t${baseSpread}${extraSpreads}
 ${aliases.map((a) => indent(a, 1)).join(",\n")}${aliases.length ? "," : ""}
 });
 ${fnsBlock}${skipped}`;
+}
+
+/**
+ * Recursive predicate over every `RustType` reachable from a list of
+ * top-level items (struct fields, alias RHS, enum variant payloads).
+ * Used to detect whether the output needs an extra import (`bitwise`,
+ * `migrations`, etc.) before we render it.
+ */
+function anyTypeMatches(
+	items: RustItem[],
+	pred: (t: RustType) => boolean,
+): boolean {
+	const visit = (t: RustType): boolean => {
+		if (pred(t)) return true;
+		if (t.kind === "array" || t.kind === "vec") return visit(t.item);
+		if (t.kind === "option") return visit(t.inner);
+		return false;
+	};
+	for (const item of items) {
+		if (item.kind === "struct") {
+			for (const f of item.fields) if (visit(f.type)) return true;
+		} else if (item.kind === "alias") {
+			if (visit(item.type)) return true;
+		} else if (item.kind === "enum") {
+			for (const v of item.variants) {
+				if (v.kind === "tuple") {
+					for (const t of v.types) if (visit(t)) return true;
+				} else if (v.kind === "struct") {
+					for (const f of v.fields) if (visit(f.type)) return true;
+				}
+			}
+		}
+	}
+	return false;
 }
 
 /**
@@ -112,6 +194,14 @@ function emitFieldLiteral(t: RustType): string {
 		case "option": {
 			return `{ kind: "optional", inner: ${emitFieldLiteral(t.inner)} }`;
 		}
+		case "bit": {
+			// Bitfields don't appear in function-arg position in any
+			// language we cover; we still emit a valid Field so the
+			// downstream pipeline doesn't choke on the variant.
+			return `{ kind: "primitive", name: ${JSON.stringify(t.underlying)}, size: 0, align: 1, paddedSize: 0, popKind: "bitwise" /* bit width: ${t.widthBits} */ }`;
+		}
+		case "unknown":
+			return `{ kind: "any" /* originally: ${escapeJsBlock(t.raw)} */ }`;
 		case "unsupported":
 			// `()` (Rust unit) and `void` (C) → encode as `unit` field.
 			if (t.raw === "()" || t.raw === "void") {
@@ -268,9 +358,26 @@ function emitTypeAsString(t: RustType): string {
 			const inner = innerStringForArktype(t.item);
 			return JSON.stringify(`${inner}[]`);
 		}
+		case "bit":
+			return JSON.stringify(bitTypeString(t.widthBits, t.underlying));
+		case "unknown":
+			return `"unknown" /* originally: ${escapeJsBlock(t.raw)} */`;
 		case "unsupported":
-			return `/* unsupported: ${t.raw} */ "any"`;
+			// arktype has no `"any"` keyword — `"unknown"` is the top type.
+			return `"unknown" /* unsupported: ${escapeJsBlock(t.raw)} */`;
 	}
+}
+
+/**
+ * Render a bit-packed field as a schema-pop arktype expression. Widths
+ * 1..7 map to the predefined `u1`..`u7` aliases (which are the common
+ * case for flag/mode fields). Wider bitfields fall back to the generic
+ * `Bit<underlying, N>` form, since schema-pop's `bitwise` scope only
+ * predefines the small widths.
+ */
+function bitTypeString(widthBits: number, underlying: string): string {
+	if (widthBits >= 1 && widthBits <= 7) return `u${widthBits}`;
+	return `Bit<${underlying}, ${widthBits}>`;
 }
 
 function innerStringForArktype(t: RustType): string {
@@ -288,7 +395,12 @@ function innerStringForArktype(t: RustType): string {
 	if (t.kind === "option") {
 		return `${innerStringForArktype(t.inner)} | undefined`;
 	}
-	return "any";
+	if (t.kind === "bit") return bitTypeString(t.widthBits, t.underlying);
+	if (t.kind === "unknown") return "unknown";
+	// `unsupported` and any other shape we can't render into a string-form
+	// arktype expression collapse to `unknown` (the top type) so the
+	// generated scope still loads.
+	return "unknown";
 }
 
 function quoteFieldName(name: string): string {

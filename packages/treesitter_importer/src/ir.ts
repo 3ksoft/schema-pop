@@ -27,6 +27,21 @@ export type RustType =
 	| { kind: "option"; inner: RustType }
 	| { kind: "vec"; item: RustType }
 	| { kind: "string" }
+	/**
+	 * Bit-packed field — typically C `uint8_t a : 3` or Rust bitfields via
+	 * a crate. `widthBits` is the declared width; `underlying` is the
+	 * storage type as written in source (used to render `Bit<u32, 12>`
+	 * when the width exceeds the schema-pop u1..u7 aliases).
+	 */
+	| { kind: "bit"; widthBits: number; underlying: RustPrimitive }
+	/**
+	 * Type that resolved to a name we don't have in scope (e.g. `size_t`
+	 * with no `<stddef.h>` available, or a project-local typedef from a
+	 * header we didn't import). Renders as the arktype `"unknown"`
+	 * keyword so loading the scope doesn't throw — `raw` carries the
+	 * original spelling for the doc trail.
+	 */
+	| { kind: "unknown"; raw: string }
 	| { kind: "unsupported"; raw: string };
 
 export type RustField = {
