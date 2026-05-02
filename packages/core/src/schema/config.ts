@@ -3,38 +3,41 @@ import type { ExporterPlugin } from "./exporter";
 import type { BindingSpec } from "../bind";
 
 /**
- * The ground-truth shape for a schema file:
- *   `<name>.pop.ts(x)`           → version defaults to "1"
- *   `<name>.<version>.pop.ts(x)` → version explicit
+ * Parse a schema filename. The `.pop` segment is a convention, not a
+ * requirement — when it's there we strip it, when it isn't we accept
+ * the file as-is. Whatever your discovery glob pulls in, that's what
+ * gets loaded.
  *
- * Examples:
- *   konektor.pop.ts            → name="konektor", version="1"
- *   konektor.1.0.pop.ts        → name="konektor", version="1.0"
- *   konektor.2.0.pop.ts        → name="konektor", version="2.0"
- *   wire.0.0.728.pop.ts        → name="wire",     version="0.0.728"
+ *   konektor.pop.ts        → name="konektor", version="1"
+ *   konektor.ts            → name="konektor", version="1"
+ *   konektor.1.0.pop.ts    → name="konektor", version="1.0"
+ *   konektor.1.0.ts        → name="konektor", version="1.0"
+ *   wire.0.0.728.pop.ts    → name="wire",     version="0.0.728"
  *
- * Single-version schemas don't need to type the version in the
- * filename — it stays `<name>.pop.ts` until a second version is
- * added (at which point the user renames v1 to `<name>.1.pop.ts`
- * and adds `<name>.2.pop.ts`).
+ * Default discovery glob (`**\/*.pop.ts`) keeps the convention so
+ * unrelated `.ts` files in the project don't get swept in by accident.
+ * Override `defineConfig.schemas` to widen (e.g. `./src/schema/*.ts`)
+ * when you don't want to retype every file's extension.
  *
  * Schema name can't contain dots. Returns `null` when the basename
- * doesn't match — caller decides whether to skip the file or
- * surface an error.
+ * is empty or starts with a dot — caller decides whether to skip
+ * the file or surface an error.
  */
 export function parseSchemaFilename(
 	filePath: string,
 ): { schemaName: string; version: string } | null {
 	const base = path.basename(filePath);
-	const stripped = base.replace(/\.tsx?$/, "");
-	if (!stripped.endsWith(".pop")) return null;
-	const core = stripped.slice(0, -".pop".length);
-	if (!core) return null;
-	const dotIdx = core.indexOf(".");
-	if (dotIdx === -1) return { schemaName: core, version: "1" };
+	let stripped = base.replace(/\.tsx?$/, "");
+	if (!stripped) return null;
+	if (stripped.endsWith(".pop")) {
+		stripped = stripped.slice(0, -".pop".length);
+		if (!stripped) return null;
+	}
+	const dotIdx = stripped.indexOf(".");
+	if (dotIdx === -1) return { schemaName: stripped, version: "1" };
 	if (dotIdx === 0) return null;
-	const schemaName = core.slice(0, dotIdx);
-	const version = core.slice(dotIdx + 1);
+	const schemaName = stripped.slice(0, dotIdx);
+	const version = stripped.slice(dotIdx + 1);
 	if (!version) return null;
 	return { schemaName, version };
 }

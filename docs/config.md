@@ -43,25 +43,30 @@ Reads stdin when input is `-` or omitted on a pipe. `-t` accepts `rust | c | cpp
 
 ## 2. Schema filenames
 
-The default discovery glob (`./**/*.pop.ts`) plus the basename rule below is **convention** — what the parser uses when nothing else tells it otherwise. Both layers can be overridden: the glob via `defineConfig.schemas`, and the parsed `schemaName` / `version` via the schema's own `schemaPop({ schemaName, version }, scope)` config (see section 3).
+The default discovery glob (`./**/*.pop.ts`) and the basename rule below are **convention** — they tell the parser what to do when nothing else overrides. Both layers are flexible: widen the glob via `defineConfig.schemas` to whatever you actually use, and pin `schemaName` / `version` via `schemaPop({ schemaName, version }, scope)` when the filename can't tell the truth (see section 3).
 
 ```
 <schemaName>.pop.ts(x)             → version defaults to "1"
 <schemaName>.<version>.pop.ts(x)   → version explicit
+<schemaName>.ts(x)                 → also fine, .pop is optional
+<schemaName>.<version>.ts(x)       → also fine
 ```
 
 ```
 src/fields.pop.ts              → name "fields",   version "1"
 src/konektor.1.0.pop.ts        → name "konektor", version "1.0"
 src/konektor.2.0.pop.ts        → name "konektor", version "2.0"
+src/widgets.ts                 → name "widgets",  version "1"
 schemas/wire.0.0.728.pop.ts    → name "wire",     version "0.0.728"
 ```
 
-Single-version schemas don't need the version segment in the filename — leave it off until you need v2 (then rename v1 to `<name>.1.pop.ts` and add `<name>.2.pop.ts`).
+Rule: split off `.tsx?$`, then optionally peel `.pop$`. If what's left has no dot it's the schema name (version defaults to `"1"`); otherwise everything before the first remaining `.` is the schema name and the rest is the version. Schema names can't contain dots.
 
-Rule: split off `.tsx?$`, then `.pop$`. If what's left has no dot it's the schema name (version defaults to `"1"`); otherwise everything before the first remaining `.` is the schema name and the rest is the version. Schema names can't contain dots.
+Single-version schemas don't need the version segment — leave it off until you need v2.
 
-Files that don't match the pattern are logged and skipped **unless** their `schemaPop({...})` call sets both `schemaName` and `version` — in which case the config wins and the file joins the build as if it were named `<schemaName>.<version>.pop.ts`. Useful for importer-generated files (`wifi-types.gen.ts` etc.) you don't want to rename.
+Files that the parser can't classify (empty basename, leading dot) are logged and skipped **unless** their `schemaPop({...})` call sets both `schemaName` and `version` — in which case the config wins and the file joins the build under those names. Useful for importer-generated files you don't want to rename.
+
+> If you don't like the `.pop.ts` convention at all, set `schemas: "./src/schema/*.ts"` (or wherever you keep schemas) and just use plain `.ts` filenames. Discovery is whatever your glob says it is.
 
 ### Single-version namespace
 
