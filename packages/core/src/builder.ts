@@ -5,6 +5,11 @@ import { createJiti } from "jiti";
 import { SchemaAnalyzer } from "./layout/analyzer";
 import { runBindings, isArktypeScope, type BindingSpec } from "./bind";
 import { diffPlans } from "./migrations";
+import { compareVersions, parseSchemaFilename, type PopConfig } from "./schema/config";
+import {
+	getSchemaPopConfig,
+	type SchemaPopConfig,
+} from "./schema/schema-pop";
 import type { ExporterPlugin, LayoutPlan } from "./schema/index";
 import { renderComment } from "./utils/comments";
 
@@ -48,6 +53,65 @@ type MigrationSummary = {
 	userSupplied: { typeName: string; reasons: string[] }[];
 };
 
+interface EffectiveConfig {
+	endian: "le" | "be";
+	wordSize: 32 | 64;
+	autoLayout: boolean;
+	layout: "aligned" | "zero-padding" | "std140" | "std430" | "dynamic";
+	mode: "binary" | "rich";
+}
+
+function mergeConfigs(
+	global: PopConfig,
+	file: SchemaPopConfig | undefined,
+): EffectiveConfig {
+	const f = file ?? {};
+	return {
+		endian: f.endian ?? global.endian ?? "le",
+		wordSize: f.wordSize ?? global.wordSize ?? 64,
+		autoLayout: f.autoLayout ?? global.autoLayout ?? true,
+		layout: f.layout ?? global.layout ?? "aligned",
+		mode: f.mode ?? global.mode ?? "binary",
+	};
+}
+
+function resolveTargets(
+	global: PopConfig,
+	file: SchemaPopConfig | undefined,
+): ExporterPlugin<any>[] {
+	const fileTargets = file?.targets ?? [];
+	const globalTargets = global.targets ?? [];
+	const extendsTargets = file?.extendsTargets ?? true;
+	if (fileTargets.length === 0) return globalTargets;
+	if (!extendsTargets) return fileTargets;
+	return [...globalTargets, ...fileTargets];
+}
+
+function findScope(module: Record<string, unknown>): unknown {
+	if (module["$"]) return module["$"];
+	for (const v of Object.values(module)) {
+		if (isArktypeScope(v)) return v;
+	}
+	return undefined;
+}
+
+function expandGlobs(patterns: string[], rootDir: string): string[] {
+	const Bun = (globalThis as { Bun?: { Glob?: any } }).Bun;
+	if (!Bun?.Glob) {
+		throw new Error(
+			"schema-pop discovery requires Bun's runtime (Bun.Glob is not available).",
+		);
+	}
+	const seen = new Set<string>();
+	for (const pat of patterns) {
+		const glob = new Bun.Glob(pat);
+		for (const f of glob.scanSync({ cwd: rootDir, absolute: true })) {
+			seen.add(f as string);
+		}
+	}
+	return [...seen].sort();
+}
+
 export async function buildConfig(
 	configPath: string,
 	ctx?: { addWatchFile?: (p: string) => void },
@@ -58,9 +122,15 @@ export async function buildConfig(
 		throw new Error(`Configuration file not found: ${resolvedPath}`);
 	}
 	const rootDir = path.dirname(resolvedPath);
-	const configModule = (await jiti.import(resolvedPath)) as any;
-	const config = configModule.default || configModule.config || configModule;
-	if (config.schemas?.length) await buildSchema(config, rootDir, ctx);
+	const configModule = (await jiti.import(resolvedPath)) as Record<
+		string,
+		unknown
+	>;
+	const config =
+		(configModule["default"] as PopConfig | undefined) ??
+		(configModule["config"] as PopConfig | undefined) ??
+		(configModule as unknown as PopConfig);
+	await buildSchema(config, rootDir, ctx);
 	const bindings = config.bindings as BindingSpec[] | undefined;
 	if (bindings?.length) {
 		await runBindings(bindings, rootDir);
@@ -69,7 +139,7 @@ export async function buildConfig(
 
 export function generateTypes(schema: LayoutPlan, target: ExporterPlugin<any>) {
 	const config = target.config;
-	let code = target.generate(schema);
+	const code = target.generate(schema);
 	if (typeof code === "string" && code && !config.noWrap) {
 		return code;
 	}
@@ -77,7 +147,7 @@ export function generateTypes(schema: LayoutPlan, target: ExporterPlugin<any>) {
 }
 
 export async function buildSchema(
-	config: any,
+	config: PopConfig,
 	rootDir: string,
 	ctx?: { addWatchFile?: (p: string) => void },
 ) {
@@ -94,80 +164,99 @@ export async function buildSchema(
 	> = {};
 	const migrationSummaries: MigrationSummary[] = [];
 
-	for (const schema of config.schemas || []) {
-		const versions = schema.versions || [];
-		const targets = schema.targets || config.targets || [];
-		let previousVersion: string | null = null;
-		let previousPlan: LayoutPlan | null = null;
+	// 1. Discover schema files via glob (default ./**/*.pop.ts).
+	const patternsRaw = config.schemas;
+	const patterns: string[] = Array.isArray(patternsRaw)
+		? patternsRaw
+		: typeof patternsRaw === "string"
+			? [patternsRaw]
+			: ["**/*.pop.ts", "**/*.pop.tsx"];
+	const candidateFiles = expandGlobs(patterns, rootDir);
 
-		for (let i = 0; i < versions.length; i++) {
-			const v = versions[i]!;
-			const safeVersion = schema.name
-				? `${schema.name}_${v.version}`
-				: v.version;
-			const isLatest = i === versions.length - 1;
-			const filePath = path.resolve(
-				rootDir,
-				v.source.endsWith(".ts") ? v.source : v.source + ".ts",
+	// 2. Parse filenames → groups by schemaName.
+	type DiscoveredFile = { version: string; path: string };
+	const groups = new Map<string, DiscoveredFile[]>();
+	for (const file of candidateFiles) {
+		const parsed = parseSchemaFilename(file);
+		if (!parsed) {
+			console.warn(
+				`⚠️  [Schema-Pop] Skipping ${path.relative(rootDir, file)}: filename doesn't match <name>.<version>.pop.ts`,
 			);
+			continue;
+		}
+		const list = groups.get(parsed.schemaName);
+		const entry: DiscoveredFile = { version: parsed.version, path: file };
+		if (list) list.push(entry);
+		else groups.set(parsed.schemaName, [entry]);
+	}
 
-			if (!fs.existsSync(filePath)) {
-				console.error(`❌ [Schema-Pop] File not found: ${filePath}`);
-				continue;
-			}
+	if (groups.size === 0) {
+		console.warn(
+			`⚠️  [Schema-Pop] No schema files matched ${patterns.join(", ")} under ${rootDir}`,
+		);
+		return;
+	}
 
-			if (ctx?.addWatchFile) ctx.addWatchFile(filePath);
+	// 3. For each group: sort versions, load files, run analyzer + emit.
+	const groupNames = [...groups.keys()].sort();
+	for (const schemaName of groupNames) {
+		const files = groups.get(schemaName)!;
+		files.sort((a, b) => compareVersions(a.version, b.version));
 
-			const module = (await jiti.import(filePath)) as any;
-			// Resolution order:
-			// 1. Explicit `versions[].exportName` (errors if missing).
-			// 2. Conventional `$` and the schema's name (existing behavior).
-			// 3. Any other named export that duck-types as an arktype scope —
-			//    this lets schemas use `export const konektor = scope({...})`
-			//    without configuring `exportName` per version.
-			let scope: any = undefined;
-			let scopeSource = "";
-			if (v.exportName) {
-				scope = module[v.exportName];
-				scopeSource = v.exportName;
-			} else if (module["$"]) {
-				scope = module["$"];
-				scopeSource = "$";
-			} else if (schema.name && module[schema.name]) {
-				scope = module[schema.name];
-				scopeSource = schema.name;
-			} else {
-				const candidate = Object.entries(module).find(
-					([, val]) => isArktypeScope(val),
-				);
-				if (candidate) {
-					scope = candidate[1];
-					scopeSource = candidate[0];
+		// Load all files; log+continue on per-file errors.
+		type Loaded = {
+			version: string;
+			path: string;
+			scope: any;
+			fileCfg: SchemaPopConfig | undefined;
+			mod: Record<string, unknown>;
+		};
+		const loaded: Loaded[] = [];
+		for (const f of files) {
+			if (ctx?.addWatchFile) ctx.addWatchFile(f.path);
+			try {
+				const mod = (await jiti.import(f.path)) as Record<string, unknown>;
+				const scope = findScope(mod);
+				if (!scope) {
+					console.error(
+						`❌ [Schema-Pop] No arktype scope export in ${path.relative(rootDir, f.path)} — skipping.`,
+					);
+					continue;
 				}
+				const fileCfg = getSchemaPopConfig(scope);
+				loaded.push({ version: f.version, path: f.path, scope, fileCfg, mod });
+			} catch (e) {
+				console.error(
+					`❌ [Schema-Pop] Failed to load ${path.relative(rootDir, f.path)}: ${(e as Error).message}`,
+				);
 			}
+		}
+		if (loaded.length === 0) continue;
 
-			if (!scope) {
-				console.error(`❌ [Schema-Pop] No export found in ${filePath}.`);
-				continue;
-			}
-			void scopeSource;
+		// Effective config + targets: take the highest version's
+		// `schemaPop()` config as the source of truth (older versions
+		// usually don't even need a wrap). Layout / endian / mode flags
+		// can still vary per version if the user explicitly wraps each.
+		const latest = loaded[loaded.length - 1]!;
+		const targets = resolveTargets(config, latest.fileCfg);
 
-			const analyzer = new SchemaAnalyzer(scope, {
-				wordSize: config.wordSize,
-				autoLayout:
-					schema.autoLayout !== undefined
-						? schema.autoLayout
-						: config.autoLayout,
-				layoutType: schema.layout || config.layout || "aligned",
-				mode: v.mode === "rich" ? "rich" : "binary",
+		let previousPlan: LayoutPlan | null = null;
+		for (let i = 0; i < loaded.length; i++) {
+			const v = loaded[i]!;
+			const isLatest = i === loaded.length - 1;
+			const eff = mergeConfigs(config, v.fileCfg);
+			const safeVersion = `${schemaName}_${v.version}`;
+
+			const analyzer = new SchemaAnalyzer(v.scope, {
+				wordSize: eff.wordSize,
+				autoLayout: eff.autoLayout,
+				layoutType: eff.layout,
+				mode: eff.mode,
 			});
-			const plan = analyzer.analyze(safeVersion, config.endian || "le");
+			const plan = analyzer.analyze(safeVersion, eff.endian);
 
 			// Attach function declarations from the same module if exported.
-			// Importers (tree-sitter / clang) emit these as a named array
-			// alongside the arktype scope; the analyzer never produces them
-			// because functions aren't part of arktype's domain.
-			const functions = module["functions"];
+			const functions = v.mod["functions"];
 			if (Array.isArray(functions) && functions.length > 0) {
 				plan.functions = functions;
 			}
@@ -175,14 +264,19 @@ export async function buildSchema(
 			for (const target of targets) {
 				const instance = target as ExporterPlugin<any>;
 				const targetConfig = instance.config;
-				const dest = targetConfig.dest;
 
+				// Resolve `dest`: per-target wins; else `<destDir>/<schemaName>.<ext>`.
+				let dest: string | undefined = targetConfig.dest;
+				if (!dest && config.destDir) {
+					const ext = instance.extension ?? instance.name;
+					dest = path.join(config.destDir, `${schemaName}.${ext}`);
+				}
 				if (!dest) continue;
 
-				if (!instance.wrapVersion && versions.length > 1) {
+				if (!instance.wrapVersion && loaded.length > 1) {
 					if (!isLatest) continue;
 					console.warn(
-						`⚠️  [Schema-Pop] Exporter "${instance.name}" only supports a single version! Only latest schema version will be exported to ${dest}`,
+						`⚠️  [Schema-Pop] Exporter "${instance.name}" only supports a single version — only ${schemaName}@${v.version} (latest) emitted to ${dest}`,
 					);
 				}
 
@@ -200,10 +294,7 @@ export async function buildSchema(
 					}
 					const entry = targetContents[dest]!;
 					entry.plans.push(plan);
-					entry.contributors.push({
-						schemaName: schema.name || "",
-						version: v.version,
-					});
+					entry.contributors.push({ schemaName, version: v.version });
 
 					if (instance.wrapVersion) {
 						content = instance.wrapVersion(safeVersion, content);
@@ -212,7 +303,6 @@ export async function buildSchema(
 
 					if (
 						instance.wrapVersion &&
-						previousVersion &&
 						previousPlan &&
 						instance.generateMigration
 					) {
@@ -221,7 +311,7 @@ export async function buildSchema(
 						migrationSummaries.push(
 							buildMigrationSummary(
 								instance.name,
-								schema.name || "",
+								schemaName,
 								previousPlan,
 								plan,
 							),
@@ -239,20 +329,21 @@ export async function buildSchema(
 								contributors: [],
 							};
 						}
-						targetContents[fileDest].plans.push(plan);
-						targetContents[fileDest].contributors.push({
-							schemaName: schema.name || "",
+						targetContents[fileDest]!.plans.push(plan);
+						targetContents[fileDest]!.contributors.push({
+							schemaName,
 							version: v.version,
 						});
-						targetContents[fileDest].body += (subContent as string) + "\n";
+						targetContents[fileDest]!.body +=
+							(subContent as string) + "\n";
 					}
 				}
 			}
-			previousVersion = safeVersion;
 			previousPlan = plan;
 		}
 	}
 
+	// 4. Write all aggregated outputs.
 	for (const dest in targetContents) {
 		const entry = targetContents[dest]!;
 		const { targetInstance, targetConfig } = entry;
@@ -260,10 +351,10 @@ export async function buildSchema(
 
 		let finalFile = "";
 		if (!targetConfig.noHeader) {
-			const endianStr = config.endian === "be" ? "Big Endian" : "Little Endian";
+			const endianStr = (config.endian ?? "le") === "be"
+				? "Big Endian"
+				: "Little Endian";
 			const lines = [`AUTO GENERATED BY schema-pop@${getSchemaPopVersion()}`];
-			// Dedupe contributors so two versions of the same schema don't
-			// list the schema name twice in the schemas line.
 			const seen = new Set<string>();
 			const schemasList: string[] = [];
 			for (const c of entry.contributors) {
@@ -306,7 +397,9 @@ export async function buildSchema(
 
 		if (path.extname(absDest)) {
 			fs.writeFileSync(absDest, finalFile);
-			console.log(`✅ [Schema-Pop] Generated: ${dest}`);
+			console.log(
+				`✅ [Schema-Pop] Generated: ${path.relative(rootDir, absDest)}`,
+			);
 		}
 
 		if (targetInstance.getHarness) {
@@ -336,7 +429,12 @@ function buildMigrationSummary(
 	let autoCount = 0;
 	const userSupplied: { typeName: string; reasons: string[] }[] = [];
 	for (const td of diff.types) {
-		if (td.kind === "unchanged" || td.kind === "added" || td.kind === "removed") continue;
+		if (
+			td.kind === "unchanged" ||
+			td.kind === "added" ||
+			td.kind === "removed"
+		)
+			continue;
 		if (td.status === "auto") {
 			autoCount++;
 			continue;

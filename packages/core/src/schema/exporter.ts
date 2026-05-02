@@ -30,6 +30,12 @@ export type BaseConfig = typeof BaseConfig.infer;
 export interface ExporterPlugin<TConfig extends BaseConfig = BaseConfig> {
 	name: string;
 	config: TConfig;
+	/**
+	 * Default file extension (without leading dot) for output files
+	 * when the user sets `defineConfig.destDir` instead of explicit
+	 * `dest` per target. Falls back to `name` when omitted.
+	 */
+	extension?: string;
 	generate: (plan: LayoutPlan) => string | Record<string, string>;
 	wrapVersion?: (version: string, code: string) => string;
 	getFileHeader?: () => string;
