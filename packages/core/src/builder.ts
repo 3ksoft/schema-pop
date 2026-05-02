@@ -173,21 +173,62 @@ export async function buildSchema(
 			: ["**/*.pop.ts", "**/*.pop.tsx"];
 	const candidateFiles = expandGlobs(patterns, rootDir);
 
-	// 2. Parse filenames → groups by schemaName.
-	type DiscoveredFile = { version: string; path: string };
-	const groups = new Map<string, DiscoveredFile[]>();
+	// 2. Load each candidate file and resolve (schemaName, version).
+	//    The filename pattern is the convention; an explicit
+	//    `schemaPop({ schemaName, version }, scope)` overrides it so a
+	//    file outside the naming convention can still join the build
+	//    (e.g. importer-generated `wifi-types.gen.ts`).
+	type Loaded = {
+		version: string;
+		path: string;
+		scope: any;
+		fileCfg: SchemaPopConfig | undefined;
+		mod: Record<string, unknown>;
+	};
+	const groups = new Map<string, Loaded[]>();
 	for (const file of candidateFiles) {
-		const parsed = parseSchemaFilename(file);
-		if (!parsed) {
-			console.warn(
-				`⚠️  [Schema-Pop] Skipping ${path.relative(rootDir, file)}: filename doesn't match <name>.<version>.pop.ts`,
+		if (ctx?.addWatchFile) ctx.addWatchFile(file);
+		let mod: Record<string, unknown>;
+		try {
+			mod = (await jiti.import(file)) as Record<string, unknown>;
+		} catch (e) {
+			console.error(
+				`❌ [Schema-Pop] Failed to load ${path.relative(rootDir, file)}: ${(e as Error).message}`,
 			);
 			continue;
 		}
-		const list = groups.get(parsed.schemaName);
-		const entry: DiscoveredFile = { version: parsed.version, path: file };
+		const scope = findScope(mod);
+		if (!scope) {
+			console.error(
+				`❌ [Schema-Pop] No arktype scope export in ${path.relative(rootDir, file)} — skipping.`,
+			);
+			continue;
+		}
+		const fileCfg = getSchemaPopConfig(scope);
+
+		let schemaName: string | undefined;
+		let version: string | undefined;
+		if (fileCfg?.schemaName && fileCfg?.version) {
+			schemaName = fileCfg.schemaName;
+			version = fileCfg.version;
+		} else {
+			const parsed = parseSchemaFilename(file);
+			if (parsed) {
+				schemaName = parsed.schemaName;
+				version = parsed.version;
+			}
+		}
+		if (!schemaName || !version) {
+			console.warn(
+				`⚠️  [Schema-Pop] ${path.relative(rootDir, file)}: filename doesn't match <name>.<version>.pop.ts and \`schemaPop({...})\` didn't set both \`schemaName\` and \`version\` — skipping.`,
+			);
+			continue;
+		}
+
+		const entry: Loaded = { version, path: file, scope, fileCfg, mod };
+		const list = groups.get(schemaName);
 		if (list) list.push(entry);
-		else groups.set(parsed.schemaName, [entry]);
+		else groups.set(schemaName, [entry]);
 	}
 
 	if (groups.size === 0) {
@@ -197,41 +238,11 @@ export async function buildSchema(
 		return;
 	}
 
-	// 3. For each group: sort versions, load files, run analyzer + emit.
+	// 3. For each group: sort versions, run analyzer + emit.
 	const groupNames = [...groups.keys()].sort();
 	for (const schemaName of groupNames) {
-		const files = groups.get(schemaName)!;
-		files.sort((a, b) => compareVersions(a.version, b.version));
-
-		// Load all files; log+continue on per-file errors.
-		type Loaded = {
-			version: string;
-			path: string;
-			scope: any;
-			fileCfg: SchemaPopConfig | undefined;
-			mod: Record<string, unknown>;
-		};
-		const loaded: Loaded[] = [];
-		for (const f of files) {
-			if (ctx?.addWatchFile) ctx.addWatchFile(f.path);
-			try {
-				const mod = (await jiti.import(f.path)) as Record<string, unknown>;
-				const scope = findScope(mod);
-				if (!scope) {
-					console.error(
-						`❌ [Schema-Pop] No arktype scope export in ${path.relative(rootDir, f.path)} — skipping.`,
-					);
-					continue;
-				}
-				const fileCfg = getSchemaPopConfig(scope);
-				loaded.push({ version: f.version, path: f.path, scope, fileCfg, mod });
-			} catch (e) {
-				console.error(
-					`❌ [Schema-Pop] Failed to load ${path.relative(rootDir, f.path)}: ${(e as Error).message}`,
-				);
-			}
-		}
-		if (loaded.length === 0) continue;
+		const loaded = groups.get(schemaName)!;
+		loaded.sort((a, b) => compareVersions(a.version, b.version));
 
 		// Effective config + targets: take the highest version's
 		// `schemaPop()` config as the source of truth (older versions

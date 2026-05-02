@@ -18,6 +18,17 @@ export const SCHEMA_POP_CONFIG = Symbol.for("schema-pop.config");
  * call a schema file inherits everything from `defineConfig`.
  */
 export interface SchemaPopConfig {
+	/**
+	 * Override the schema name parsed from the filename. The
+	 * `<name>.<version>.pop.ts` filename rule is just a convention —
+	 * setting this here lets a file with any name take part in the
+	 * build (e.g. a generated `wifi-types.gen.ts` declaring itself as
+	 * `schemaName: "wifi", version: "1.0"`). Both `schemaName` and
+	 * `version` must be set together; otherwise the builder falls
+	 * back to filename parsing.
+	 */
+	schemaName?: string;
+	version?: string;
 	endian?: "le" | "be";
 	wordSize?: 32 | 64;
 	autoLayout?: boolean;

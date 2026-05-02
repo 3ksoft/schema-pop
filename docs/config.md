@@ -31,6 +31,8 @@ Fields, all optional:
 
 ## 2. Schema filenames
 
+The default discovery glob (`./**/*.pop.ts`) plus the basename rule below is **convention** — what the parser uses when nothing else tells it otherwise. Both layers can be overridden: the glob via `defineConfig.schemas`, and the parsed `schemaName` / `version` via the schema's own `schemaPop({ schemaName, version }, scope)` config (see section 3).
+
 ```
 <schemaName>.<version>.pop.ts(x)
 ```
@@ -44,7 +46,7 @@ schemas/wire.0.0.728.pop.ts    → name "wire",     version "0.0.728"
 
 Rule: split off `.tsx?$`, then `.pop$`, then everything before the first remaining `.` is the schema name; the rest is the version. Schema names can't contain dots.
 
-Files that don't match the pattern are logged and skipped — they don't break the build.
+Files that don't match the pattern are logged and skipped **unless** their `schemaPop({...})` call sets both `schemaName` and `version` — in which case the config wins and the file joins the build as if it were named `<schemaName>.<version>.pop.ts`. Useful for importer-generated files (`wifi-types.gen.ts` etc.) you don't want to rename.
 
 Multi-version: group by name, sort by version (semver, lexicographic fallback), migration emit between consecutive versions. Targets come from the highest-version file; older versions can stay plain `scope({})` exports.
 
@@ -78,6 +80,8 @@ export const $ = schemaPop(
 
 | Field             | Default        | Notes                                                                |
 |-------------------|----------------|----------------------------------------------------------------------|
+| `schemaName`      | from filename  | Override the parsed name. Must be set together with `version`.       |
+| `version`         | from filename  | Override the parsed version. Must be set together with `schemaName`. |
 | `targets`         | —              | Exporters to run for this schema. See `extendsTargets`.              |
 | `extendsTargets`  | `true`         | Append to `defineConfig.targets`. `false` replaces them outright.    |
 | `endian`          | inherited      | Per-schema override.                                                 |
