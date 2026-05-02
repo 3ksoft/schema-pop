@@ -23,7 +23,7 @@ fi
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-PACKAGES=(packages/core packages/core-exporters packages/extra-exporters packages/treesitter_importer packages/create)
+PACKAGES=(packages/core packages/core-exporters packages/extra-exporters packages/treesitter_importer packages/clang_importer packages/importer packages/create)
 
 if [ -z "$DRY_RUN" ]; then
 	echo "==> Bumping all packages to $VERSION (and pinning workspace deps)"
@@ -57,8 +57,18 @@ bun run typecheck
 echo "==> Build"
 bun run build
 
+echo "==> Build importer packages"
+for pkg in packages/treesitter_importer packages/clang_importer packages/importer; do
+	echo "    -> $pkg"
+	(cd "$pkg" && bun run build)
+done
+
 echo "==> Unit tests"
 (cd packages/core && bun test)
+for pkg in packages/treesitter_importer packages/clang_importer; do
+	echo "    -> $pkg"
+	(cd "$pkg" && bun test)
+done
 
 echo "==> Syncing README into core / core-exporters / extra-exporters"
 for pkg in packages/core packages/core-exporters packages/extra-exporters; do
@@ -73,7 +83,7 @@ done
 
 if [ -z "$DRY_RUN" ]; then
 	echo "==> Verifying versions on npm"
-	for p in schema-pop @schema-pop/core-exporters @schema-pop/extra-exporters @schema-pop/treesitter-importer create-schema-pop; do
+	for p in schema-pop @schema-pop/core-exporters @schema-pop/extra-exporters @schema-pop/treesitter-importer @schema-pop/clang-importer @schema-pop/importer create-schema-pop; do
 		printf "    %-35s " "$p"
 		npm view "$p" version 2>/dev/null
 	done

@@ -9,7 +9,7 @@
 	"scripts": {
 		"build": "cd packages/core && bun run build && cd ../core-exporters && bun run build && cd ../extra-exporters && bun run build && cd ../.. && bun run docs:dogfood",
 		"docs:dogfood": "cd docs/dogfood && bunx schema-pop",
-		"typecheck": "cd packages/core && bun run typecheck && cd ../core-exporters && bun run typecheck && cd ../extra-exporters && bun run typecheck && cd ../create && bun run typecheck",
+		"typecheck": "cd packages/core && bun run typecheck && cd ../core-exporters && bun run typecheck && cd ../extra-exporters && bun run typecheck && cd ../create && bun run typecheck && cd ../treesitter_importer && bun run typecheck && cd ../clang_importer && bun run typecheck && cd ../importer && bun run typecheck",
 		"test": "cd packages/core && bun test && cd ../create && bun test",
 		"format": "biome format --write",
 		"format:check": "biome format",
