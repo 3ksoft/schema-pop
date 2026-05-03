@@ -149,13 +149,19 @@ The corpus harness switches to `.layout.json` mode → all 27 emit-time
 bugs go away as a side effect (we never round-trip through the broken
 emit.ts).
 
-### Phase 7 — delete `emit.ts`
+### Phase 7 — DROPPED
 
-Once nothing produces `.pop.ts` from imports, `emit.ts` is dead code.
-Delete it. Tree-sitter walker stays for the **TypeScript schema** ingest
-path (`-l typescript`) which is its own concern — that one consumes a
-hand-written TS file with arktype-style types and emits IR; it never
-needed emit.ts anyway.
+Original plan was to delete `emit.ts` once `.layout.json` was the
+default. Walking through the call sites changed my mind: `emit.ts` is
+the `-o foo.ts` **legacy authoring path** that lets users round-trip
+machine imports through arktype scope source, hand-edit it, and feed
+it back into the build. That workflow has value (debugging, manual
+type curation, integrating imported types into hand-authored schemas)
+and isn't replaced by `.layout.json`.
+
+Decision: keep `emit.ts`. `.layout.json` is the default for batch
+imports (cheap path, no string roundtrip). `.ts` stays opt-in via
+`-o foo.ts` for the hand-edit workflow. Both paths coexist cleanly.
 
 ## Open questions (to answer before coding)
 

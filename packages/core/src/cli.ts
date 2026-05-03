@@ -17,6 +17,10 @@ Usage:
                                       pipe. Output goes to stdout if -o omitted;
                                       type inferred from the -o extension when
                                       -t is missing. Bypasses pop.config.ts.
+                                      Accepts \`.pop.ts\` / \`.tsx\` (arktype
+                                      scope source) OR \`.layout.json\` (a
+                                      LayoutPlan emitted by \`schema-pop-import\`
+                                      — skips analyzer entirely).
   schema-pop emit '<glob>' -t <type> -o <dir>/
                                       Batch mode. Globs and multi-arg inputs
                                       both fan out to \`<dir>/<name>.<ext>\`.
@@ -209,7 +213,12 @@ async function emitCommand(args: string[]) {
 		fs.mkdirSync(absOutDir, { recursive: true });
 		for (const inp of expandedInputs) {
 			const absInp = path.resolve(process.cwd(), inp);
-			const base = path.basename(absInp).replace(/\.(pop\.)?tsx?$/, "");
+			// Strip recognized input extensions: `.pop.ts(x)` / `.ts(x)` for
+			// arktype scope sources, `.layout.json` for importer output.
+			const base = path
+				.basename(absInp)
+				.replace(/\.layout\.json$/, "")
+				.replace(/\.(pop\.)?tsx?$/, "");
 			const dest = path.join(absOutDir, `${base}.${ext}`);
 			try {
 				await emitOne(absInp, typeName, nameOverride, false, dest);
@@ -303,6 +312,41 @@ async function emitOne(
 	if (!exporter) {
 		const known = Object.keys(EMIT_PACKAGE_BY_TYPE).sort().join(", ");
 		throw new Error(`unknown target "${typeName}". Known: ${known}`);
+	}
+
+	// Fast path: `.layout.json` input is already a `LayoutPlan` produced
+	// by the importer (or a previous `schema-pop` run). Skip jiti +
+	// arktype + analyzer entirely — the LayoutPlan IS what exporters
+	// consume, so we hand it through directly. This is the
+	// machine-imported workflow where the source is C / C++ / Rust and
+	// there's no `.pop.ts` to roundtrip through.
+	if (absInput.endsWith(".layout.json")) {
+		const { readLayoutPlan } = await import("./layout-io");
+		const plan = await readLayoutPlan(absInput);
+		const instance = exporter.instance;
+		let content = instance.generate(plan);
+		if (typeof content !== "string") {
+			throw new Error(
+				`${typeName} exporter produces multiple files — write a config + run \`schema-pop\` instead.`,
+			);
+		}
+		// `plan.version` already carries the wrapName produced at build
+		// time (`schemaName` for single-version, `schemaName_version`
+		// when multiple). The `nameOverride` flag wins when set so users
+		// can rename without re-importing.
+		const wrapName = nameOverride ?? plan.version;
+		if (instance.wrapVersion) content = instance.wrapVersion(wrapName, content);
+		if (instance.getFileHeader) content = instance.getFileHeader() + content;
+		if (instance.getFileFooter) content += instance.getFileFooter();
+
+		if (dest) {
+			fs.mkdirSync(path.dirname(dest), { recursive: true });
+			fs.writeFileSync(dest, content);
+			console.error(
+				`✅ [Schema-Pop] Generated: ${path.relative(process.cwd(), dest)}`,
+			);
+		}
+		return content;
 	}
 
 	const jiti = createJiti(import.meta.url);
