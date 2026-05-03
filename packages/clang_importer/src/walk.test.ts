@@ -315,7 +315,7 @@ describe("importFile", () => {
 		}
 	});
 
-	test("bitfields emit as `bit` RustType — uN for N≤7, Bit<u32,N> wider", async () => {
+	test("bitfields emit as `bit` IRType — uN for N≤7, Bit<u32,N> wider", async () => {
 		const ir = await importFile(path.join(FIXTURES, "bits.h"));
 		const status = ir.items.find((i) => i.name === "StatusFlags")!;
 		expect(status.kind).toBe("struct");

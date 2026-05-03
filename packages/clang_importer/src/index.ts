@@ -2,7 +2,7 @@ import * as path from "node:path";
 import {
 	emitArktypeScope,
 	type EmitOptions,
-	type RustModuleIR,
+	type SchemaPopIR,
 } from "@schema-pop/treesitter-importer";
 import {
 	type ClangLang,
@@ -52,7 +52,7 @@ export function langFromPath(filePath: string): ClangLang | null {
 export async function importFile(
 	filePath: string,
 	opts: ImportOptions = {},
-): Promise<RustModuleIR> {
+): Promise<SchemaPopIR> {
 	const abs = path.resolve(filePath);
 	const lang = opts.lang ?? langFromPath(abs);
 	if (!lang) {

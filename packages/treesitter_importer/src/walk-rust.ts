@@ -1,11 +1,11 @@
 import type { Node as TSNode, Tree } from "web-tree-sitter";
 import type {
-	RustField,
-	RustEnumVariant,
-	RustItem,
-	RustModuleIR,
-	RustPrimitive,
-	RustType,
+	IRField,
+	IREnumVariant,
+	IRItem,
+	SchemaPopIR,
+	IRPrimitive,
+	IRType,
 } from "./ir";
 import { downgradeUnknownRefs } from "./known-names";
 
@@ -15,7 +15,7 @@ export interface WalkRustOptions {
 	extraKnownNames?: readonly string[];
 }
 
-const PRIMITIVE_NAMES = new Set<RustPrimitive>([
+const PRIMITIVE_NAMES = new Set<IRPrimitive>([
 	"u8",
 	"u16",
 	"u32",
@@ -40,8 +40,8 @@ export function walkRustFile(
 	tree: Tree,
 	sourcePath: string,
 	opts: WalkRustOptions = {},
-): RustModuleIR {
-	const items: RustItem[] = [];
+): SchemaPopIR {
+	const items: IRItem[] = [];
 	const skipped: { name: string; reason: string }[] = [];
 
 	function visit(node: TSNode, scopePrefix: string) {
@@ -164,7 +164,7 @@ function handleStruct(
 	attrs: string[],
 	doc: string | undefined,
 	scopePrefix: string,
-): Handle<RustItem> {
+): Handle<IRItem> {
 	const nameNode = node.childForFieldName("name");
 	const name = nameNode?.text;
 	if (!name) return { ok: false, name: "<anon>", reason: "no name" };
@@ -194,7 +194,7 @@ function handleStruct(
 		return { ok: false, name: qName, reason: `tuple struct (${body.type})` };
 	}
 
-	const fields: RustField[] = [];
+	const fields: IRField[] = [];
 	let fieldDoc: string[] = [];
 	for (const c of body.namedChildren) {
 		if (!c) continue;
@@ -243,7 +243,7 @@ function handleEnum(
 	attrs: string[],
 	doc: string | undefined,
 	scopePrefix: string,
-): Handle<RustItem> {
+): Handle<IRItem> {
 	const nameNode = node.childForFieldName("name");
 	const name = nameNode?.text;
 	if (!name) return { ok: false, name: "<anon>", reason: "no name" };
@@ -256,7 +256,7 @@ function handleEnum(
 	const body = node.childForFieldName("body");
 	if (!body) return { ok: false, name: qName, reason: "no body" };
 
-	const variants: RustEnumVariant[] = [];
+	const variants: IREnumVariant[] = [];
 	let variantDoc: string[] = [];
 	for (const c of body.namedChildren) {
 		if (!c) continue;
@@ -278,7 +278,7 @@ function handleEnum(
 			continue;
 		}
 		if (vbody.type === "ordered_field_declaration_list") {
-			const types: RustType[] = [];
+			const types: IRType[] = [];
 			for (const t of vbody.namedChildren) {
 				if (!t) continue;
 				if (
@@ -292,7 +292,7 @@ function handleEnum(
 			}
 			variants.push({ kind: "tuple", name: vname, types, doc: vDoc });
 		} else if (vbody.type === "field_declaration_list") {
-			const fields: RustField[] = [];
+			const fields: IRField[] = [];
 			for (const f of vbody.namedChildren) {
 				if (!f || f.type !== "field_declaration") continue;
 				const fnameNode = f.childForFieldName("name");
@@ -361,7 +361,7 @@ function handleFunction(
 	doc: string | undefined,
 	scopePrefix: string,
 	overrideAbi?: string,
-): Handle<RustItem> {
+): Handle<IRItem> {
 	const nameNode = node.childForFieldName("name");
 	const name = nameNode?.text;
 	if (!name) return { ok: false, name: "<anon>", reason: "no name" };
@@ -377,7 +377,7 @@ function handleFunction(
 	const abi = overrideAbi ?? findExternAbi(node);
 
 	const params = node.childForFieldName("parameters");
-	const args: { name?: string; type: RustType }[] = [];
+	const args: { name?: string; type: IRType }[] = [];
 	if (params) {
 		for (const p of params.namedChildren) {
 			if (!p) continue;
@@ -396,7 +396,7 @@ function handleFunction(
 	// Missing `-> Type` in Rust means unit `()`. Map to `{ unsupported, raw: "()" }`
 	// at IR level — the emitter normalizes that to schema-pop's `Field { kind: "unit" }`.
 	const returnTypeNode = node.childForFieldName("return_type");
-	const returnType: RustType = returnTypeNode
+	const returnType: IRType = returnTypeNode
 		? parseRustType(returnTypeNode)
 		: { kind: "unsupported", raw: "()" };
 
@@ -419,7 +419,7 @@ function handleAlias(
 	_attrs: string[],
 	doc: string | undefined,
 	scopePrefix: string,
-): Handle<RustItem> {
+): Handle<IRItem> {
 	const nameNode = node.childForFieldName("name");
 	const name = nameNode?.text;
 	if (!name) return { ok: false, name: "<anon>", reason: "no name" };
@@ -438,12 +438,12 @@ function handleAlias(
 	};
 }
 
-function parseRustType(node: TSNode): RustType {
+function parseRustType(node: TSNode): IRType {
 	switch (node.type) {
 		case "primitive_type": {
 			const n = node.text;
-			if (PRIMITIVE_NAMES.has(n as RustPrimitive)) {
-				return { kind: "primitive", name: n as RustPrimitive };
+			if (PRIMITIVE_NAMES.has(n as IRPrimitive)) {
+				return { kind: "primitive", name: n as IRPrimitive };
 			}
 			// usize/isize/char/str — not part of our binary subset.
 			return { kind: "unsupported", raw: n };

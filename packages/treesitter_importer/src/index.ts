@@ -6,16 +6,16 @@ import { walkCFile } from "./walk-c";
 import { walkCppFile } from "./walk-cpp";
 import { walkTsFile } from "./walk-ts";
 import { emitArktypeScope, type EmitOptions } from "./emit";
-import type { RustModuleIR } from "./ir";
+import type { SchemaPopIR } from "./ir";
 
-export type { RustModuleIR, EmitOptions, Lang };
+export type { SchemaPopIR, EmitOptions, Lang };
 export type { ExtraScope } from "./emit";
 export type {
-	RustField,
-	RustItem,
-	RustEnumVariant,
-	RustType,
-	RustPrimitive,
+	IRField,
+	IRItem,
+	IREnumVariant,
+	IRType,
+	IRPrimitive,
 } from "./ir";
 
 export { parseRust, parseSource, getParser } from "./parser";
@@ -65,7 +65,7 @@ export interface ImportFileOptions {
 export async function importFile(
 	filePath: string,
 	langOrOpts?: Lang | ImportFileOptions,
-): Promise<RustModuleIR> {
+): Promise<SchemaPopIR> {
 	const abs = path.resolve(filePath);
 	const opts: ImportFileOptions =
 		typeof langOrOpts === "string"

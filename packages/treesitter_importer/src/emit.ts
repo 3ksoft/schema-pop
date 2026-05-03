@@ -1,8 +1,8 @@
 import type {
-	RustField,
-	RustItem,
-	RustModuleIR,
-	RustType,
+	IRField,
+	IRItem,
+	SchemaPopIR,
+	IRType,
 } from "./ir";
 
 /**
@@ -42,7 +42,7 @@ export interface ExtraScope {
 }
 
 export function emitArktypeScope(
-	ir: RustModuleIR,
+	ir: SchemaPopIR,
 	opts: EmitOptions = {},
 ): string {
 	const scopeName = opts.scopeName ?? "$";
@@ -56,7 +56,7 @@ export function emitArktypeScope(
 		(i) => i.kind !== "function" && !shadowed.has(i.name),
 	);
 	const fnItems = ir.items.filter(
-		(i): i is Extract<RustItem, { kind: "function" }> =>
+		(i): i is Extract<IRItem, { kind: "function" }> =>
 			i.kind === "function" && !shadowed.has(i.name),
 	);
 
@@ -117,16 +117,16 @@ ${fnsBlock}${skipped}`;
 }
 
 /**
- * Recursive predicate over every `RustType` reachable from a list of
+ * Recursive predicate over every `IRType` reachable from a list of
  * top-level items (struct fields, alias RHS, enum variant payloads).
  * Used to detect whether the output needs an extra import (`bitwise`,
  * `migrations`, etc.) before we render it.
  */
 function anyTypeMatches(
-	items: RustItem[],
-	pred: (t: RustType) => boolean,
+	items: IRItem[],
+	pred: (t: IRType) => boolean,
 ): boolean {
-	const visit = (t: RustType): boolean => {
+	const visit = (t: IRType): boolean => {
 		if (pred(t)) return true;
 		if (t.kind === "array" || t.kind === "vec") return visit(t.item);
 		if (t.kind === "option") return visit(t.inner);
@@ -158,7 +158,7 @@ function anyTypeMatches(
  * bypass the arktype scope entirely).
  */
 function emitFunctions(
-	fns: Extract<RustItem, { kind: "function" }>[],
+	fns: Extract<IRItem, { kind: "function" }>[],
 ): string {
 	const entries = fns.map((fn) => {
 		const argEntries = fn.args.map(
@@ -181,11 +181,11 @@ function emitFunctions(
 }
 
 /**
- * Emit a IR `RustType` as a literal `Field` object compatible with
+ * Emit a IR `IRType` as a literal `Field` object compatible with
  * schema-pop's `Field` union. Used inside function argument / return
  * types where there's no string-form arktype available.
  */
-function emitFieldLiteral(t: RustType): string {
+function emitFieldLiteral(t: IRType): string {
 	switch (t.kind) {
 		case "primitive":
 			return `{ kind: "primitive", name: ${JSON.stringify(t.name)}, size: ${primitiveSize(t.name)}, align: ${primitiveAlign(t.name)}, paddedSize: ${primitiveSize(t.name)}, popKind: "binary" }`;
@@ -244,7 +244,7 @@ function defaultHeader(sourcePath: string): string {
 `;
 }
 
-function emitItem(item: RustItem): string {
+function emitItem(item: IRItem): string {
 	if (item.kind === "struct") {
 		const lines = item.fields
 			.filter((f) => emittableField(f))
@@ -311,11 +311,11 @@ function emitItem(item: RustItem): string {
 	return "";
 }
 
-function emittableField(f: RustField): boolean {
+function emittableField(f: IRField): boolean {
 	return f.type.kind !== "unsupported";
 }
 
-function emitField(f: RustField): string {
+function emitField(f: IRField): string {
 	// Option<T> at field level → "name?": "T" (arktype optional-key form).
 	const docPrefix = jsdoc(f.doc, "\t");
 	if (f.type.kind === "option") {
@@ -346,7 +346,7 @@ function jsdoc(text: string | undefined, pad: string = ""): string {
 	return `${pad}/**\n${body}\n${pad} */\n`;
 }
 
-function emitTypeAsString(t: RustType): string {
+function emitTypeAsString(t: IRType): string {
 	switch (t.kind) {
 		case "primitive":
 			return JSON.stringify(t.name);
@@ -405,7 +405,7 @@ function bitTypeString(widthBits: number, underlying: string): string {
 	return `Bit<${underlying}, ${widthBits}>`;
 }
 
-function innerStringForArktype(t: RustType): string {
+function innerStringForArktype(t: IRType): string {
 	// For nested types inside a string-form arktype expression we strip the
 	// outer quotes. Keep it conservative: only primitive/ref/string forms.
 	if (t.kind === "primitive") return t.name;

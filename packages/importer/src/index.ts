@@ -4,7 +4,7 @@ import {
 	emitArktypeScope,
 	type EmitOptions,
 	type ExtraScope,
-	type RustModuleIR,
+	type SchemaPopIR,
 } from "@schema-pop/treesitter-importer";
 import {
 	importFile as treesitterImport,
@@ -169,7 +169,7 @@ function toRelativeImport(target: string, fromDir: string): string {
 export async function importFile(
 	filePath: string,
 	opts: ImportOptions = {},
-): Promise<RustModuleIR> {
+): Promise<SchemaPopIR> {
 	const abs = path.resolve(filePath);
 	const { engine, lang } = pickEngine(abs, opts);
 	const extraKnownNames = (opts.extras ?? []).flatMap((e) => e.aliases);
@@ -199,9 +199,9 @@ export async function importFile(
 }
 
 function applyFilter(
-	ir: RustModuleIR,
+	ir: SchemaPopIR,
 	filter: "all" | "types" | "functions" | undefined,
-): RustModuleIR {
+): SchemaPopIR {
 	if (!filter || filter === "all") return ir;
 	if (filter === "types") {
 		ir.items = ir.items.filter((i) => i.kind !== "function");

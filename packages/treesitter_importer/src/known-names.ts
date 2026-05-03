@@ -1,4 +1,4 @@
-import type { RustItem, RustType } from "./ir";
+import type { IRItem, IRType } from "./ir";
 
 /**
  * Names schema-pop's `binary` + `bitwise` scopes always provide, plus
@@ -30,7 +30,7 @@ export const SCHEMA_POP_KNOWN_NAMES: ReadonlySet<string> = new Set([
  * Mutates `items` in place.
  */
 export function downgradeUnknownRefs(
-	items: RustItem[],
+	items: IRItem[],
 	extra?: readonly string[],
 ): void {
 	const known = new Set<string>(SCHEMA_POP_KNOWN_NAMES);
@@ -57,7 +57,7 @@ export function downgradeUnknownRefs(
 	}
 }
 
-function downgradeType(t: RustType, known: Set<string>): RustType {
+function downgradeType(t: IRType, known: Set<string>): IRType {
 	switch (t.kind) {
 		case "ref":
 			return known.has(t.name) ? t : { kind: "unknown", raw: t.name };

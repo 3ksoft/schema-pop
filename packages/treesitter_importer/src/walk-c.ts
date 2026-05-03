@@ -1,11 +1,11 @@
 import type { Node as TSNode, Tree } from "web-tree-sitter";
 import type {
-	RustField,
-	RustItem,
-	RustModuleIR,
-	RustPrimitive,
-	RustType,
-	RustEnumVariant,
+	IRField,
+	IRItem,
+	SchemaPopIR,
+	IRPrimitive,
+	IRType,
+	IREnumVariant,
 } from "./ir";
 import { downgradeUnknownRefs } from "./known-names";
 
@@ -31,7 +31,7 @@ export interface WalkCOptions {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const STDINT_ALIASES: Record<string, RustPrimitive> = {
+const STDINT_ALIASES: Record<string, IRPrimitive> = {
 	uint8_t: "u8",
 	uint16_t: "u16",
 	uint32_t: "u32",
@@ -65,7 +65,7 @@ const STDINT_ALIASES: Record<string, RustPrimitive> = {
  * Resolve a `primitive_type` or `sized_type_specifier` text to our IR
  * primitive set. Returns `null` for ambiguous platform-dependent types.
  */
-function resolveCPrimitive(text: string): RustPrimitive | null {
+function resolveCPrimitive(text: string): IRPrimitive | null {
 	const t = text.replace(/\s+/g, " ").trim();
 	switch (t) {
 		case "char":
@@ -106,7 +106,7 @@ export function walkCFile(
 	tree: Tree,
 	sourcePath: string,
 	opts: WalkCOptions = {},
-): RustModuleIR {
+): SchemaPopIR {
 	return walkCLike(tree, sourcePath, { allowClass: false, ...opts });
 }
 
@@ -118,8 +118,8 @@ export function walkCLike(
 	tree: Tree,
 	sourcePath: string,
 	opts: { allowClass: boolean; extraKnownNames?: readonly string[] },
-): RustModuleIR {
-	const items: RustItem[] = [];
+): SchemaPopIR {
+	const items: IRItem[] = [];
 	const skipped: { name: string; reason: string }[] = [];
 
 	function visit(node: TSNode, scopePrefix: string) {
@@ -243,7 +243,7 @@ function handleTypedef(
 	node: TSNode,
 	doc: string | undefined,
 	scopePrefix: string,
-	items: RustItem[],
+	items: IRItem[],
 	skipped: { name: string; reason: string }[],
 	opts: { allowClass: boolean },
 ) {
@@ -330,7 +330,7 @@ function handleBareDeclaration(
 	doc: string | undefined,
 	attrs: string[],
 	scopePrefix: string,
-	items: RustItem[],
+	items: IRItem[],
 	skipped: { name: string; reason: string }[],
 	opts: { allowClass: boolean },
 ) {
@@ -385,7 +385,7 @@ function handleFunctionPrototype(
 	doc: string | undefined,
 	_scopePrefix: string,
 	skipped: { name: string; reason: string }[],
-): RustItem | null {
+): IRItem | null {
 	// Skip definitions with body — we want prototypes only (typical in headers).
 	// Note: `function_definition` is its own top-level node; `declaration` here
 	// means just the prototype.
@@ -402,12 +402,12 @@ function handleFunctionPrototype(
 
 	// Return type lives in the `type` field of the declaration node.
 	const returnTypeNode = declNode.childForFieldName("type");
-	const returnType: RustType = returnTypeNode
+	const returnType: IRType = returnTypeNode
 		? parseCType(returnTypeNode)
 		: { kind: "unsupported", raw: "void" };
 
 	const params = fnDecl.childForFieldName("parameters");
-	const args: { name?: string; type: RustType }[] = [];
+	const args: { name?: string; type: IRType }[] = [];
 	if (params) {
 		for (const p of params.namedChildren) {
 			if (!p) continue;
@@ -449,7 +449,7 @@ function handleFunctionPrototype(
 	};
 }
 
-function markPacked(items: RustItem[], attrs: string[]) {
+function markPacked(items: IRItem[], attrs: string[]) {
 	if (attrs.length === 0 || items.length === 0) return;
 	const last = items[items.length - 1];
 	if (!last) return;
@@ -464,7 +464,7 @@ function handleStructSpecifier(
 	typedefName: string | null,
 	doc: string | undefined,
 	scopePrefix: string,
-	items: RustItem[],
+	items: IRItem[],
 	skipped: { name: string; reason: string }[],
 ) {
 	// Templates → skipped (C++).
@@ -484,7 +484,7 @@ function handleStructSpecifier(
 	if (!body) return;
 
 	const qName = scopePrefix ? `${scopePrefix}::${name}` : name;
-	const fields: RustField[] = [];
+	const fields: IRField[] = [];
 	let fieldDoc: string[] = [];
 	for (const c of body.namedChildren) {
 		if (!c) continue;
@@ -540,7 +540,7 @@ function handleEnumSpecifier(
 	typedefName: string | null,
 	doc: string | undefined,
 	_scopePrefix: string,
-	items: RustItem[],
+	items: IRItem[],
 	_skipped: { name: string; reason: string }[],
 ) {
 	const tagName = node.childForFieldName("name")?.text;
@@ -548,7 +548,7 @@ function handleEnumSpecifier(
 	const body = node.childForFieldName("body");
 	if (!name || !body) return;
 
-	const variants: RustEnumVariant[] = [];
+	const variants: IREnumVariant[] = [];
 	let pendingDoc: string[] = [];
 	for (const c of body.namedChildren) {
 		if (!c) continue;
@@ -587,7 +587,7 @@ function handleUnionSpecifier(
 	_doc: string | undefined,
 	_scopePrefix: string,
 	skipped: { name: string; reason: string }[],
-): RustItem | null {
+): IRItem | null {
 	const tagName = node.childForFieldName("name")?.text;
 	const name = typedefName ?? tagName;
 	if (!name) return null;
@@ -600,7 +600,7 @@ function handleUnionSpecifier(
 	return null;
 }
 
-function parseFieldDeclaration(node: TSNode): RustField | null {
+function parseFieldDeclaration(node: TSNode): IRField | null {
 	// Skip if this is a function pointer declarator or has bitfield_clause.
 	if (
 		node.namedChildren.some(
@@ -638,8 +638,8 @@ function parseFieldDeclaration(node: TSNode): RustField | null {
 
 function parseArrayDeclarator(
 	node: TSNode,
-	baseType: RustType,
-): { name: string; type: RustType } | null {
+	baseType: IRType,
+): { name: string; type: IRType } | null {
 	// Possibly nested for multi-dim arrays: int x[3][4]; we read inside-out.
 	const inner = node.childForFieldName("declarator");
 	const sizeNode = node.childForFieldName("size");
@@ -660,11 +660,11 @@ function parseArrayDeclarator(
 }
 
 /** Map a textual type name to a known primitive, or `null` if not known. */
-function resolveTextToPrimitive(text: string): RustPrimitive | null {
+function resolveTextToPrimitive(text: string): IRPrimitive | null {
 	return STDINT_ALIASES[text] ?? resolveCPrimitive(text) ?? null;
 }
 
-function parseCType(node: TSNode): RustType {
+function parseCType(node: TSNode): IRType {
 	switch (node.type) {
 		case "type_descriptor": {
 			// C++ wraps the type in `type_descriptor` for `using ... = T`. Unwrap.

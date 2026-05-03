@@ -1,11 +1,18 @@
 /**
- * Intermediate representation for Rust types extracted via tree-sitter.
- * Deliberately narrow — covers only what schema-pop's binary layout cares
- * about (FFI / wire-format types). Generics, lifetimes, traits are out of
- * scope; an unrecognized shape becomes `{ kind: "unsupported", raw }`.
+ * Canonical schema-pop importer IR — what every walker (rust /
+ * c / cpp / typescript / clang) produces and what `emitArktypeScope`
+ * consumes. Deliberately narrow: covers FFI / wire-format types
+ * only. Generics, lifetimes, traits are out of scope; an
+ * unrecognized shape becomes `{ kind: "unsupported", raw }`.
+ *
+ * Naming history: types used to be `Rust*`-prefixed because the
+ * importer started Rust-only. They've been agnostic since the C /
+ * C++ / TypeScript walkers landed; the `Rust*` aliases at the
+ * bottom of this file are kept as `@deprecated` shims so external
+ * consumers don't break on the rename.
  */
 
-export type RustPrimitive =
+export type IRPrimitive =
 	| "u8"
 	| "u16"
 	| "u32"
@@ -20,12 +27,12 @@ export type RustPrimitive =
 	| "f64"
 	| "bool";
 
-export type RustType =
-	| { kind: "primitive"; name: RustPrimitive }
+export type IRType =
+	| { kind: "primitive"; name: IRPrimitive }
 	| { kind: "ref"; name: string }
-	| { kind: "array"; item: RustType; len: number }
-	| { kind: "option"; inner: RustType }
-	| { kind: "vec"; item: RustType }
+	| { kind: "array"; item: IRType; len: number }
+	| { kind: "option"; inner: IRType }
+	| { kind: "vec"; item: IRType }
 	| { kind: "string" }
 	/**
 	 * Bit-packed field — typically C `uint8_t a : 3` or Rust bitfields via
@@ -33,7 +40,7 @@ export type RustType =
 	 * storage type as written in source (used to render `Bit<u32, 12>`
 	 * when the width exceeds the schema-pop u1..u7 aliases).
 	 */
-	| { kind: "bit"; widthBits: number; underlying: RustPrimitive }
+	| { kind: "bit"; widthBits: number; underlying: IRPrimitive }
 	/**
 	 * Type that resolved to a name we don't have in scope (e.g. `size_t`
 	 * with no `<stddef.h>` available, or a project-local typedef from a
@@ -44,28 +51,28 @@ export type RustType =
 	| { kind: "unknown"; raw: string }
 	| { kind: "unsupported"; raw: string };
 
-export type RustField = {
+export type IRField = {
 	name: string;
-	type: RustType;
+	type: IRType;
 	doc?: string;
 	pub: boolean;
 };
 
-export type RustEnumVariant =
+export type IREnumVariant =
 	| { kind: "unit"; name: string; doc?: string }
-	| { kind: "tuple"; name: string; types: RustType[]; doc?: string }
-	| { kind: "struct"; name: string; fields: RustField[]; doc?: string };
+	| { kind: "tuple"; name: string; types: IRType[]; doc?: string }
+	| { kind: "struct"; name: string; fields: IRField[]; doc?: string };
 
-export type RustFnArg = {
+export type IRFnArg = {
 	name?: string;
-	type: RustType;
+	type: IRType;
 };
 
-export type RustItem =
+export type IRItem =
 	| {
 			kind: "struct";
 			name: string;
-			fields: RustField[];
+			fields: IRField[];
 			repr?: string[];
 			doc?: string;
 			pub: boolean;
@@ -73,7 +80,7 @@ export type RustItem =
 	| {
 			kind: "enum";
 			name: string;
-			variants: RustEnumVariant[];
+			variants: IREnumVariant[];
 			repr?: string[];
 			doc?: string;
 			pub: boolean;
@@ -81,15 +88,15 @@ export type RustItem =
 	| {
 			kind: "alias";
 			name: string;
-			type: RustType;
+			type: IRType;
 			doc?: string;
 			pub: boolean;
 	  }
 	| {
 			kind: "function";
 			name: string;
-			args: RustFnArg[];
-			returnType: RustType;
+			args: IRFnArg[];
+			returnType: IRType;
 			/**
 			 * Calling convention as written in source: `C` (Rust `extern "C"`),
 			 * `system`, `cdecl`, `stdcall`, `fastcall`. `null` for the
@@ -100,9 +107,9 @@ export type RustItem =
 			pub: boolean;
 	  };
 
-export type RustModuleIR = {
+export type SchemaPopIR = {
 	source: string; // origin file path (relative or absolute, caller's choice)
-	items: RustItem[];
+	items: IRItem[];
 	/** Items skipped because they had unrecognized shape (generics/etc.). */
 	skipped: { name: string; reason: string }[];
 };

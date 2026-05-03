@@ -1,6 +1,6 @@
 import type { Tree } from "web-tree-sitter";
 import { walkCLike, type WalkCOptions } from "./walk-c";
-import type { RustModuleIR } from "./ir";
+import type { SchemaPopIR } from "./ir";
 
 /**
  * tree-sitter-cpp walker. Reuses the C walker with `allowClass: true` so
@@ -18,6 +18,6 @@ export function walkCppFile(
 	tree: Tree,
 	sourcePath: string,
 	opts: WalkCOptions = {},
-): RustModuleIR {
+): SchemaPopIR {
 	return walkCLike(tree, sourcePath, { allowClass: true, ...opts });
 }

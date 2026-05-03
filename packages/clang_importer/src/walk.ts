@@ -1,10 +1,10 @@
 import type {
-	RustField,
-	RustEnumVariant,
-	RustItem,
-	RustModuleIR,
-	RustPrimitive,
-	RustType,
+	IRField,
+	IREnumVariant,
+	IRItem,
+	SchemaPopIR,
+	IRPrimitive,
+	IRType,
 } from "@schema-pop/treesitter-importer";
 import { downgradeUnknownRefs } from "@schema-pop/treesitter-importer";
 import {
@@ -19,7 +19,7 @@ import {
  * users get identical mappings whether they import via clang or
  * tree-sitter.
  */
-const STDINT_ALIASES: Record<string, RustPrimitive> = {
+const STDINT_ALIASES: Record<string, IRPrimitive> = {
 	uint8_t: "u8",
 	uint16_t: "u16",
 	uint32_t: "u32",
@@ -54,7 +54,7 @@ const STDINT_ALIASES: Record<string, RustPrimitive> = {
  * (`int`, `long`) — caller can decide whether to fall through to LP64
  * assumptions or report the type as unsupported.
  */
-function resolveCBuiltin(text: string): RustPrimitive | null {
+function resolveCBuiltin(text: string): IRPrimitive | null {
 	const t = text.replace(/\s+/g, " ").trim();
 	switch (t) {
 		case "char":
@@ -91,7 +91,7 @@ function resolveCBuiltin(text: string): RustPrimitive | null {
 }
 
 /**
- * Resolve a clang `qualType` string to a `RustType`. Pointers are
+ * Resolve a clang `qualType` string to a `IRType`. Pointers are
  * lowered to `ref` (FFI semantics — schema-pop's binary types are
  * value-typed; pointer indirection is the caller's concern). Arrays
  * become `array`. Tag types (`struct X`) become refs to `X`. Anything
@@ -103,7 +103,7 @@ function resolveCBuiltin(text: string): RustPrimitive | null {
 export function resolveQualType(
 	qualTypeRaw: string,
 	opts: { lp64?: boolean } = {},
-): RustType {
+): IRType {
 	const lp64 = opts.lp64 ?? true;
 	let qt = qualTypeRaw
 		.replace(/\bconst\b/g, "")
@@ -298,7 +298,7 @@ function collectText(node: ClangNode): string {
 
 interface WalkContext {
 	inputFile: string;
-	items: RustItem[];
+	items: IRItem[];
 	skipped: { name: string; reason: string }[];
 	emittedNames: Set<string>;
 	/** Map of clang decl id → top-level node, used to resolve `typedef
@@ -326,7 +326,7 @@ export function walkClangAst(
 	root: ClangNode,
 	inputFile: string,
 	opts: WalkOptions = {},
-): RustModuleIR {
+): SchemaPopIR {
 	const ctx: WalkContext = {
 		inputFile,
 		items: [],
@@ -376,7 +376,7 @@ export function walkClangAst(
 function visitTopLevel(
 	node: ClangNode,
 	ctx: WalkContext,
-	resolve: (qt: string) => RustType,
+	resolve: (qt: string) => IRType,
 ) {
 	switch (node.kind) {
 		case "TypedefDecl":
@@ -424,7 +424,7 @@ function visitTopLevel(
 function handleTypedef(
 	node: ClangNode,
 	ctx: WalkContext,
-	resolve: (qt: string) => RustType,
+	resolve: (qt: string) => IRType,
 ) {
 	const name = node.name;
 	if (!name) return;
@@ -510,7 +510,7 @@ function handleRecord(
 	node: ClangNode,
 	typedefName: string | null,
 	ctx: WalkContext,
-	resolve: (qt: string) => RustType,
+	resolve: (qt: string) => IRType,
 	overrideDoc?: string,
 ) {
 	// Only emit complete definitions. Forward decls (`struct Foo;`) have
@@ -550,7 +550,7 @@ function handleRecord(
 		}
 	}
 
-	const fields: RustField[] = [];
+	const fields: IRField[] = [];
 	let skippedAnyField = false;
 	for (const child of node.inner ?? []) {
 		if (child.kind !== "FieldDecl") continue;
@@ -561,7 +561,7 @@ function handleRecord(
 		// Bitfields: clang sets `isBitfield: true` and embeds the width
 		// as a `ConstantExpr.value` integer literal in the FieldDecl's
 		// `inner`. We resolve the storage type from qualType and emit a
-		// `bit`-kind RustType, which the emitter renders as `uN` (1..7)
+		// `bit`-kind IRType, which the emitter renders as `uN` (1..7)
 		// or `Bit<storage, N>` (wider) — both valid schema-pop forms.
 		if (child.isBitfield === true) {
 			const width = extractBitfieldWidth(child);
@@ -710,7 +710,7 @@ function handleEnum(
 	const name = typedefName ?? node.name;
 	if (!name) return;
 
-	const variants: RustEnumVariant[] = [];
+	const variants: IREnumVariant[] = [];
 	for (const child of node.inner ?? []) {
 		if (child.kind !== "EnumConstantDecl") continue;
 		if (!child.name) continue;
@@ -737,7 +737,7 @@ function handleEnum(
 function handleFunction(
 	node: ClangNode,
 	ctx: WalkContext,
-	resolve: (qt: string) => RustType,
+	resolve: (qt: string) => IRType,
 ) {
 	const name = node.name;
 	if (!name) return;
@@ -750,7 +750,7 @@ function handleFunction(
 	const retQt = extractReturnType(fnQt);
 	const returnType = resolveReturnType(retQt, resolve);
 
-	const args: { name?: string; type: RustType }[] = [];
+	const args: { name?: string; type: IRType }[] = [];
 	for (const child of node.inner ?? []) {
 		if (child.kind !== "ParmVarDecl") continue;
 		const argName = child.name || undefined;
@@ -814,13 +814,13 @@ function extractAbi(node: ClangNode): string | undefined {
 }
 
 /**
- * Map a return-type qualType to a `RustType`. `void` → `unsupported`
+ * Map a return-type qualType to a `IRType`. `void` → `unsupported`
  * with raw `"void"`, which the emitter renders as `{ kind: "unit" }`.
  */
 function resolveReturnType(
 	retQt: string,
-	resolve: (qt: string) => RustType,
-): RustType {
+	resolve: (qt: string) => IRType,
+): IRType {
 	if (!retQt) return { kind: "unsupported", raw: "void" };
 	const t = retQt.replace(/\s+/g, " ").trim();
 	if (t === "void") return { kind: "unsupported", raw: "void" };
@@ -838,7 +838,7 @@ function extractReturnType(fnQt: string): string {
 	return fnQt.slice(0, idx).trim();
 }
 
-function pushItem(ctx: WalkContext, item: RustItem) {
+function pushItem(ctx: WalkContext, item: IRItem) {
 	if (ctx.emittedNames.has(item.name)) {
 		// Same name twice — keep the first; record subsequent as skipped.
 		ctx.skipped.push({

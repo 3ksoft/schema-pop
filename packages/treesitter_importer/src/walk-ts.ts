@@ -1,10 +1,10 @@
 import type { Node as TSNode, Tree } from "web-tree-sitter";
 import type {
-	RustEnumVariant,
-	RustField,
-	RustItem,
-	RustModuleIR,
-	RustType,
+	IREnumVariant,
+	IRField,
+	IRItem,
+	SchemaPopIR,
+	IRType,
 } from "./ir";
 import { downgradeUnknownRefs } from "./known-names";
 
@@ -39,7 +39,7 @@ export interface WalkTsOptions {
  *    (lifts to `OriginalType<unknown, '...'>` at emit time).
  */
 
-const TS_PRIMITIVE_KEYWORDS: Record<string, RustType> = {
+const TS_PRIMITIVE_KEYWORDS: Record<string, IRType> = {
 	number: { kind: "primitive", name: "f64" },
 	bigint: { kind: "primitive", name: "i64" },
 	boolean: { kind: "primitive", name: "bool" },
@@ -50,8 +50,8 @@ export function walkTsFile(
 	tree: Tree,
 	sourcePath: string,
 	opts: WalkTsOptions = {},
-): RustModuleIR {
-	const items: RustItem[] = [];
+): SchemaPopIR {
+	const items: IRItem[] = [];
 	const skipped: { name: string; reason: string }[] = [];
 
 	function visit(node: TSNode) {
@@ -98,7 +98,7 @@ export function walkTsFile(
 function handleDecl(
 	node: TSNode,
 	doc: string | undefined,
-	items: RustItem[],
+	items: IRItem[],
 	skipped: { name: string; reason: string }[],
 ): void {
 	switch (node.type) {
@@ -120,7 +120,7 @@ function handleDecl(
 function handleInterface(
 	node: TSNode,
 	doc: string | undefined,
-	items: RustItem[],
+	items: IRItem[],
 	skipped: { name: string; reason: string }[],
 ): void {
 	const name = node.childForFieldName("name")?.text;
@@ -138,7 +138,7 @@ function handleInterface(
 function handleTypeAlias(
 	node: TSNode,
 	doc: string | undefined,
-	items: RustItem[],
+	items: IRItem[],
 	skipped: { name: string; reason: string }[],
 ): void {
 	const name = node.childForFieldName("name")?.text;
@@ -189,12 +189,12 @@ function handleTypeAlias(
 function handleEnum(
 	node: TSNode,
 	doc: string | undefined,
-	items: RustItem[],
+	items: IRItem[],
 ): void {
 	const name = node.childForFieldName("name")?.text;
 	const body = node.childForFieldName("body");
 	if (!name || !body) return;
-	const variants: RustEnumVariant[] = [];
+	const variants: IREnumVariant[] = [];
 	for (const c of body.namedChildren) {
 		if (!c) continue;
 		if (c.type !== "property_identifier" && c.type !== "enum_assignment") continue;
@@ -211,8 +211,8 @@ function collectStructFields(
 	body: TSNode,
 	skipped: { name: string; reason: string }[],
 	parentName: string,
-): RustField[] {
-	const fields: RustField[] = [];
+): IRField[] {
+	const fields: IRField[] = [];
 	let pendingDoc: string[] = [];
 	for (const c of body.namedChildren) {
 		if (!c) continue;
@@ -246,7 +246,7 @@ function collectStructFields(
 	return fields;
 }
 
-function parseProperty(node: TSNode): RustField | null {
+function parseProperty(node: TSNode): IRField | null {
 	const nameNode = node.childForFieldName("name");
 	const typeAnnot = node.namedChildren.find(
 		(c) => c && c.type === "type_annotation",
@@ -289,7 +289,7 @@ function collectStringLiterals(unionNode: TSNode): string[] | null {
 	return lits.length ? lits : null;
 }
 
-function parseTsType(node: TSNode): RustType {
+function parseTsType(node: TSNode): IRType {
 	switch (node.type) {
 		case "predefined_type": {
 			const t = TS_PRIMITIVE_KEYWORDS[node.text];
