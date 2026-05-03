@@ -1,0 +1,40 @@
+{
+  "version": "v1",
+  "endian": "le",
+  "autoLayout": false,
+  "wordSize": 64,
+  "types": [
+    {
+      "kind": "struct",
+      "name": "Tags",
+      "size": 44,
+      "align": 4,
+      "paddedSize": 44,
+      "fields": [
+        {
+          "name": "items",
+          "type": {
+            "kind": "array",
+            "item": {
+              "kind": "primitive",
+              "size": 4,
+              "align": 4,
+              "paddedSize": 4,
+              "name": "u32",
+              "bitSize": 32,
+              "popKind": "binary"
+            },
+            "maxLength": 10
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 352,
+          "size": 44,
+          "paddingAfter": 0,
+          "description": "number <= 4294967295 & >= 0[]"
+        }
+      ],
+      "description": "{ items: number <= 4294967295 & >= 0[] }"
+    }
+  ]
+}

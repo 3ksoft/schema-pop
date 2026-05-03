@@ -303,8 +303,15 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 		commentStyle: "slash",
 		...config,
 	};
-	const { typeName, fieldName, indent, mapScalarField, wrapNamespace, isRichType } =
-		ExporterTools(cfg);
+	const {
+		typeName,
+		fieldName,
+		indent,
+		mapScalarField,
+		wrapNamespace,
+		isRichType,
+		toSafeVersionIdentifier,
+	} = ExporterTools(cfg);
 
 	function fieldRustType(field: Field, fieldSize: number): string {
 		const t = fieldInnerType(field);
@@ -561,8 +568,12 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 		},
 		generateMigration: (fromPlan: LayoutPlan, toPlan: LayoutPlan) => {
 			const diff = diffPlans(fromPlan, toPlan);
-			const fromNs = fromPlan.version;
-			const toNs = toPlan.version;
+			// Module path components must match the namespace identifiers
+			// emitted by `wrapVersion` — both go through `toSafeVersionIdentifier`
+			// so e.g. `1.0` / `test-schema_2.0` become `v1_0` / `test_schema_2_0`
+			// instead of breaking `impl From<...>` parsing.
+			const fromNs = toSafeVersionIdentifier(fromPlan.version);
+			const toNs = toSafeVersionIdentifier(toPlan.version);
 			const blocks: string[] = [];
 			for (const td of diff.types) {
 				const code = renderRustMigration(td, fromNs, toNs);

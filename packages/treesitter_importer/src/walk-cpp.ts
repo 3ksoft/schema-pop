@@ -1,6 +1,6 @@
 import type { Tree } from "web-tree-sitter";
 import { walkCLike, type WalkCOptions } from "./walk-c";
-import type { SchemaPopIR } from "./ir";
+import type { SchemaPopIR } from "schema-pop";
 
 /**
  * tree-sitter-cpp walker. Reuses the C walker with `allowClass: true` so

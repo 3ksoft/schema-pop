@@ -28,7 +28,7 @@ describe("typescript importer — walker", () => {
 			expect(s.fields[0]!.type).toEqual({ kind: "primitive", name: "f64" });
 			expect(s.fields[1]!.type).toEqual({ kind: "string" });
 			expect(s.fields[2]!.type).toEqual({
-				kind: "vec",
+				kind: "array",
 				item: { kind: "primitive", name: "f64" },
 			});
 		}
@@ -39,8 +39,8 @@ describe("typescript importer — walker", () => {
 		const s = r.items[0]!;
 		if (s.kind === "struct") {
 			const note = s.fields.find((f) => f.name === "note")!;
-			expect(note.type.kind).toBe("option");
-			if (note.type.kind === "option") {
+			expect(note.type.kind).toBe("optional");
+			if (note.type.kind === "optional") {
 				expect(note.type.inner).toEqual({ kind: "string" });
 			}
 		}
@@ -88,9 +88,9 @@ describe("typescript importer — walker", () => {
             }
         `);
 		const s = r.items[0]!;
-		expect(s.doc).toContain("Telemetry packet");
+		expect(s.description).toContain("Telemetry packet");
 		if (s.kind === "struct") {
-			expect(s.fields[0]!.doc).toContain("Monotonic clock");
+			expect(s.fields[0]!.description).toContain("Monotonic clock");
 		}
 	});
 
@@ -108,7 +108,7 @@ describe("typescript importer — walker", () => {
 		const s = r.items[0]!;
 		if (s.kind === "struct") {
 			expect(s.fields[0]!.type).toEqual({
-				kind: "vec",
+				kind: "array",
 				item: { kind: "primitive", name: "f64" },
 			});
 		}

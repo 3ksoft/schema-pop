@@ -1,0 +1,72 @@
+{
+  "version": "v1",
+  "endian": "le",
+  "autoLayout": false,
+  "wordSize": 64,
+  "types": [
+    {
+      "kind": "struct",
+      "name": "Flags",
+      "size": 1,
+      "align": 1,
+      "paddedSize": 1,
+      "fields": [
+        {
+          "name": "a",
+          "type": {
+            "kind": "primitive",
+            "size": 1,
+            "align": 1,
+            "paddedSize": 1,
+            "name": "u1",
+            "bitSize": 1,
+            "popKind": "binary"
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 1,
+          "size": 1,
+          "paddingAfter": 0,
+          "description": "non-negative and at most 1"
+        },
+        {
+          "name": "b",
+          "type": {
+            "kind": "primitive",
+            "size": 1,
+            "align": 1,
+            "paddedSize": 1,
+            "name": "u3",
+            "bitSize": 3,
+            "popKind": "binary"
+          },
+          "offset": 0,
+          "bitOffset": 1,
+          "bitSize": 3,
+          "size": 1,
+          "paddingAfter": 0,
+          "description": "non-negative and at most 7"
+        },
+        {
+          "name": "c",
+          "type": {
+            "kind": "primitive",
+            "size": 1,
+            "align": 1,
+            "paddedSize": 1,
+            "name": "u4",
+            "bitSize": 4,
+            "popKind": "binary"
+          },
+          "offset": 0,
+          "bitOffset": 4,
+          "bitSize": 4,
+          "size": 1,
+          "paddingAfter": 0,
+          "description": "non-negative and at most 15"
+        }
+      ],
+      "description": "{ a: non-negative and at most 1, b: non-negative and at most 7, c: non-negative and at most 15 }"
+    }
+  ]
+}

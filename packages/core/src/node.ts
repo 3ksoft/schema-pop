@@ -6,3 +6,9 @@
 export * from "./index";
 export * from "./builder";
 export { bindFile, runBindings, isArktypeScope } from "./bind";
+export {
+	readLayoutPlan,
+	writeLayoutPlan,
+	LAYOUT_JSON_SCHEMA_VERSION,
+	type LayoutJsonEnvelope,
+} from "./layout-io";

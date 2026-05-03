@@ -58,14 +58,18 @@ describe("resolveQualType", () => {
 		expect(resolveQualType("uint8_t[64]")).toEqual({
 			kind: "array",
 			item: { kind: "primitive", name: "u8" },
-			len: 64,
+			exactLength: 64,
 		});
 	});
 
-	test("pointer to known ref → ref", () => {
+	test("pointer to known ref → ref with indirection: pointer", () => {
+		// Indirection marker is what lets `computeLayoutPlan` size pointer
+		// fields without resolving the pointee — load-bearing for
+		// self-referential structs (`struct node *next`).
 		expect(resolveQualType("Foo *")).toEqual({
 			kind: "ref",
 			name: "Foo",
+			indirection: "pointer",
 		});
 	});
 
@@ -138,7 +142,7 @@ describe("importFile", () => {
 			const payload = packet.fields.find((f) => f.name === "payload")!;
 			expect(payload.type.kind).toBe("array");
 			if (payload.type.kind === "array") {
-				expect(payload.type.len).toBe(64);
+				expect(payload.type.exactLength).toBe(64);
 			}
 		}
 
@@ -182,24 +186,24 @@ describe("importFile", () => {
 		const ir = await importFile(path.join(FIXTURES, "docs.h"));
 
 		const deviceId = ir.items.find((i) => i.name === "DeviceId")!;
-		expect(deviceId.doc).toContain("Globally-unique device id");
+		expect(deviceId.description).toContain("Globally-unique device id");
 
 		const header = ir.items.find((i) => i.name === "Header")!;
-		expect(header.doc).toContain("Wire-format header");
+		expect(header.description).toContain("Wire-format header");
 		if (header.kind === "struct") {
 			const version = header.fields.find((f) => f.name === "version")!;
-			expect(version.doc).toContain("protocol revision");
+			expect(version.description).toContain("protocol revision");
 			const length = header.fields.find((f) => f.name === "length")!;
-			expect(length.doc).toContain("total payload length");
+			expect(length.description).toContain("total payload length");
 		}
 
 		const status = ir.items.find((i) => i.name === "Status")!;
-		expect(status.doc).toContain("Boot-time status");
+		expect(status.description).toContain("Boot-time status");
 
 		const dispatch = ir.items.find((i) => i.name === "dispatch")!;
-		expect(dispatch.doc).toContain("Dispatch a packet");
-		expect(dispatch.doc).toContain("@param pkt");
-		expect(dispatch.doc).toContain("@return");
+		expect(dispatch.description).toContain("Dispatch a packet");
+		expect(dispatch.description).toContain("@param pkt");
+		expect(dispatch.description).toContain("@return");
 	});
 
 	test("edge cases — fn pointers, multidim, forward decls, defines", async () => {
@@ -215,13 +219,27 @@ describe("importFile", () => {
 			"struct:Flags",
 			"struct:Forward",
 			"struct:Named",
+			"struct:Node",
 		]);
 
 		const buffer = ir.items.find((i) => i.name === "Buffer")!;
 		if (buffer.kind === "struct") {
 			const bytes = buffer.fields[0]!;
 			expect(bytes.type.kind).toBe("array");
-			if (bytes.type.kind === "array") expect(bytes.type.len).toBe(32);
+			if (bytes.type.kind === "array") expect(bytes.type.exactLength).toBe(32);
+		}
+
+		// Self-referential pointer field — survives import as a ref tagged
+		// `pointer`, which is what makes computeLayoutPlan handle the
+		// circular type without a topo-sort error.
+		const node = ir.items.find((i) => i.name === "Node")!;
+		if (node.kind === "struct") {
+			const next = node.fields.find((f) => f.name === "next")!;
+			expect(next.type).toEqual({
+				kind: "ref",
+				name: "Node",
+				indirection: "pointer",
+			});
 		}
 
 		// Skipped list still captures fn pointers + multidim arrays.
@@ -242,10 +260,10 @@ describe("importFile", () => {
 		expect(bufLen.type.kind).toBe("unknown");
 		if (bufLen.type.kind === "unknown") expect(bufLen.type.raw).toBe("size_t");
 
-		// `domainLinkPos: std::vector<size_t>` becomes vec(unknown).
+		// `domainLinkPos: std::vector<size_t>` becomes array(unknown).
 		const linkPos = struct.fields.find((f) => f.name === "domainLinkPos")!;
-		expect(linkPos.type.kind).toBe("vec");
-		if (linkPos.type.kind === "vec") {
+		expect(linkPos.type.kind).toBe("array");
+		if (linkPos.type.kind === "array") {
 			expect(linkPos.type.item.kind).toBe("unknown");
 		}
 
@@ -264,16 +282,16 @@ describe("importFile", () => {
 		);
 		expect(fieldsByName.name).toEqual({ kind: "string" });
 		expect(fieldsByName.bytes).toEqual({
-			kind: "vec",
+			kind: "array",
 			item: { kind: "primitive", name: "u8" },
 		});
 		expect(fieldsByName.packets).toEqual({
 			kind: "array",
 			item: { kind: "primitive", name: "u32" },
-			len: 16,
+			exactLength: 16,
 		});
 		expect(fieldsByName.maybe_count).toEqual({
-			kind: "option",
+			kind: "optional",
 			inner: { kind: "primitive", name: "u32" },
 		});
 

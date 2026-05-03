@@ -43,7 +43,7 @@
     {
       "name": "manual_test",
       "label": "manual_test",
-      "query": "+ manual_test/schemas/**/*.{ts,hpp,cpp,rs,toml,json,md,zig}"
+      "query": "+ manual_test/**/*.{ts,hpp,cpp,rs,toml,json,md,zig}"
     }
   ],
   "projectRoot": "/home/kr/Documents/schema-pop",

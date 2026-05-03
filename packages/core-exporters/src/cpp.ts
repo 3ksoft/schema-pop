@@ -49,8 +49,15 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
 		commentStyle: "star",
 		...config,
 	};
-	const { typeName, fieldName, indent, mapScalarField, wrapNamespace, isRichType } =
-		ExporterTools(cfg);
+	const {
+		typeName,
+		fieldName,
+		indent,
+		mapScalarField,
+		wrapNamespace,
+		isRichType,
+		toSafeVersionIdentifier,
+	} = ExporterTools(cfg);
 
 	function fieldCppType(
 		field: Field,
@@ -143,8 +150,11 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
 			}),
 		generateMigration: (fromPlan: LayoutPlan, toPlan: LayoutPlan) => {
 			const diff = diffPlans(fromPlan, toPlan);
-			const fromNs = fromPlan.version;
-			const toNs = toPlan.version;
+			// Match the namespace identifier emitted by `wrapVersion` —
+			// raw versions like `1.0` / `test-schema_2.0` aren't valid C++
+			// identifiers and break `migrate_X_<from>_to_<to>` symbols.
+			const fromNs = toSafeVersionIdentifier(fromPlan.version);
+			const toNs = toSafeVersionIdentifier(toPlan.version);
 			const blocks: string[] = [];
 			for (const td of diff.types) {
 				const code = renderCppMigration(td, fromNs, toNs);

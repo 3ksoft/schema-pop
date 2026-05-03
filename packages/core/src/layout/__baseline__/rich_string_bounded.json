@@ -1,0 +1,31 @@
+{
+  "version": "v1",
+  "endian": "le",
+  "autoLayout": false,
+  "wordSize": 64,
+  "types": [
+    {
+      "kind": "struct",
+      "name": "Note",
+      "size": 84,
+      "align": 4,
+      "paddedSize": 84,
+      "fields": [
+        {
+          "name": "body",
+          "type": {
+            "kind": "string",
+            "maxLength": 80
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 672,
+          "size": 84,
+          "paddingAfter": 0,
+          "description": "a string and at most length 80"
+        }
+      ],
+      "description": "{ body: a string and at most length 80 }"
+    }
+  ]
+}

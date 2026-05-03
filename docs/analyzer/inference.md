@@ -15,7 +15,7 @@ If a user defines a schema:
 arktype
 ```typescript
 const MySchema = type({
-    age: "number >= 0 && number <= 120",
+    age: "0 <= number <= 120",
     score: "number <= 65000"
 });
 ```
@@ -40,8 +40,8 @@ This structural inference extends to bit-packed fields as well.
 arktype
 ```typescript
 const Settings = type({
-    powerLevel: "0 >= number < 4",  // Maps to u2 (2 bits)
-    mode: "0 >= number < 8"         // Maps to u3 (3 bits)
+    powerLevel: "0 <= number < 4",  // Maps to u2 (2 bits)
+    mode: "0 <= number < 8"         // Maps to u3 (3 bits)
 });
 ```
 

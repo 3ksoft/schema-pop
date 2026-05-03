@@ -38,3 +38,11 @@ enum {
 struct Buffer {
     uint8_t bytes[BUF_SIZE];
 };
+
+// Self-referential struct via pointer — classic linked-list shape.
+// Pointer field must NOT trigger topo-sort failure in computeLayoutPlan
+// (the pointee layout is irrelevant — sizeof(void*) is enough).
+struct Node {
+    uint32_t value;
+    struct Node *next;
+};

@@ -1,0 +1,72 @@
+{
+  "version": "v1",
+  "endian": "le",
+  "autoLayout": true,
+  "wordSize": 64,
+  "types": [
+    {
+      "kind": "struct",
+      "name": "Mixed",
+      "size": 8,
+      "align": 4,
+      "paddedSize": 8,
+      "fields": [
+        {
+          "name": "y",
+          "type": {
+            "kind": "primitive",
+            "size": 4,
+            "align": 4,
+            "paddedSize": 4,
+            "name": "u32",
+            "bitSize": 32,
+            "popKind": "binary"
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 32,
+          "size": 4,
+          "paddingAfter": 0,
+          "description": "non-negative and at most 4294967295"
+        },
+        {
+          "name": "x",
+          "type": {
+            "kind": "primitive",
+            "size": 1,
+            "align": 1,
+            "paddedSize": 1,
+            "name": "u8",
+            "bitSize": 8,
+            "popKind": "binary"
+          },
+          "offset": 4,
+          "bitOffset": 0,
+          "bitSize": 8,
+          "size": 1,
+          "paddingAfter": 0,
+          "description": "non-negative and at most 255"
+        },
+        {
+          "name": "z",
+          "type": {
+            "kind": "primitive",
+            "size": 1,
+            "align": 1,
+            "paddedSize": 1,
+            "name": "u8",
+            "bitSize": 8,
+            "popKind": "binary"
+          },
+          "offset": 5,
+          "bitOffset": 0,
+          "bitSize": 8,
+          "size": 1,
+          "paddingAfter": 2,
+          "description": "non-negative and at most 255"
+        }
+      ],
+      "description": "{ x: non-negative and at most 255, y: non-negative and at most 4294967295, z: non-negative and at most 255 }"
+    }
+  ]
+}

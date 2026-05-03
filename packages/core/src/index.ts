@@ -4,6 +4,7 @@
 // `runBindings`, `bindFile`) live under "schema-pop/node" and require
 // a Node / Bun runtime.
 export * from "./schema/index";
+export * from "./ir";
 export {
 	Binary,
 	Bit,
@@ -16,6 +17,14 @@ export {
 	OriginalType,
 } from "./schema/core";
 export * from "./layout/analyzer";
+export {
+	arktypeScopeToIR,
+	type ScopeToIROptions,
+} from "./layout/scope-to-ir";
+export {
+	computeLayoutPlan,
+	type ComputeLayoutOptions,
+} from "./layout/compute-plan";
 export * from "./migrations";
 export * from "./codec/pop";
 export * from "./utils/naming";

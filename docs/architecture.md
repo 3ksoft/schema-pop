@@ -7,7 +7,7 @@
 1. **Schema definition (ArkType)** — high-level data modeling using standard TypeScript syntax. Constraints (numeric ranges, string literals, generics like `Binary<>` / `Bit<>` / `Obsolete<>`) describe both the logical type and binary metadata.
 2. **Schema analyzer** — a deterministic engine that translates logical types into a physical memory map. Picks the smallest fitting primitive for unconstrained `number`, infers `u8`–`u64` and bit-packed `u1`–`u7` from constraints, computes alignment and padding per layout strategy.
 3. **Linear Layout Plan (LLP)** — the intermediate representation. Contains exact byte and bit offsets, alignment, padding, tag offsets for unions, and metadata propagated from the schema (descriptions, deprecation flags). Exporters consume only the LLP.
-4. **Exporters** — stateless plugin functions that turn an LLP into source code or other artifacts. Built-ins cover Rust / C / C++ / Zig / TypeScript / GLSL / WGSL / HTML / SVG / OpenAPI / random fixtures / Brainfuck. Each exporter is ~100–300 LoC; you can write your own ([guide](./exporters/writing_own_exporters.md)).
+4. **Exporters** — stateless plugin functions that turn an LLP into source code or other artifacts. Built-ins cover Rust / C / C++ / Go / Zig / TypeScript / Markdown / GLSL / WGSL / HTML / SVG / Mermaid / OpenAPI / JSON Schema / Nuxt UI forms / random fixtures / Brainfuck. Each exporter is ~100–300 LoC; you can write your own ([guide](./exporters/writing_own_exporters.md)).
 5. **PopCodec** — a zero-dependency TypeScript runtime that uses an embedded LLP to read/write binary buffers from JS without code generation.
 
 ## Pipeline

@@ -6,8 +6,12 @@ import { walkCFile } from "./walk-c";
 import { walkCppFile } from "./walk-cpp";
 import { walkTsFile } from "./walk-ts";
 import { emitArktypeScope, type EmitOptions } from "./emit";
-import type { SchemaPopIR } from "./ir";
+import type { SchemaPopIR } from "schema-pop";
 
+// Re-export IR shape from core so external consumers that import IR
+// types via `@schema-pop/treesitter-importer` keep working without
+// touching their imports. New code should import from `schema-pop`
+// directly — this surface is a thin shim.
 export type { SchemaPopIR, EmitOptions, Lang };
 export type { ExtraScope } from "./emit";
 export type {
@@ -16,7 +20,7 @@ export type {
 	IREnumVariant,
 	IRType,
 	IRPrimitive,
-} from "./ir";
+} from "schema-pop";
 
 export { parseRust, parseSource, getParser } from "./parser";
 export { walkRustFile } from "./walk-rust";

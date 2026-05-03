@@ -9,6 +9,24 @@ uplinks:
     url: https://registry.npmjs.org/
 
 packages:
+  # Unscoped first-party packages — must NOT proxy to npmjs, otherwise a
+  # publish of the same version that's already on real npm gets 409
+  # Conflict (verdaccio sees the existing manifest via the upstream).
+  'schema-pop':
+    access: $all
+    publish: $all
+    unpublish: $all
+
+  'create-schema-pop':
+    access: $all
+    publish: $all
+    unpublish: $all
+
+  'schema-pop-import':
+    access: $all
+    publish: $all
+    unpublish: $all
+
   '@schema-pop/*':
     access: $all
     publish: $all

@@ -71,7 +71,7 @@ describe("function extraction — Rust", () => {
         `);
 		const fn = r.items.find((i) => i.kind === "function");
 		if (!fn || fn.kind !== "function") throw new Error();
-		expect(fn.doc).toContain("Compute checksum");
+		expect(fn.description).toContain("Compute checksum");
 	});
 });
 
@@ -116,7 +116,7 @@ describe("function extraction — C", () => {
         `);
 		const fn = r.items.find((i) => i.kind === "function");
 		if (!fn || fn.kind !== "function") throw new Error();
-		expect(fn.doc).toContain("Compute CRC");
+		expect(fn.description).toContain("Compute CRC");
 	});
 });
 

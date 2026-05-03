@@ -16,24 +16,25 @@
     "docs/dogfood": {
       "name": "schema-pop-dogfood",
       "devDependencies": {
+        "@schema-pop/core-exporters": "workspace:*",
         "@schema-pop/extra-exporters": "workspace:*",
         "schema-pop": "workspace:*",
       },
     },
     "packages/clang_importer": {
       "name": "@schema-pop/clang-importer",
-      "version": "0.1.14",
+      "version": "0.1.31",
       "bin": {
         "schema-pop-clang-import": "./src/cli.ts",
       },
       "dependencies": {
-        "@schema-pop/treesitter-importer": "0.1.14",
-        "schema-pop": "0.1.14",
+        "@schema-pop/treesitter-importer": "0.1.31",
+        "schema-pop": "0.1.31",
       },
     },
     "packages/core": {
       "name": "schema-pop",
-      "version": "0.1.14",
+      "version": "0.1.31",
       "bin": {
         "schema-pop": "./dist/cli.js",
       },
@@ -50,14 +51,14 @@
     },
     "packages/core-exporters": {
       "name": "@schema-pop/core-exporters",
-      "version": "0.1.14",
+      "version": "0.1.31",
       "dependencies": {
-        "schema-pop": "workspace:*",
+        "schema-pop": "0.1.29",
       },
     },
     "packages/create": {
       "name": "create-schema-pop",
-      "version": "0.1.14",
+      "version": "0.1.31",
       "bin": {
         "create-schema-pop": "bin.ts",
       },
@@ -74,32 +75,42 @@
     },
     "packages/extra-exporters": {
       "name": "@schema-pop/extra-exporters",
-      "version": "0.1.14",
+      "version": "0.1.31",
       "dependencies": {
-        "schema-pop": "workspace:*",
+        "schema-pop": "0.1.29",
+      },
+    },
+    "packages/import-cli": {
+      "name": "schema-pop-import",
+      "version": "0.1.31",
+      "bin": {
+        "schema-pop-import": "bin.ts",
+      },
+      "dependencies": {
+        "@schema-pop/importer": "0.1.31",
       },
     },
     "packages/importer": {
       "name": "@schema-pop/importer",
-      "version": "0.1.14",
+      "version": "0.1.31",
       "bin": {
         "schema-pop-import": "./src/cli.ts",
       },
       "dependencies": {
-        "@schema-pop/clang-importer": "0.1.14",
-        "@schema-pop/treesitter-importer": "0.1.14",
+        "@schema-pop/clang-importer": "0.1.31",
+        "@schema-pop/treesitter-importer": "0.1.31",
         "jiti": "^2.0.0",
-        "schema-pop": "0.1.14",
+        "schema-pop": "0.1.31",
       },
     },
     "packages/treesitter_importer": {
       "name": "@schema-pop/treesitter-importer",
-      "version": "0.1.14",
+      "version": "0.1.31",
       "bin": {
         "schema-pop-import-rust": "./src/cli.ts",
       },
       "dependencies": {
-        "schema-pop": "0.1.14",
+        "schema-pop": "0.1.31",
         "web-tree-sitter": "^0.25.0",
       },
     },
@@ -947,6 +958,8 @@
     "schema-pop": ["schema-pop@workspace:packages/core"],
 
     "schema-pop-dogfood": ["schema-pop-dogfood@workspace:docs/dogfood"],
+
+    "schema-pop-import": ["schema-pop-import@workspace:packages/import-cli"],
 
     "semver": ["semver@7.7.4", "http://localhost:4873/semver/-/semver-7.7.4.tgz", { "bin": { "semver": "bin/semver.js" } }, "sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA=="],
 

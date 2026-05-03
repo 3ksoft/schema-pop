@@ -69,8 +69,14 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 		commentStyle: "slash",
 		...config,
 	};
-	const { typeName, fieldName, indent, mapScalarField, wrapNamespace } =
-		ExporterTools(cfg);
+	const {
+		typeName,
+		fieldName,
+		indent,
+		mapScalarField,
+		wrapNamespace,
+		toSafeVersionIdentifier,
+	} = ExporterTools(cfg);
 
 	function fieldType(field: Field): string {
 		const scalar = mapScalarField(field, PRIMITIVE_TS, typeName);
@@ -459,8 +465,11 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 		},
 		generateMigration: (fromPlan: LayoutPlan, toPlan: LayoutPlan) => {
 			const diff = diffPlans(fromPlan, toPlan);
-			const fromNs = fromPlan.version;
-			const toNs = toPlan.version;
+			// Match the identifier produced by `wrapVersion`'s namespace —
+			// raw versions like `1.0` / `test-schema_2.0` are not valid TS
+			// identifiers and break `migrations_X_to_Y` namespaces.
+			const fromNs = toSafeVersionIdentifier(fromPlan.version);
+			const toNs = toSafeVersionIdentifier(toPlan.version);
 			const fns: string[] = [];
 			for (const td of diff.types) {
 				const code = renderMigrationFn(td, fromNs, toNs, moduleConfigured);

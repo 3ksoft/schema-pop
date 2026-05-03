@@ -119,10 +119,13 @@ export function resolveQualType(
 	if (qt.endsWith("*")) {
 		const inner = qt.slice(0, -1).trim();
 		const innerType = resolveQualType(inner, { lp64 });
-		// Pointer to a known type → ref to that type. Pointer to primitive
-		// is unusual in wire formats, so we surface it as unsupported with
-		// the raw text. The user can adjust via wrapping types.
-		if (innerType.kind === "ref") return innerType;
+		// Pointer to a known type → ref to that type, marked `pointer` so
+		// `computeLayoutPlan` treats it as wordsize-sized without needing
+		// the pointee's layout (matters for self-referential structs and
+		// forward declarations — `struct node *next` inside `struct node`).
+		if (innerType.kind === "ref") {
+			return { ...innerType, indirection: "pointer" };
+		}
 		if (innerType.kind === "primitive") {
 			return { kind: "unsupported", raw: qualTypeRaw };
 		}
@@ -139,7 +142,7 @@ export function resolveQualType(
 		// arrays as unsupported for now — the user can pick an
 		// alternative shape (flat byte buffer + accessor, etc.).
 		if (elem.kind === "array") return { kind: "unsupported", raw: qualTypeRaw };
-		return { kind: "array", item: elem, len };
+		return { kind: "array", item: elem, exactLength: len };
 	}
 
 	// Tag type: `struct X`, `enum X`, `union X`, `class X`
@@ -164,13 +167,9 @@ export function resolveQualType(
 		const args = parseTemplateArgs(stl[2]!);
 		if (tplName === "vector" && args.length === 1) {
 			const elem = resolveQualType(args[0]!, { lp64 });
-			if (
-				elem.kind === "unsupported" ||
-				elem.kind === "vec" ||
-				elem.kind === "array"
-			)
+			if (elem.kind === "unsupported" || elem.kind === "array")
 				return { kind: "unsupported", raw: qualTypeRaw };
-			return { kind: "vec", item: elem };
+			return { kind: "array", item: elem };
 		}
 		if (tplName === "array" && args.length === 2) {
 			const elem = resolveQualType(args[0]!, { lp64 });
@@ -178,17 +177,16 @@ export function resolveQualType(
 			if (
 				Number.isNaN(len) ||
 				elem.kind === "unsupported" ||
-				elem.kind === "vec" ||
 				elem.kind === "array"
 			)
 				return { kind: "unsupported", raw: qualTypeRaw };
-			return { kind: "array", item: elem, len };
+			return { kind: "array", item: elem, exactLength: len };
 		}
 		if (tplName === "optional" && args.length === 1) {
 			const inner = resolveQualType(args[0]!, { lp64 });
 			if (inner.kind === "unsupported")
 				return { kind: "unsupported", raw: qualTypeRaw };
-			return { kind: "option", inner };
+			return { kind: "optional", inner };
 		}
 		return { kind: "unsupported", raw: qualTypeRaw };
 	}
@@ -236,13 +234,13 @@ export function resolveQualType(
  * Extract documentation from a clang decl. Looks for a `FullComment`
  * child (produced when clang is invoked with `-fparse-all-comments`)
  * and renders its inner ParagraphComment / ParamCommandComment /
- * BlockCommandComment nodes back into a plain-text doc-string.
+ * BlockCommandComment nodes back into a plain-text description-string.
  *
  * The output preserves @param / @return metadata as Doxygen-style
  * lines, since the rest of schema-pop's pipeline (analyzer, HTML/MD
- * exporters) treats `doc` as opaque text and just renders it.
+ * exporters) treats `description` as opaque text and just renders it.
  *
- * Returns `undefined` if the decl has no doc-comment.
+ * Returns `undefined` if the decl has no description-comment.
  */
 export function extractDoc(node: ClangNode): string | undefined {
 	const fc = (node.inner ?? []).find((c) => c.kind === "FullComment");
@@ -363,7 +361,7 @@ export function walkClangAst(
 	// scope (typical for system typedefs we filtered out, like `size_t`).
 	// Without this, arktype throws ParseError("'size_t' is unresolvable")
 	// when the generated scope is loaded. Replacing with `unknown` keeps
-	// the field while preserving the original type name for the doc.
+	// the field while preserving the original type name for the description.
 	downgradeUnknownRefs(ctx.items, opts.extraKnownNames);
 
 	return { source: inputFile, items: ctx.items, skipped: ctx.skipped };
@@ -475,7 +473,7 @@ function handleTypedef(
 		kind: "alias",
 		name,
 		type: t,
-		doc: typedefDoc,
+		description: typedefDoc,
 		pub: true,
 	});
 }
@@ -583,7 +581,7 @@ function handleRecord(
 					underlying: storage.name,
 				},
 				pub: true,
-				doc: fieldDoc,
+				description: fieldDoc,
 			});
 			continue;
 		}
@@ -608,7 +606,7 @@ function handleRecord(
 			continue;
 		}
 		const fieldDoc = extractDoc(child);
-		fields.push({ name: fname, type: t, pub: true, doc: fieldDoc });
+		fields.push({ name: fname, type: t, pub: true, description: fieldDoc });
 	}
 
 	// Empty struct (either originally empty, or all fields filtered out) →
@@ -629,7 +627,7 @@ function handleRecord(
 		name,
 		fields,
 		repr: repr.length ? repr : undefined,
-		doc: overrideDoc ?? extractDoc(node),
+		description: overrideDoc ?? extractDoc(node),
 		pub: true,
 	});
 }
@@ -714,7 +712,7 @@ function handleEnum(
 	for (const child of node.inner ?? []) {
 		if (child.kind !== "EnumConstantDecl") continue;
 		if (!child.name) continue;
-		variants.push({ kind: "unit", name: child.name, doc: extractDoc(child) });
+		variants.push({ kind: "unit", name: child.name, description: extractDoc(child) });
 	}
 
 	// Detect explicit underlying type (C++11 / C23 `enum Name : uint8_t`).
@@ -729,7 +727,7 @@ function handleEnum(
 		name,
 		variants,
 		repr,
-		doc: overrideDoc ?? extractDoc(node),
+		description: overrideDoc ?? extractDoc(node),
 		pub: true,
 	});
 }
@@ -764,7 +762,7 @@ function handleFunction(
 		args,
 		returnType,
 		abi: extractAbi(node),
-		doc: extractDoc(node),
+		description: extractDoc(node),
 		pub: true,
 	});
 }

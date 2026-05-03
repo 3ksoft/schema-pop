@@ -112,6 +112,14 @@ function expandGlobs(patterns: string[], rootDir: string): string[] {
 	}
 	const seen = new Set<string>();
 	for (const pat of patterns) {
+		if (typeof pat !== "string") {
+			throw new Error(
+				`schema-pop: \`schemas\` must be a string or string[]. ` +
+					`Got entry of type ${typeof pat}: ${JSON.stringify(pat)}. ` +
+					`Per-schema config (targets, versions, etc.) belongs in the ` +
+					`\`schemaPop({...}, scope({...}))\` wrap inside each .pop.ts file.`,
+			);
+		}
 		const glob = new Bun.Glob(pat);
 		for (const f of glob.scanSync({ cwd: rootDir, absolute: true })) {
 			seen.add(f as string);
@@ -266,16 +274,20 @@ export async function buildSchema(
 			const v = loaded[i]!;
 			const isLatest = i === loaded.length - 1;
 			const eff = mergeConfigs(config, v.fileCfg);
-			// `safeVersion` keeps `<schemaName>_<version>` for plan
-			// uniqueness (migration tracking, header comments). The
-			// namespace passed to `wrapVersion` collapses to plain
-			// `<schemaName>` when there's only one version of this
-			// schema — gives users `import { Foo } from "./fields"`
-			// instead of `import { fields_1 } from ...; fields_1.Foo`
-			// for the common single-version case. Multi-version retains
-			// the suffix so the per-version namespaces don't collide.
-			const safeVersion = `${schemaName}_${v.version}`;
-			const wrapName = isMultiVersion ? safeVersion : schemaName;
+			// `wrapName` is the namespace identifier — collapses to plain
+			// `<schemaName>` when there's only one version of this schema
+			// (so users get `import { Foo } from "./fields"` instead of
+			// `fields_1.Foo`), and `<schemaName>_<version>` when multiple
+			// versions coexist so per-version namespaces don't collide.
+			//
+			// `plan.version` carries the SAME value because every
+			// downstream consumer (`wrapVersion`, harness, migration
+			// codegen) needs to derive the same identifier. Header
+			// comments / migration summaries get the raw `v.version`
+			// separately via `contributors[]`.
+			const wrapName = isMultiVersion
+				? `${schemaName}_${v.version}`
+				: schemaName;
 
 			const analyzer = new SchemaAnalyzer(v.scope, {
 				wordSize: eff.wordSize,
@@ -283,7 +295,7 @@ export async function buildSchema(
 				layoutType: eff.layout,
 				mode: eff.mode,
 			});
-			const plan = analyzer.analyze(safeVersion, eff.endian);
+			const plan = analyzer.analyze(wrapName, eff.endian);
 
 			// Attach function declarations from the same module if exported.
 			const functions = v.mod["functions"];

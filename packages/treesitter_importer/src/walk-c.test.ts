@@ -84,7 +84,7 @@ describe("c importer — IR extraction", () => {
 		expect(it.fields[0]!.type).toEqual({
 			kind: "array",
 			item: { kind: "primitive", name: "u8" },
-			len: 16,
+			exactLength: 16,
 		});
 	});
 
@@ -147,8 +147,8 @@ describe("c importer — IR extraction", () => {
         `);
 		const it = r.items[0]!;
 		if (it.kind !== "struct") throw new Error();
-		expect(it.doc).toContain("Battery payload");
-		expect(it.fields[0]!.doc).toContain("Voltage");
+		expect(it.description).toContain("Battery payload");
+		expect(it.fields[0]!.description).toContain("Voltage");
 	});
 
 	test("end-to-end emit", async () => {

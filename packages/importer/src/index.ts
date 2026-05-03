@@ -7,6 +7,11 @@ import {
 	type SchemaPopIR,
 } from "@schema-pop/treesitter-importer";
 import {
+	computeLayoutPlan,
+	type ComputeLayoutOptions,
+	type LayoutPlan,
+} from "schema-pop";
+import {
 	importFile as treesitterImport,
 	langFromPath as treesitterLangFromPath,
 } from "@schema-pop/treesitter-importer";
@@ -220,4 +225,28 @@ export async function fileToArktypeScope(
 ): Promise<string> {
 	const ir = await importFile(filePath, opts);
 	return emitArktypeScope(ir, opts);
+}
+
+/**
+ * One-shot: dispatch → IR → `LayoutPlan` (with derived layout). Used
+ * by the importer's `.layout.json` output mode — bypasses
+ * `emitArktypeScope` entirely so consumers don't pay the
+ * IR → string → re-parse round-trip that historically masked layout
+ * info in tree-sitter walks. Defaults: version derived from the input
+ * basename, endian="le", layoutType="aligned".
+ */
+export async function fileToLayoutPlan(
+	filePath: string,
+	opts: ImportOptions & Partial<ComputeLayoutOptions> = {},
+): Promise<LayoutPlan> {
+	const ir = await importFile(filePath, opts);
+	const version =
+		opts.version ?? path.basename(filePath).replace(/\.[^.]+$/, "");
+	return computeLayoutPlan(ir, {
+		version,
+		endian: opts.endian ?? "le",
+		wordSize: opts.wordSize ?? 64,
+		autoLayout: opts.autoLayout ?? true,
+		layoutType: opts.layoutType ?? "aligned",
+	});
 }

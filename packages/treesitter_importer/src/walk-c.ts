@@ -6,7 +6,7 @@ import type {
 	IRPrimitive,
 	IRType,
 	IREnumVariant,
-} from "./ir";
+} from "schema-pop";
 import { downgradeUnknownRefs } from "./known-names";
 
 export interface WalkCOptions {
@@ -163,17 +163,17 @@ export function walkCLike(
 				continue;
 			}
 
-			const doc = pendingDoc.length ? pendingDoc.join("\n") : undefined;
+			const description = pendingDoc.length ? pendingDoc.join("\n") : undefined;
 			const attrs = pendingAttrs;
 			pendingDoc = [];
 			pendingAttrs = [];
 
 			if (child.type === "type_definition") {
-				handleTypedef(child, doc, scopePrefix, items, skipped, opts);
+				handleTypedef(child, description, scopePrefix, items, skipped, opts);
 			} else if (child.type === "declaration") {
 				handleBareDeclaration(
 					child,
-					doc,
+					description,
 					attrs,
 					scopePrefix,
 					items,
@@ -181,15 +181,15 @@ export function walkCLike(
 					opts,
 				);
 			} else if (child.type === "struct_specifier") {
-				handleStructSpecifier(child, null, doc, scopePrefix, items, skipped);
+				handleStructSpecifier(child, null, description, scopePrefix, items, skipped);
 			} else if (child.type === "enum_specifier") {
-				handleEnumSpecifier(child, null, doc, scopePrefix, items, skipped);
+				handleEnumSpecifier(child, null, description, scopePrefix, items, skipped);
 			} else if (child.type === "union_specifier") {
 				// Treat union as struct for layout purposes — first field "wins".
 				const it = handleUnionSpecifier(
 					child,
 					null,
-					doc,
+					description,
 					scopePrefix,
 					skipped,
 				);
@@ -198,7 +198,7 @@ export function walkCLike(
 				opts.allowClass &&
 				(child.type === "class_specifier" || child.type === "struct_specifier")
 			) {
-				handleStructSpecifier(child, null, doc, scopePrefix, items, skipped);
+				handleStructSpecifier(child, null, description, scopePrefix, items, skipped);
 			} else if (opts.allowClass && child.type === "namespace_definition") {
 				const nameNode = child.childForFieldName("name");
 				const body = child.childForFieldName("body");
@@ -215,7 +215,7 @@ export function walkCLike(
 					kind: "alias",
 					name,
 					type: parseCType(typeNode),
-					doc,
+					description,
 					pub: true,
 				});
 			}
@@ -241,7 +241,7 @@ function stripStarLines(block: string): string {
 
 function handleTypedef(
 	node: TSNode,
-	doc: string | undefined,
+	description: string | undefined,
 	scopePrefix: string,
 	items: IRItem[],
 	skipped: { name: string; reason: string }[],
@@ -302,7 +302,7 @@ function handleTypedef(
 		handleStructSpecifier(
 			innerType,
 			aliasName,
-			doc,
+			description,
 			scopePrefix,
 			items,
 			skipped,
@@ -311,23 +311,23 @@ function handleTypedef(
 		const it = handleUnionSpecifier(
 			innerType,
 			aliasName,
-			doc,
+			description,
 			scopePrefix,
 			skipped,
 		);
 		if (it) items.push(it);
 	} else if (innerType.type === "enum_specifier") {
-		handleEnumSpecifier(innerType, aliasName, doc, scopePrefix, items, skipped);
+		handleEnumSpecifier(innerType, aliasName, description, scopePrefix, items, skipped);
 	} else {
 		// `typedef <primitive|sized|ref> Name;` → alias
 		const t = parseCType(innerType);
-		items.push({ kind: "alias", name: aliasName, type: t, doc, pub: true });
+		items.push({ kind: "alias", name: aliasName, type: t, description, pub: true });
 	}
 }
 
 function handleBareDeclaration(
 	node: TSNode,
-	doc: string | undefined,
+	description: string | undefined,
 	attrs: string[],
 	scopePrefix: string,
 	items: IRItem[],
@@ -341,7 +341,7 @@ function handleBareDeclaration(
 
 	const fnDecl = findNestedFunctionDeclarator(node);
 	if (fnDecl) {
-		const fn = handleFunctionPrototype(node, fnDecl, doc, scopePrefix, skipped);
+		const fn = handleFunctionPrototype(node, fnDecl, description, scopePrefix, skipped);
 		if (fn) items.push(fn);
 		return;
 	}
@@ -349,15 +349,15 @@ function handleBareDeclaration(
 	for (const c of node.namedChildren) {
 		if (!c) continue;
 		if (c.type === "struct_specifier") {
-			handleStructSpecifier(c, null, doc, scopePrefix, items, skipped);
+			handleStructSpecifier(c, null, description, scopePrefix, items, skipped);
 			markPacked(items, attrs);
 		} else if (c.type === "enum_specifier") {
-			handleEnumSpecifier(c, null, doc, scopePrefix, items, skipped);
+			handleEnumSpecifier(c, null, description, scopePrefix, items, skipped);
 		} else if (c.type === "union_specifier") {
-			const it = handleUnionSpecifier(c, null, doc, scopePrefix, skipped);
+			const it = handleUnionSpecifier(c, null, description, scopePrefix, skipped);
 			if (it) items.push(it);
 		} else if (opts.allowClass && c.type === "class_specifier") {
-			handleStructSpecifier(c, null, doc, scopePrefix, items, skipped);
+			handleStructSpecifier(c, null, description, scopePrefix, items, skipped);
 		}
 	}
 }
@@ -382,7 +382,7 @@ function findNestedFunctionDeclarator(decl: TSNode): TSNode | null {
 function handleFunctionPrototype(
 	declNode: TSNode,
 	fnDecl: TSNode,
-	doc: string | undefined,
+	description: string | undefined,
 	_scopePrefix: string,
 	skipped: { name: string; reason: string }[],
 ): IRItem | null {
@@ -444,7 +444,7 @@ function handleFunctionPrototype(
 		returnType,
 		// C convention: cdecl by default; we leave abi unset and let consumers
 		// assume the platform default. Future: pull from `__attribute__((stdcall))`.
-		doc,
+		description,
 		pub: true,
 	};
 }
@@ -462,7 +462,7 @@ function markPacked(items: IRItem[], attrs: string[]) {
 function handleStructSpecifier(
 	node: TSNode,
 	typedefName: string | null,
-	doc: string | undefined,
+	description: string | undefined,
 	scopePrefix: string,
 	items: IRItem[],
 	skipped: { name: string; reason: string }[],
@@ -513,7 +513,7 @@ function handleStructSpecifier(
 		if (c.type !== "field_declaration") continue;
 		const f = parseFieldDeclaration(c);
 		if (f) {
-			f.doc = fieldDoc.length ? fieldDoc.join("\n") : f.doc;
+			f.description = fieldDoc.length ? fieldDoc.join("\n") : f.description;
 			fields.push(f);
 		} else {
 			// Bitfield, function pointer, or other unsupported shape.
@@ -530,7 +530,7 @@ function handleStructSpecifier(
 		kind: "struct",
 		name,
 		fields,
-		doc,
+		description,
 		pub: true,
 	});
 }
@@ -538,7 +538,7 @@ function handleStructSpecifier(
 function handleEnumSpecifier(
 	node: TSNode,
 	typedefName: string | null,
-	doc: string | undefined,
+	description: string | undefined,
 	_scopePrefix: string,
 	items: IRItem[],
 	_skipped: { name: string; reason: string }[],
@@ -567,7 +567,7 @@ function handleEnumSpecifier(
 		variants.push({
 			kind: "unit",
 			name: vname,
-			doc: pendingDoc.length ? pendingDoc.join("\n") : undefined,
+			description: pendingDoc.length ? pendingDoc.join("\n") : undefined,
 		});
 		pendingDoc = [];
 	}
@@ -576,7 +576,7 @@ function handleEnumSpecifier(
 		kind: "enum",
 		name,
 		variants,
-		doc,
+		description,
 		pub: true,
 	});
 }
@@ -649,12 +649,12 @@ function parseArrayDeclarator(
 	if (Number.isNaN(len)) return null;
 
 	if (inner.type === "field_identifier" || inner.type === "identifier") {
-		return { name: inner.text, type: { kind: "array", item: baseType, len } };
+		return { name: inner.text, type: { kind: "array", item: baseType, exactLength: len } };
 	}
 	if (inner.type === "array_declarator") {
 		const sub = parseArrayDeclarator(inner, baseType);
 		if (!sub) return null;
-		return { name: sub.name, type: { kind: "array", item: sub.type, len } };
+		return { name: sub.name, type: { kind: "array", item: sub.type, exactLength: len } };
 	}
 	return null;
 }

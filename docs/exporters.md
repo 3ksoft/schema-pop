@@ -11,6 +11,7 @@ Exporters translate the **Linear Layout Plan (LLP)** into source code or auxilia
 | `rust`   | `.rs` `#[repr(C, align(N))]`      | Opaque byte fallback for non-scalar fields, optional buildable harness |
 | `c`      | `.h` `typedef struct`             | FFI-safe, version-prefixed type names                                  |
 | `cpp`    | `.hpp` `struct alignas(N)`        | Bitfield support, optional buildable harness                           |
+| `go`     | `.go` `struct` + typed `string` enums | Optional → `*T`, fixed array → `[N]T`, explicit padding, `// Deprecated:` lints, optional `unsafe.Sizeof` compile-time layout checks, `versionNamespace` for multi-version prefixing, `generateMigration` + buildable harness via `harness: true` |
 | `zig`    | `.zig` `extern struct`            | Field-level `align()` for opaque payloads, optional buildable harness  |
 | `ts`     | `.ts` interfaces + optional codec | JSDoc comments, optional `PopCodec` glue + `LAYOUT_PLAN` JSON dump     |
 | `random` | `.json` randomized fixtures       | Used by the ABI test harness                                           |
@@ -24,7 +25,10 @@ Exporters translate the **Linear Layout Plan (LLP)** into source code or auxilia
 | `glsl`      | `.glsl` UBO/SSBO struct         | `std140` / `std430` layout strategies                                |
 | `wgsl`      | `.wgsl` storage/uniform struct  | `std140` / `std430` layout strategies                                |
 | `openapi`   | OpenAPI 3.0 component schemas   | `deprecated: true` for obsolete types                                |
-| `nuxt-ui`   | Form-component example          | Demonstrates schema → UI mapping                                     |
+| `json-schema` | JSON Schema 2020-12 documents | Per-schema `.json`, optional `$id` base, configurable `$schema` URI for older validators (Ajv draft-07, etc.) |
+| `md`        | `.md` documentation             | One section per type with field tables, sizes, alignment; functions section when present; optional `preamble` |
+| `mermaid`   | `.mmd` / fenced markdown ER diagram | Class-diagram-style graph of types + references, configurable orientation (LR/TB), GitHub-renderable by default |
+| `nuxt-ui`   | Nuxt UI v3 form per `StructPlan` | Multi-file output (`*Form.vue` + standalone arktype `schemas.ts`), `<UForm>` w/ built-in validation, primitive→`UInputNumber`/`UCheckbox` w/ bounds, enum→`USelectMenu`, struct ref→child SFC, optional set/unset toggle, array add/remove |
 | `brainfuck` | `.bf` + interpreter checked     | Yes, really. Layout-only ABI check via shell wrapper.                |
 
 ## TypeScript exporter scope

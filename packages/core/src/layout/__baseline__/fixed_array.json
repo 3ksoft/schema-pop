@@ -1,0 +1,40 @@
+{
+  "version": "v1",
+  "endian": "le",
+  "autoLayout": false,
+  "wordSize": 64,
+  "types": [
+    {
+      "kind": "struct",
+      "name": "Buf",
+      "size": 16,
+      "align": 1,
+      "paddedSize": 16,
+      "fields": [
+        {
+          "name": "data",
+          "type": {
+            "kind": "array",
+            "item": {
+              "kind": "primitive",
+              "size": 1,
+              "align": 1,
+              "paddedSize": 1,
+              "name": "u8",
+              "bitSize": 8,
+              "popKind": "binary"
+            },
+            "exactLength": 16
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 128,
+          "size": 16,
+          "paddingAfter": 0,
+          "description": "number <= 255 & >= 0[]"
+        }
+      ],
+      "description": "{ data: number <= 255 & >= 0[] }"
+    }
+  ]
+}

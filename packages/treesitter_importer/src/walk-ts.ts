@@ -5,7 +5,7 @@ import type {
 	IRItem,
 	SchemaPopIR,
 	IRType,
-} from "./ir";
+} from "schema-pop";
 import { downgradeUnknownRefs } from "./known-names";
 
 export interface WalkTsOptions {
@@ -75,15 +75,15 @@ export function walkTsFile(
 			if (child.type === "export_statement") {
 				const inner = child.namedChildren.find((c) => c && c.type !== "comment");
 				if (inner) {
-					const doc = pendingDoc.length ? pendingDoc.join("\n") : undefined;
-					handleDecl(inner, doc, items, skipped);
+					const description = pendingDoc.length ? pendingDoc.join("\n") : undefined;
+					handleDecl(inner, description, items, skipped);
 				}
 				pendingDoc = [];
 				continue;
 			}
-			const doc = pendingDoc.length ? pendingDoc.join("\n") : undefined;
+			const description = pendingDoc.length ? pendingDoc.join("\n") : undefined;
 			pendingDoc = [];
-			handleDecl(child, doc, items, skipped);
+			handleDecl(child, description, items, skipped);
 		}
 	}
 
@@ -97,19 +97,19 @@ export function walkTsFile(
 
 function handleDecl(
 	node: TSNode,
-	doc: string | undefined,
+	description: string | undefined,
 	items: IRItem[],
 	skipped: { name: string; reason: string }[],
 ): void {
 	switch (node.type) {
 		case "interface_declaration":
-			handleInterface(node, doc, items, skipped);
+			handleInterface(node, description, items, skipped);
 			break;
 		case "type_alias_declaration":
-			handleTypeAlias(node, doc, items, skipped);
+			handleTypeAlias(node, description, items, skipped);
 			break;
 		case "enum_declaration":
-			handleEnum(node, doc, items);
+			handleEnum(node, description, items);
 			break;
 		default:
 			// Imports, statements, generics-only types, etc. — silently ignored.
@@ -119,7 +119,7 @@ function handleDecl(
 
 function handleInterface(
 	node: TSNode,
-	doc: string | undefined,
+	description: string | undefined,
 	items: IRItem[],
 	skipped: { name: string; reason: string }[],
 ): void {
@@ -132,12 +132,12 @@ function handleInterface(
 	const body = node.childForFieldName("body");
 	if (!body) return;
 	const fields = collectStructFields(body, skipped, name);
-	items.push({ kind: "struct", name, fields, doc, pub: true });
+	items.push({ kind: "struct", name, fields, description, pub: true });
 }
 
 function handleTypeAlias(
 	node: TSNode,
-	doc: string | undefined,
+	description: string | undefined,
 	items: IRItem[],
 	skipped: { name: string; reason: string }[],
 ): void {
@@ -153,7 +153,7 @@ function handleTypeAlias(
 	// `type X = { ... }` → struct
 	if (value.type === "object_type") {
 		const fields = collectStructFields(value, skipped, name);
-		items.push({ kind: "struct", name, fields, doc, pub: true });
+		items.push({ kind: "struct", name, fields, description, pub: true });
 		return;
 	}
 
@@ -165,7 +165,7 @@ function handleTypeAlias(
 				kind: "enum",
 				name,
 				variants: lits.map((l) => ({ kind: "unit", name: l })),
-				doc,
+				description,
 				pub: true,
 			});
 			return;
@@ -175,7 +175,7 @@ function handleTypeAlias(
 			kind: "alias",
 			name,
 			type: { kind: "unknown", raw: value.text },
-			doc,
+			description,
 			pub: true,
 		});
 		return;
@@ -183,12 +183,12 @@ function handleTypeAlias(
 
 	// `type X = T` for any other RHS → alias
 	const t = parseTsType(value);
-	items.push({ kind: "alias", name, type: t, doc, pub: true });
+	items.push({ kind: "alias", name, type: t, description, pub: true });
 }
 
 function handleEnum(
 	node: TSNode,
-	doc: string | undefined,
+	description: string | undefined,
 	items: IRItem[],
 ): void {
 	const name = node.childForFieldName("name")?.text;
@@ -204,7 +204,7 @@ function handleEnum(
 				: (c.childForFieldName("name")?.text ?? c.text);
 		if (variantName) variants.push({ kind: "unit", name: variantName });
 	}
-	items.push({ kind: "enum", name, variants, doc, pub: true });
+	items.push({ kind: "enum", name, variants, description, pub: true });
 }
 
 function collectStructFields(
@@ -238,7 +238,7 @@ function collectStructFields(
 			continue;
 		}
 		if (pendingDoc.length) {
-			f.doc = pendingDoc.join("\n");
+			f.description = pendingDoc.join("\n");
 			pendingDoc = [];
 		}
 		fields.push(f);
@@ -258,7 +258,7 @@ function parseProperty(node: TSNode): IRField | null {
 	const typeNode = typeAnnot?.namedChildren.find((c) => c && c.type !== "comment");
 	if (!typeNode) return null;
 	let t = parseTsType(typeNode);
-	if (optional) t = { kind: "option", inner: t };
+	if (optional) t = { kind: "optional", inner: t };
 	return { name, type: t, pub: true };
 }
 
@@ -301,7 +301,7 @@ function parseTsType(node: TSNode): IRType {
 		case "array_type": {
 			// `T[]` — child is the element type.
 			const elem = node.namedChild(0);
-			if (elem) return { kind: "vec", item: parseTsType(elem) };
+			if (elem) return { kind: "array", item: parseTsType(elem) };
 			return { kind: "unknown", raw: node.text };
 		}
 		case "generic_type": {
@@ -310,7 +310,7 @@ function parseTsType(node: TSNode): IRType {
 			const args = node.childForFieldName("type_arguments");
 			if (ident === "Array" && args) {
 				const inner = args.namedChild(0);
-				if (inner) return { kind: "vec", item: parseTsType(inner) };
+				if (inner) return { kind: "array", item: parseTsType(inner) };
 			}
 			return { kind: "unknown", raw: node.text };
 		}

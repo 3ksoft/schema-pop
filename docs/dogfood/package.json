@@ -4,6 +4,7 @@
 	"type": "module",
 	"devDependencies": {
 		"schema-pop": "workspace:*",
+		"@schema-pop/core-exporters": "workspace:*",
 		"@schema-pop/extra-exporters": "workspace:*"
 	}
 }

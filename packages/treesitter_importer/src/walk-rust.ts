@@ -6,7 +6,7 @@ import type {
 	SchemaPopIR,
 	IRPrimitive,
 	IRType,
-} from "./ir";
+} from "schema-pop";
 import { downgradeUnknownRefs } from "./known-names";
 
 export interface WalkRustOptions {
@@ -46,7 +46,7 @@ export function walkRustFile(
 
 	function visit(node: TSNode, scopePrefix: string) {
 		const children = node.namedChildren;
-		// Collect pending attributes and doc-comments contiguously preceding
+		// Collect pending attributes and description-comments contiguously preceding
 		// the next concrete item.
 		let pendingAttrs: string[] = [];
 		let pendingDoc: string[] = [];
@@ -72,27 +72,27 @@ export function walkRustFile(
 			}
 
 			const attrs = pendingAttrs;
-			const doc = pendingDoc.length ? pendingDoc.join("\n") : undefined;
+			const description = pendingDoc.length ? pendingDoc.join("\n") : undefined;
 			pendingAttrs = [];
 			pendingDoc = [];
 
 			if (child.type === "struct_item") {
-				const item = handleStruct(child, attrs, doc, scopePrefix);
+				const item = handleStruct(child, attrs, description, scopePrefix);
 				if (item.ok) items.push(item.value);
 				else skipped.push({ name: item.name, reason: item.reason });
 			} else if (child.type === "enum_item") {
-				const item = handleEnum(child, attrs, doc, scopePrefix);
+				const item = handleEnum(child, attrs, description, scopePrefix);
 				if (item.ok) items.push(item.value);
 				else skipped.push({ name: item.name, reason: item.reason });
 			} else if (child.type === "type_item") {
-				const item = handleAlias(child, attrs, doc, scopePrefix);
+				const item = handleAlias(child, attrs, description, scopePrefix);
 				if (item.ok) items.push(item.value);
 				else skipped.push({ name: item.name, reason: item.reason });
 			} else if (
 				child.type === "function_item" ||
 				child.type === "function_signature_item"
 			) {
-				const item = handleFunction(child, doc, scopePrefix);
+				const item = handleFunction(child, description, scopePrefix);
 				if (item.ok) items.push(item.value);
 				else skipped.push({ name: item.name, reason: item.reason });
 			} else if (child.type === "foreign_mod_item") {
@@ -162,7 +162,7 @@ function isPub(node: TSNode): boolean {
 function handleStruct(
 	node: TSNode,
 	attrs: string[],
-	doc: string | undefined,
+	description: string | undefined,
 	scopePrefix: string,
 ): Handle<IRItem> {
 	const nameNode = node.childForFieldName("name");
@@ -185,7 +185,7 @@ function handleStruct(
 				name,
 				fields: [],
 				...parseAttrs(attrs),
-				doc,
+				description,
 				pub: isPub(node),
 			},
 		};
@@ -219,7 +219,7 @@ function handleStruct(
 		fields.push({
 			name: fname,
 			type: t,
-			doc: fieldDoc.length ? fieldDoc.join("\n") : undefined,
+			description: fieldDoc.length ? fieldDoc.join("\n") : undefined,
 			pub: isPub(c),
 		});
 		fieldDoc = [];
@@ -232,7 +232,7 @@ function handleStruct(
 			name,
 			fields,
 			...parseAttrs(attrs),
-			doc,
+			description,
 			pub: isPub(node),
 		},
 	};
@@ -241,7 +241,7 @@ function handleStruct(
 function handleEnum(
 	node: TSNode,
 	attrs: string[],
-	doc: string | undefined,
+	description: string | undefined,
 	scopePrefix: string,
 ): Handle<IRItem> {
 	const nameNode = node.childForFieldName("name");
@@ -274,7 +274,7 @@ function handleEnum(
 		const vDoc = variantDoc.length ? variantDoc.join("\n") : undefined;
 		variantDoc = [];
 		if (!vbody) {
-			variants.push({ kind: "unit", name: vname, doc: vDoc });
+			variants.push({ kind: "unit", name: vname, description: vDoc });
 			continue;
 		}
 		if (vbody.type === "ordered_field_declaration_list") {
@@ -290,7 +290,7 @@ function handleEnum(
 					continue;
 				types.push(parseRustType(t));
 			}
-			variants.push({ kind: "tuple", name: vname, types, doc: vDoc });
+			variants.push({ kind: "tuple", name: vname, types, description: vDoc });
 		} else if (vbody.type === "field_declaration_list") {
 			const fields: IRField[] = [];
 			for (const f of vbody.namedChildren) {
@@ -305,9 +305,9 @@ function handleEnum(
 					pub: isPub(f),
 				});
 			}
-			variants.push({ kind: "struct", name: vname, fields, doc: vDoc });
+			variants.push({ kind: "struct", name: vname, fields, description: vDoc });
 		} else {
-			variants.push({ kind: "unit", name: vname, doc: vDoc });
+			variants.push({ kind: "unit", name: vname, description: vDoc });
 		}
 	}
 
@@ -318,7 +318,7 @@ function handleEnum(
 			name,
 			variants,
 			...parseAttrs(attrs),
-			doc,
+			description,
 			pub: isPub(node),
 		},
 	};
@@ -358,7 +358,7 @@ function findExternAbi(node: TSNode): string | undefined {
 
 function handleFunction(
 	node: TSNode,
-	doc: string | undefined,
+	description: string | undefined,
 	scopePrefix: string,
 	overrideAbi?: string,
 ): Handle<IRItem> {
@@ -408,7 +408,7 @@ function handleFunction(
 			args,
 			returnType,
 			abi,
-			doc,
+			description,
 			pub: isPub(node),
 		},
 	};
@@ -417,7 +417,7 @@ function handleFunction(
 function handleAlias(
 	node: TSNode,
 	_attrs: string[],
-	doc: string | undefined,
+	description: string | undefined,
 	scopePrefix: string,
 ): Handle<IRItem> {
 	const nameNode = node.childForFieldName("name");
@@ -434,7 +434,7 @@ function handleAlias(
 	const t = parseRustType(typeNode);
 	return {
 		ok: true,
-		value: { kind: "alias", name, type: t, doc, pub: isPub(node) },
+		value: { kind: "alias", name, type: t, description, pub: isPub(node) },
 	};
 }
 
@@ -465,7 +465,7 @@ function parseRustType(node: TSNode): IRType {
 			if (Number.isNaN(len)) {
 				return { kind: "unsupported", raw: node.text };
 			}
-			return { kind: "array", item, len };
+			return { kind: "array", item, exactLength: len };
 		}
 		case "generic_type": {
 			const typeNode = node.childForFieldName("type");
@@ -475,10 +475,10 @@ function parseRustType(node: TSNode): IRType {
 				? argsNode.namedChildren.filter((c) => c && c.type !== "lifetime")
 				: [];
 			if (baseName === "Option" && args.length === 1) {
-				return { kind: "option", inner: parseRustType(args[0]!) };
+				return { kind: "optional", inner: parseRustType(args[0]!) };
 			}
 			if (baseName === "Vec" && args.length === 1) {
-				return { kind: "vec", item: parseRustType(args[0]!) };
+				return { kind: "array", item: parseRustType(args[0]!) };
 			}
 			return { kind: "unsupported", raw: node.text };
 		}

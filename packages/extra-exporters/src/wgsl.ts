@@ -1,15 +1,32 @@
 import type { LayoutPlan, Field, BaseConfig, ExporterPlugin } from "schema-pop";
 import { applyNaming, ExporterTools } from "schema-pop";
 
-export interface WgslConfig extends BaseConfig {}
+export interface WgslConfig extends BaseConfig {
+	/**
+	 * How to express trailing padding on a field.
+	 * - "fields": emit explicit `_pad_<name>: u32` filler fields. More verbose
+	 *   but self-documenting; copy-paste-safe to other WGSL files.
+	 * - "size":   use the WGSL `@size(N)` annotation on the field. Compact,
+	 *   but the padding becomes invisible in casual reading.
+	 * Default: "fields".
+	 */
+	paddingStyle?: "size" | "fields";
+}
 
 function getWgslType(f: Field): string {
 	if (f.kind === "primitive") {
 		if (f.name === "f32") return "f32";
-		if (f.name === "f64") return "f64";
+		if (f.name === "f64") {
+			throw new Error(
+				`wgsl: f64 has no WGSL equivalent. Narrow the schema field to f32 explicitly, or omit it from this exporter target.`,
+			);
+		}
 		if (f.name === "i32" || f.name === "i16" || f.name === "i8") return "i32";
 		if (f.name === "u32" || f.name === "u16" || f.name === "u8") return "u32";
 		if (f.name === "bool" || f.name === "boolean") return "u32"; // WGSL host-shareable structs cannot contain bool
+		console.warn(
+			`  ⚠ wgsl: unknown primitive "${f.name}", falling back to u32. Add explicit support if this type is intentional.`,
+		);
 		return "u32";
 	}
 	if (f.kind === "reference") return f.name;
@@ -26,6 +43,9 @@ function getWgslType(f: Field): string {
 		const len = f.exactLength || f.maxLength;
 		return len ? `array<${itemType}, ${len}>` : `array<${itemType}>`;
 	}
+	console.warn(
+		`  ⚠ wgsl: unsupported field kind "${(f as Field).kind}", emitting u32 placeholder.`,
+	);
 	return "u32";
 }
 
@@ -34,8 +54,9 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 		fieldNaming: "snake_case",
 		typeNaming: "PascalCase",
 		commentStyle: "slash",
+		paddingStyle: "fields",
 		...config,
-	} as WgslConfig;
+	} as Required<Pick<WgslConfig, "paddingStyle">> & WgslConfig;
 	return {
 		name: "wgsl",
 		extension: "wgsl",
@@ -68,16 +89,26 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 								}
 								if (f.paddingAfter > 0) {
 									const padWords = Math.ceil(f.paddingAfter / 4);
-									code += `\t_pad_bits_${f.offset}: array<u32, ${padWords}>,\n`;
+									code += `\t_pad_bits_${f.name}: array<u32, ${padWords}>,\n`;
 								}
 							} else {
 								const wgslType = getWgslType(f.type);
 								const fieldName = applyNaming(f.name, cfg.fieldNaming!);
-								const totalSize = f.size + f.paddingAfter;
 
-								// In WGSL, we can use @size to manage padding elegantly.
 								if (f.paddingAfter > 0) {
-									code += `\t@size(${totalSize}) ${fieldName}: ${wgslType},\n`;
+									if (cfg.paddingStyle === "size") {
+										const totalSize = f.size + f.paddingAfter;
+										code += `\t@size(${totalSize}) ${fieldName}: ${wgslType},\n`;
+									} else {
+										// "fields" — explicit named padding slot(s)
+										code += `\t${fieldName}: ${wgslType},\n`;
+										const padWords = Math.ceil(f.paddingAfter / 4);
+										if (padWords === 1) {
+											code += `\t_pad_${fieldName}: u32,\n`;
+										} else {
+											code += `\t_pad_${fieldName}: array<u32, ${padWords}>,\n`;
+										}
+									}
 								} else {
 									code += `\t${fieldName}: ${wgslType},\n`;
 								}

@@ -1,4 +1,4 @@
-import type { IRItem, IRType } from "./ir";
+import type { IRItem, IRType } from "schema-pop";
 
 /**
  * Names schema-pop's `binary` + `bitwise` scopes always provide, plus
@@ -63,9 +63,7 @@ function downgradeType(t: IRType, known: Set<string>): IRType {
 			return known.has(t.name) ? t : { kind: "unknown", raw: t.name };
 		case "array":
 			return { ...t, item: downgradeType(t.item, known) };
-		case "vec":
-			return { ...t, item: downgradeType(t.item, known) };
-		case "option":
+		case "optional":
 			return { ...t, inner: downgradeType(t.inner, known) };
 		default:
 			return t;

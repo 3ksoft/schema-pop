@@ -1,0 +1,57 @@
+{
+  "version": "v1",
+  "endian": "le",
+  "autoLayout": false,
+  "wordSize": 64,
+  "types": [
+    {
+      "kind": "struct",
+      "name": "Cfg",
+      "size": 8,
+      "align": 4,
+      "paddedSize": 8,
+      "fields": [
+        {
+          "name": "name",
+          "type": {
+            "kind": "primitive",
+            "size": 4,
+            "align": 4,
+            "paddedSize": 4,
+            "name": "u32",
+            "bitSize": 32,
+            "popKind": "binary"
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 32,
+          "size": 4,
+          "paddingAfter": 0,
+          "description": "non-negative and at most 4294967295"
+        },
+        {
+          "name": "age",
+          "type": {
+            "kind": "optional",
+            "inner": {
+              "kind": "primitive",
+              "size": 1,
+              "align": 1,
+              "paddedSize": 1,
+              "name": "u8",
+              "bitSize": 8,
+              "popKind": "binary"
+            }
+          },
+          "offset": 4,
+          "bitOffset": 0,
+          "bitSize": 16,
+          "size": 2,
+          "paddingAfter": 2,
+          "description": "non-negative and at most 255"
+        }
+      ],
+      "description": "{ name: non-negative and at most 4294967295, age?: non-negative and at most 255 }"
+    }
+  ]
+}

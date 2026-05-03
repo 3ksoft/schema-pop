@@ -4,29 +4,35 @@ Schemas evolve. `schema-pop` lets you ship multiple versions of one schema side 
 
 ## Workflow
 
-1. **Snapshot** — keep each version as its own source file (e.g. `test-schema.ts` for v1.0, `test-schemaV2.ts` for v2.0). The `create-schema-pop` scaffold groups files by base name automatically: `<base>.ts` → 1.0, `<base>V<n>.ts` → `<n>.0`.
-2. **Register** — declare versions in `pop.config.ts`:
+1. **Snapshot** — keep each version as its own source file. The filename carries the version: `<name>.<version>.pop.ts`. The `create-schema-pop` scaffold and the discovery glob (`./**/*.pop.ts`, see [`config.md`](./config.md)) pick them up automatically.
 
-   ```ts
-   schemas: [{
-       name: "test-schema",
-       versions: [
-           { version: "1.0", source: "./src/test-schema.ts" },
-           { version: "2.0", source: "./src/test-schemaV2.ts" },
-       ],
-       targets: [ /* … */ ],
-   }]
+   ```
+   src/test-schema.1.pop.ts
+   src/test-schema.2.pop.ts
    ```
 
-3. **Generate** — `bun run generate` produces all versions in each target output:
+2. **Wrap the latest** with `schemaPop({ targets: [...] }, scope({...}))`. Older versions can stay as plain `export const $ = scope({...})` — the builder picks targets from the highest-version file:
 
-   - Rust: `pub mod test_schema_1_0 { … }` and `pub mod test_schema_2_0 { … }`
-   - C++: `namespace test_schema_1_0 { … }`
-   - Zig: `pub const test_schema_1_0 = struct { … }`
-   - TypeScript: `export namespace test_schema_1_0 { … }`
+   ```ts
+   // test-schema.2.pop.ts
+   import { schemaPop, scope } from "schema-pop";
+   import { rust, html } from "@schema-pop/core-exporters";
+
+   export const $ = schemaPop(
+       { targets: [rust({}), html({})] },
+       scope({ ...schemaPop, /* ... */ }),
+   );
+   ```
+
+3. **Generate** — `bunx schema-pop` produces all versions in each target output:
+
+   - Rust: `pub mod test_schema_1 { … }` and `pub mod test_schema_2 { … }`
+   - C++: `namespace test_schema_1 { … }`
+   - Zig: `pub const test_schema_1 = struct { … }`
+   - TypeScript: `export namespace test_schema_1 { … }`
    - HTML: a single page with both versions, side-by-side compare overlay, and a per-type diff summary
 
-   Within one output, each version's struct types use the namespaced safe identifier (`test_schema_1_0_BatteryInfo` etc.) so name collisions across versions are impossible.
+   Within one output, each version's struct types use the namespaced safe identifier (`test_schema_1_BatteryInfo` etc.) so name collisions across versions are impossible. Single-version schemas drop the suffix automatically — see "Single-version namespace" in [`config.md`](./config.md).
 
 ## Marking fields as obsolete
 
@@ -54,6 +60,4 @@ The compare overlay (sidebar → "compare versions") lets you diff any two versi
 
 ## Code-level migration helpers
 
-> **Status (0.1):** code-generation of migration functions (e.g. `impl From<v1::T> for v2::T`) is not yet shipped. The 0.2 milestone adds custom-migration hooks; until then, the diff view is the primary support for tracking schema evolution.
-
-For now, when you need to migrate data between versions, the typed structs from each namespace are available side by side and you can write the migration logic by hand using the existing pre-computed layout.
+The Rust, C++, Zig, and Go exporters implement `generateMigration(fromPlan, toPlan)` and emit per-type conversion functions between consecutive versions in their respective output files (`migrate_T_v1_to_v2(src) -> T`). Auto-derivable changes (added field with default, renamed via `Renamed<T, "oldName">`, type widening, reorder) get full bodies; ambiguous changes (narrowing, structural type changes) emit a stub the user fills in. See [`migrations-spec.md`](./migrations-spec.md) for the change taxonomy and per-language emit shapes.

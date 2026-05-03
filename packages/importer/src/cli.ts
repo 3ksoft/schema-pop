@@ -11,10 +11,12 @@ declare const Bun: {
 		scan(opts: { cwd: string; onlyFiles?: boolean }): AsyncIterable<string>;
 	};
 };
+import { writeLayoutPlan } from "schema-pop/node";
 import {
 	type Engine,
 	type Lang,
 	fileToArktypeScope,
+	fileToLayoutPlan,
 	loadExtras,
 	pickEngine,
 } from "./index";
@@ -86,6 +88,7 @@ async function main() {
 			scope: { type: "string", short: "n" },
 			type: { type: "string", short: "t" },
 			extras: { type: "string", short: "x", multiple: true },
+			format: { type: "string" },
 			clang: { type: "string" },
 			"no-auto-stdint": { type: "boolean" },
 			help: { type: "boolean", short: "h" },
@@ -135,11 +138,15 @@ async function main() {
 	// Keep the source extension as part of the output basename so a
 	// `foo.cpp` and a `foo.h` in the same batch don't both write to
 	// `foo.ts` (the second one would silently overwrite the first).
-	// Result: `foo.cpp.ts` / `foo.h.ts` — verbose, but unambiguous.
+	// Result: `foo.cpp.layout.json` / `foo.h.layout.json` — verbose, but unambiguous.
+	// Batch mode defaults to `.layout.json` (the cheap path that bypasses
+	// emit.ts roundtrip); pass `--format ts` to opt into legacy arktype source.
+	const format =
+		(values.format as string | undefined) === "ts" ? "ts" : "layout.json";
 	for (const inp of inputs) {
 		const absInp = path.resolve(inp);
 		const base = path.basename(absInp);
-		const dest = path.join(absOutput, `${base}.ts`);
+		const dest = path.join(absOutput, `${base}.${format}`);
 		try {
 			await runOne(inp, dest, values, passthrough);
 		} catch (e) {
@@ -210,6 +217,25 @@ async function runOne(
 			console.error(`error: ${(e as Error).message}`);
 			process.exit(2);
 		}
+	}
+
+	// Output extension picks the format:
+	//   .layout.json — direct LayoutPlan, no arktype round-trip (preferred)
+	//   .ts          — legacy arktype scope source (kept for hand-edit workflows)
+	if (absOutput.endsWith(".layout.json")) {
+		const plan = await fileToLayoutPlan(absInput, {
+			engine,
+			lang,
+			clangBin: values.clang as string | undefined,
+			extraClangArgs: extraArgs,
+			extras,
+			filter,
+		});
+		await writeLayoutPlan(plan, absOutput);
+		console.log(
+			`✅ ${path.relative(process.cwd(), absInput)} → ${path.relative(process.cwd(), absOutput)} (${lang}, ${engine}, layout-json)`,
+		);
+		return;
 	}
 
 	const code = await fileToArktypeScope(absInput, {

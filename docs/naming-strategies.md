@@ -13,16 +13,15 @@ To bridge language conventions (`snake_case` in Rust, `camelCase` in TypeScript,
 
 ## Configuration
 
-Per-target, in `pop.config.ts`:
+Per-target, set inside the schema file's `schemaPop({ targets: [...] }, scope)` wrap:
 
 ```ts
-import { defineConfig } from "schema-pop";
+// telemetry.1.pop.ts
+import { schemaPop, scope } from "schema-pop";
 import { ts, rust } from "@schema-pop/core-exporters";
 
-export default defineConfig({
-    schemas: [{
-        name: "telemetry",
-        versions: [{ version: "1.0", source: "./src/telemetry.ts" }],
+export const $ = schemaPop(
+    {
         targets: [
             ts({
                 dest: "./dist/telemetry.ts",
@@ -35,8 +34,9 @@ export default defineConfig({
                 typeNaming: "PascalCase",
             }),
         ],
-    }],
-});
+    },
+    scope({ ...schemaPop, /* ... */ }),
+);
 ```
 
 The same byte at offset `+4` will be reachable as `voltageLevel` from TypeScript and `voltage_level` from Rust — no manual mapping required.

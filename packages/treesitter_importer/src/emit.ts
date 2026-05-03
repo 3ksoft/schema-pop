@@ -3,9 +3,16 @@ import type {
 	IRItem,
 	SchemaPopIR,
 	IRType,
-} from "./ir";
+} from "schema-pop";
 
 /**
+ * @deprecated Legacy IR → arktype scope source emitter. Kept for the
+ * hand-edit workflow (`schema-pop-import foo.h -o foo.pop.ts`), but
+ * the default importer flow now writes `.layout.json` directly via
+ * `computeLayoutPlan` + `writeLayoutPlan` and skips this round-trip
+ * entirely. Use `.layout.json` output unless you specifically need the
+ * editable arktype scope artifact.
+ *
  * IR → arktype scope source. The output file is meant to be hand-readable
  * and to plug into a normal schema-pop pipeline as `versions[].source`.
  *
@@ -128,8 +135,8 @@ function anyTypeMatches(
 ): boolean {
 	const visit = (t: IRType): boolean => {
 		if (pred(t)) return true;
-		if (t.kind === "array" || t.kind === "vec") return visit(t.item);
-		if (t.kind === "option") return visit(t.inner);
+		if (t.kind === "array") return visit(t.item);
+		if (t.kind === "optional") return visit(t.inner);
 		return false;
 	};
 	for (const item of items) {
@@ -166,8 +173,8 @@ function emitFunctions(
 				`\t\t\t{ ${a.name ? `name: ${JSON.stringify(a.name)}, ` : ""}type: ${emitFieldLiteral(a.type)} }`,
 		);
 		const ret = emitFieldLiteral(fn.returnType);
-		const docPart = fn.doc
-			? `\n\t\tdescription: ${JSON.stringify(fn.doc)},`
+		const docPart = fn.description
+			? `\n\t\tdescription: ${JSON.stringify(fn.description)},`
 			: "";
 		const abiPart = fn.abi ? `\n\t\tabi: ${JSON.stringify(fn.abi)},` : "";
 		return `\t{
@@ -194,12 +201,11 @@ function emitFieldLiteral(t: IRType): string {
 		case "string":
 			return `{ kind: "string" }`;
 		case "array": {
-			return `{ kind: "array", item: ${emitFieldLiteral(t.item)}, exactLength: ${t.len}, size: 0, align: 1, paddedSize: 0 }`;
+			const lenPart =
+				t.exactLength !== undefined ? `, exactLength: ${t.exactLength}` : "";
+			return `{ kind: "array", item: ${emitFieldLiteral(t.item)}${lenPart}, size: 0, align: 1, paddedSize: 0 }`;
 		}
-		case "vec": {
-			return `{ kind: "array", item: ${emitFieldLiteral(t.item)}, size: 0, align: 1, paddedSize: 0 }`;
-		}
-		case "option": {
+		case "optional": {
 			return `{ kind: "optional", inner: ${emitFieldLiteral(t.inner)} }`;
 		}
 		case "bit": {
@@ -216,6 +222,15 @@ function emitFieldLiteral(t: IRType): string {
 				return `{ kind: "unit" }`;
 			}
 			return `{ kind: "any", originalType: ${JSON.stringify(t.raw)} }`;
+		case "inlineStruct":
+		case "map":
+		case "any":
+		case "unit":
+			// New IR variants produced by the arktype walker only;
+			// tree-sitter walkers don't emit them, so the emitter
+			// (which is tree-sitter-only) doesn't need to handle them.
+			// Falls back to opaque so we don't crash if a stray IR slips through.
+			return `{ kind: "any" }`;
 	}
 }
 
@@ -249,7 +264,7 @@ function emitItem(item: IRItem): string {
 		const lines = item.fields
 			.filter((f) => emittableField(f))
 			.map((f) => emitField(f));
-		return `${jsdoc(item.doc)}${quoteTypeName(item.name)}: {\n${lines.join(",\n")}\n}`;
+		return `${jsdoc(item.description)}${quoteTypeName(item.name)}: {\n${lines.join(",\n")}\n}`;
 	}
 	if (item.kind === "enum") {
 		// All unit variants → string literal union; carry tag size via
@@ -257,7 +272,7 @@ function emitItem(item: IRItem): string {
 		const allUnit = item.variants.every((v) => v.kind === "unit");
 		if (allUnit) {
 			const lits = item.variants.map((v) => `'${v.name}'`).join(" | ");
-			return `${jsdoc(item.doc)}${quoteTypeName(item.name)}: ${JSON.stringify(lits)}`;
+			return `${jsdoc(item.description)}${quoteTypeName(item.name)}: ${JSON.stringify(lits)}`;
 		}
 		// Discriminated tagged union: emit each variant as a struct ref then
 		// a union of those refs. For MVP keep it simple: emit per-variant
@@ -305,7 +320,7 @@ function emitItem(item: IRItem): string {
 		return all.join(",\n");
 	}
 	if (item.kind === "alias") {
-		return `${jsdoc(item.doc)}${quoteTypeName(item.name)}: ${emitTypeAsString(item.type)}`;
+		return `${jsdoc(item.description)}${quoteTypeName(item.name)}: ${emitTypeAsString(item.type)}`;
 	}
 	// function items are emitted via emitFunctions, not inside the scope.
 	return "";
@@ -316,9 +331,9 @@ function emittableField(f: IRField): boolean {
 }
 
 function emitField(f: IRField): string {
-	// Option<T> at field level → "name?": "T" (arktype optional-key form).
-	const docPrefix = jsdoc(f.doc, "\t");
-	if (f.type.kind === "option") {
+	// Optional<T> at field level → "name?": "T" (arktype optional-key form).
+	const docPrefix = jsdoc(f.description, "\t");
+	if (f.type.kind === "optional") {
 		const innerExpr = emitTypeAsString(f.type.inner);
 		const key = f.name + "?";
 		return `${docPrefix}\t${JSON.stringify(key)}: ${innerExpr}`;
@@ -356,15 +371,15 @@ function emitTypeAsString(t: IRType): string {
 			return JSON.stringify("string");
 		case "array": {
 			const inner = innerStringForArktype(t.item);
-			return JSON.stringify(`${inner}[] == ${t.len}`);
+			return JSON.stringify(
+				t.exactLength !== undefined
+					? `${inner}[] == ${t.exactLength}`
+					: `${inner}[]`,
+			);
 		}
-		case "option": {
+		case "optional": {
 			const inner = innerStringForArktype(t.inner);
 			return JSON.stringify(`${inner} | undefined`);
-		}
-		case "vec": {
-			const inner = innerStringForArktype(t.item);
-			return JSON.stringify(`${inner}[]`);
 		}
 		case "bit":
 			return JSON.stringify(bitTypeString(t.widthBits, t.underlying));
@@ -378,6 +393,14 @@ function emitTypeAsString(t: IRType): string {
 			return JSON.stringify(`OriginalType<unknown, ${quoteForArktype(t.raw)}>`);
 		case "unsupported":
 			return JSON.stringify(`OriginalType<unknown, ${quoteForArktype(t.raw)}>`);
+		case "inlineStruct":
+		case "map":
+		case "any":
+		case "unit":
+			// Tree-sitter walkers don't produce these; the emitter is
+			// tree-sitter-only so a shared opaque fallback keeps the
+			// switch exhaustive without generating bogus arktype source.
+			return JSON.stringify("unknown");
 	}
 }
 
@@ -412,12 +435,11 @@ function innerStringForArktype(t: IRType): string {
 	if (t.kind === "ref") return t.name;
 	if (t.kind === "string") return "string";
 	if (t.kind === "array") {
-		return `${innerStringForArktype(t.item)}[] == ${t.len}`;
+		return t.exactLength !== undefined
+			? `${innerStringForArktype(t.item)}[] == ${t.exactLength}`
+			: `${innerStringForArktype(t.item)}[]`;
 	}
-	if (t.kind === "vec") {
-		return `${innerStringForArktype(t.item)}[]`;
-	}
-	if (t.kind === "option") {
+	if (t.kind === "optional") {
 		return `${innerStringForArktype(t.inner)} | undefined`;
 	}
 	if (t.kind === "bit") return bitTypeString(t.widthBits, t.underlying);
