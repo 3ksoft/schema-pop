@@ -132,9 +132,13 @@ async function main() {
 	}
 
 	await fs.mkdir(absOutput, { recursive: true });
+	// Keep the source extension as part of the output basename so a
+	// `foo.cpp` and a `foo.h` in the same batch don't both write to
+	// `foo.ts` (the second one would silently overwrite the first).
+	// Result: `foo.cpp.ts` / `foo.h.ts` — verbose, but unambiguous.
 	for (const inp of inputs) {
 		const absInp = path.resolve(inp);
-		const base = path.basename(absInp).replace(/\.[^.]+$/, "");
+		const base = path.basename(absInp);
 		const dest = path.join(absOutput, `${base}.ts`);
 		try {
 			await runOne(inp, dest, values, passthrough);
