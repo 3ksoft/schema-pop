@@ -169,59 +169,78 @@ function computeTargetsBlock(
 	pType: "monorepo" | "project" | "all",
 	harnesses: string[],
 ): { targetImports: string[]; targetLines: string[] } {
-	const importsSet = new Set<string>();
+	// Collect named imports per source module so we end up with one
+	// `import { ts, rust, c, cpp, zig } from "@schema-pop/core-exporters"`
+	// line instead of N separate same-source imports.
+	const namesByModule = new Map<string, Set<string>>();
+	const addImport = (mod: string, ...names: string[]) => {
+		const set = namesByModule.get(mod) ?? new Set<string>();
+		for (const n of names) set.add(n);
+		namesByModule.set(mod, set);
+	};
 	const lines: string[] = [];
 
 	if (pType === "monorepo" || pType === "all") {
 		if (harnesses.includes("ts")) {
-			importsSet.add(`import { ts } from "@schema-pop/core-exporters";`);
+			addImport("@schema-pop/core-exporters", "ts");
 			lines.push(
-				`\t\tts({ dest: "../../packages/ts/src/schema.ts", exportJsonPlan: true }),`,
+				`\t\t\tts({ dest: "../../packages/ts/src/schema.ts", exportJsonPlan: true }),`,
 			);
 		}
 		if (harnesses.includes("rust")) {
-			importsSet.add(`import { rust } from "@schema-pop/core-exporters";`);
+			addImport("@schema-pop/core-exporters", "rust");
 			lines.push(
-				`\t\trust({ dest: "../../packages/rust/src/schema.rs", harness: true }),`,
+				`\t\t\trust({ dest: "../../packages/rust/src/schema.rs", harness: true }),`,
 			);
 		}
 		if (harnesses.includes("cpp")) {
-			importsSet.add(`import { cpp, c } from "@schema-pop/core-exporters";`);
+			addImport("@schema-pop/core-exporters", "cpp", "c");
 			lines.push(
-				`\t\tcpp({ dest: "../../packages/cpp/src/schema.hpp", harness: true }),`,
+				`\t\t\tcpp({ dest: "../../packages/cpp/src/schema.hpp", harness: true }),`,
 			);
-			lines.push(`\t\tc({ dest: "../../packages/cpp/src/schema.h" }),`);
+			lines.push(`\t\t\tc({ dest: "../../packages/cpp/src/schema.h" }),`);
 		}
 		if (harnesses.includes("zig")) {
-			importsSet.add(`import { zig } from "@schema-pop/core-exporters";`);
+			addImport("@schema-pop/core-exporters", "zig");
 			lines.push(
-				`\t\tzig({ dest: "../../packages/zig/src/schema.zig", pub: true, harness: true }),`,
+				`\t\t\tzig({ dest: "../../packages/zig/src/schema.zig", pub: true, harness: true }),`,
 			);
 		}
 		if (pType === "all") {
-			importsSet.add(`import { random } from "@schema-pop/core-exporters";`);
-			importsSet.add(
-				`import { brainfuck, glsl, html, nuxtUi, openapi, svg, wgsl } from "@schema-pop/extra-exporters";`,
+			addImport("@schema-pop/core-exporters", "random");
+			addImport(
+				"@schema-pop/extra-exporters",
+				"brainfuck",
+				"glsl",
+				"html",
+				"nuxtUi",
+				"openapi",
+				"svg",
+				"wgsl",
 			);
 			lines.push(
-				`\t\tbrainfuck({ dest: "../../packages/bf/schema.bf", harness: true }),`,
+				`\t\t\tbrainfuck({ dest: "../../packages/bf/schema.bf", harness: true }),`,
 			);
-			lines.push(`\t\tglsl({}),`);
-			lines.push(`\t\thtml({}),`);
-			lines.push(`\t\tnuxtUi({}),`);
-			lines.push(`\t\topenapi({}),`);
-			lines.push(`\t\trandom({}),`);
-			lines.push(`\t\tsvg({}),`);
-			lines.push(`\t\twgsl({}),`);
+			lines.push(`\t\t\tglsl({}),`);
+			lines.push(`\t\t\thtml({}),`);
+			lines.push(`\t\t\tnuxtUi({}),`);
+			lines.push(`\t\t\topenapi({}),`);
+			lines.push(`\t\t\trandom({}),`);
+			lines.push(`\t\t\tsvg({}),`);
+			lines.push(`\t\t\twgsl({}),`);
 		}
 	} else {
 		// Standalone project: ts + rust by default.
-		importsSet.add(`import { ts, rust } from "@schema-pop/core-exporters";`);
-		lines.push(`\t\tts({ dest: "./dist/schema.ts", exportJsonPlan: true }),`);
-		lines.push(`\t\trust({ dest: "./dist/schema.rs" }),`);
+		addImport("@schema-pop/core-exporters", "ts", "rust");
+		lines.push(`\t\t\tts({ dest: "./dist/schema.ts", exportJsonPlan: true }),`);
+		lines.push(`\t\t\trust({ dest: "./dist/schema.rs" }),`);
 	}
 
-	return { targetImports: [...importsSet], targetLines: lines };
+	const targetImports = [...namesByModule.entries()].map(
+		([mod, names]) =>
+			`import { ${[...names].sort().join(", ")} } from "${mod}";`,
+	);
+	return { targetImports, targetLines: lines };
 }
 
 /**
@@ -257,16 +276,38 @@ function injectSchemaPopWraps(
 		// Skip if already wrapped (idempotent).
 		if (/schemaPop\(\s*\{/.test(original)) continue;
 
-		const importsBlock = targetImports.join("\n");
+		// Find the schema-pop import line and ensure `schemaPop` is in
+		// the destructured names. Bundled schemas may import e.g.
+		// `{ scope, binary }` (no schemaPop) — need to inject it so
+		// the wrap call below resolves.
+		const popImportRe =
+			/^import\s*\{\s*([^}]+?)\s*\}\s*from\s*["']schema-pop["'];?/m;
+		const popMatch = original.match(popImportRe);
+		if (!popMatch) {
+			console.warn(
+				`  ⚠ skip wrap: ${latest.file} has no \`from "schema-pop"\` import`,
+			);
+			continue;
+		}
+		const existingNames = popMatch[1]!
+			.split(",")
+			.map((n) => n.trim())
+			.filter(Boolean);
+		const namesSet = new Set(existingNames);
+		namesSet.add("schemaPop");
+		namesSet.add("scope");
+		const fixedPopImport = `import { ${[...namesSet].sort().join(", ")} } from "schema-pop";`;
+		const importsBlock = targetImports.length
+			? `\n${targetImports.join("\n")}`
+			: "";
+
 		const targetsBody =
 			targetLines.length > 0
-				? `\n${targetLines.join("\n")}\n\t`
+				? `\n${targetLines.join("\n")}\n\t\t`
 				: "";
+
 		const wrapped = original
-			.replace(
-				/import \{ schemaPop, scope \} from "schema-pop";/,
-				`import { schemaPop, scope } from "schema-pop";\n${importsBlock}`,
-			)
+			.replace(popImportRe, `${fixedPopImport}${importsBlock}`)
 			.replace(
 				/export const \$ = scope\(/,
 				`export const $ = schemaPop(\n\t{\n\t\ttargets: [${targetsBody}],\n\t},\n\tscope(`,
@@ -505,13 +546,33 @@ export default defineConfig({
 						pkg.name === `${pName}-schema` ||
 						pkg.name === "schema-pop-test"
 					) {
-						const version = process.env.LOCAL_TEST ? "workspace:*" : "latest";
 						pkg.devDependencies = pkg.devDependencies ?? {};
-						pkg.devDependencies["schema-pop"] = version;
-						if (pType === "all") {
-							pkg.devDependencies["@schema-pop/core-exporters"] = version;
-							pkg.devDependencies["@schema-pop/extra-exporters"] = version;
+						// LOCAL_TEST points at the in-tree workspace via `file:`
+						// protocol so the scaffolded project installs without
+						// Verdaccio and without being inside the bun workspace
+						// tree itself. LOCAL_TEST_PACKAGES_DIR overrides the
+						// resolution root (absolute path to packages/).
+						const localRoot = process.env.LOCAL_TEST_PACKAGES_DIR;
+						const pkgPathMap: Record<string, string> = {
+							"schema-pop": "core",
+							"@schema-pop/core-exporters": "core-exporters",
+							"@schema-pop/extra-exporters": "extra-exporters",
+							"@schema-pop/clang-importer": "clang_importer",
+							"@schema-pop/treesitter-importer": "treesitter_importer",
+							"@schema-pop/importer": "importer",
+						};
+						const versionFor = (dep: string): string => {
+							if (!process.env.LOCAL_TEST) return "latest";
+							const sub = pkgPathMap[dep];
+							if (!sub || !localRoot) return "latest";
+							return `file:${localRoot}/${sub}`;
+						};
+						for (const dep of Object.keys(pkg.devDependencies)) {
+							if (dep === "schema-pop" || dep.startsWith("@schema-pop/")) {
+								pkg.devDependencies[dep] = versionFor(dep);
+							}
 						}
+						pkg.devDependencies["schema-pop"] = versionFor("schema-pop");
 					}
 					content = JSON.stringify(pkg, null, 4) + "\n";
 				} catch {}
