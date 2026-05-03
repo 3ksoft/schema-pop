@@ -426,9 +426,24 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 			const richOpts = { allowOriginalType: !!cfg.useOriginalType };
 			for (const t of plan.types) {
 				if (isRichType(t, richOpts)) {
+					// Emit an opaque byte-blob stub instead of dropping the
+					// type entirely. Other types in the same plan often
+					// reference this one via pointer (`*mut UartTxDataT`),
+					// and dropping it would leave those refs unresolved.
+					// The stub preserves layout (size + align) and lets
+					// downstream code do pointer arithmetic / casting; what
+					// it does NOT support is direct field access — exactly
+					// the contract for "rich content we can't safely model".
 					console.warn(
-						`  ⚠ rust: skipping "${t.name}" — contains rich-tier types (Record / unknown / unbounded number)`,
+						`  ⚠ rust: opaque stub for "${t.name}" — contains rich-tier fields (Record / unknown / unbounded / nested-anon-struct)`,
 					);
+					const size = (t as any).paddedSize ?? (t as any).size ?? 0;
+					const align = (t as any).align ?? 1;
+					if (size > 0) {
+						code += `#[repr(C, align(${align}))]\npub struct ${typeName(t.name)} {\n${indent()}_opaque: [u8; ${size}],\n}\n\n`;
+					} else {
+						code += `#[repr(C)]\npub struct ${typeName(t.name)} { _private: [u8; 0] }\n\n`;
+					}
 					continue;
 				}
 				const tn = typeName(t.name);
