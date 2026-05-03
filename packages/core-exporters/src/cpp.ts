@@ -65,13 +65,16 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
 	): { type: string; suffix?: string } {
 		// Pointer / reference indirection wins over the scalar map —
 		// otherwise self-referential structs (`struct Node { Node *next; }`)
-		// render as recursive value types.
+		// render as recursive value types. When the pointee is a primitive
+		// (clang `int *` → ref name "i32"), use the primitive map so we
+		// get `int32_t*` instead of pascal-cased `I32*`.
 		if (field.kind === "reference") {
+			const inner = CPP_PRIMITIVES[field.name] ?? typeName(field.name);
 			if (field.indirection === "pointer") {
-				return { type: `${typeName(field.name)}*` };
+				return { type: `${inner}*` };
 			}
 			if (field.indirection === "reference") {
-				return { type: `${typeName(field.name)}&` };
+				return { type: `${inner}&` };
 			}
 		}
 		const scalar = mapScalarField(field, CPP_PRIMITIVES, typeName);

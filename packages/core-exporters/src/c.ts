@@ -115,8 +115,11 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 			): { type: string; suffix?: string } {
 				// Pointer indirection — self-ref structs (`struct Node { Node *next; }`)
 				// otherwise render as recursive value types and don't compile.
+				// Pointer-to-primitive (`int *` → ref name "i32") routes
+				// through the primitive map so we get `int32_t*` not `I32*`.
 				if (field.kind === "reference" && field.indirection === "pointer") {
-					return { type: `${refName(field.name)}*` };
+					const inner = C_PRIMITIVES[field.name] ?? refName(field.name);
+					return { type: `${inner}*` };
 				}
 				const scalar = mapScalarField(field, C_PRIMITIVES, refName);
 				if (scalar !== undefined) return { type: scalar };

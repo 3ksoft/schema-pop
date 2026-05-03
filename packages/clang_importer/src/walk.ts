@@ -126,8 +126,20 @@ export function resolveQualType(
 		if (innerType.kind === "ref") {
 			return { ...innerType, indirection: "pointer" };
 		}
+		// Pointer to primitive (`int *`, `char *`, `const uint8_t *`) —
+		// previously skipped as `unsupported`, which dropped the field
+		// from the IR and silently misaligned every subsequent field in
+		// the containing struct (the pointer's 8 bytes vanish but the
+		// struct still occupies them). Modeling as a ref-to-primitive
+		// with pointer indirection preserves layout (sizeof void*) and
+		// gives exporters something concrete to render (`*mut u8`,
+		// `int*`, etc.). Buckets ~2.7k fields in the ESP-IDF corpus.
 		if (innerType.kind === "primitive") {
-			return { kind: "unsupported", raw: qualTypeRaw };
+			return {
+				kind: "ref",
+				name: innerType.name,
+				indirection: "pointer",
+			};
 		}
 		return { kind: "unsupported", raw: qualTypeRaw };
 	}

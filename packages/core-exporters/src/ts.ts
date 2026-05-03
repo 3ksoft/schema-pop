@@ -83,9 +83,11 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 		// pointers, so model as nullable: `Foo | null`. This communicates
 		// intent (the slot can be empty) without breaking on self-ref
 		// structs (which would otherwise be recursive value types).
+		// Pointer-to-primitive routes through the primitive map.
 		if (field.kind === "reference") {
 			if (field.indirection === "pointer" || field.indirection === "reference") {
-				return `${typeName(field.name)} | null`;
+				const inner = PRIMITIVE_TS[field.name] ?? typeName(field.name);
+				return `${inner} | null`;
 			}
 		}
 		const scalar = mapScalarField(field, PRIMITIVE_TS, typeName);

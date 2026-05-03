@@ -184,9 +184,11 @@ export function go(config: GoConfig = {}): ExporterPlugin<GoConfig> {
 		// types stay self-consistent within the file. Pointer / reference
 		// indirection (clang `Foo *`) wins so self-ref structs render as
 		// `*Foo` not bare `Foo` (would be a recursive value type).
+		// Pointer-to-primitive routes through the primitive map.
 		if (f.kind === "reference") {
 			if (f.indirection === "pointer" || f.indirection === "reference") {
-				return `*${vtn(f.name)}`;
+				const inner = GO_PRIMITIVES[f.name] ?? vtn(f.name);
+				return `*${inner}`;
 			}
 		}
 		const scalar = mapScalarField(f, GO_PRIMITIVES, vtn);

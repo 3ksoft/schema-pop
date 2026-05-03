@@ -336,12 +336,16 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 		// the importer recorded (clang `Foo *`), and rendering it as
 		// bare `Foo` produces a recursive value type with infinite size
 		// for self-referential structs (`struct Node { Node *next; }`).
+		// When the pointee is a primitive (clang `int *` → ref name
+		// "i32"), we look it up in the primitive map so we get
+		// `*mut i32` instead of pascal-cased `*mut I32`.
 		if (field.kind === "reference") {
+			const inner = RUST_PRIMITIVES[field.name] ?? typeName(field.name);
 			if (field.indirection === "pointer") {
-				return `*mut ${typeName(field.name)}`;
+				return `*mut ${inner}`;
 			}
 			if (field.indirection === "reference") {
-				return `&'static ${typeName(field.name)}`;
+				return `&'static ${inner}`;
 			}
 		}
 		const scalar = mapScalarField(field, RUST_PRIMITIVES, typeName);

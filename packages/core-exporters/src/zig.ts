@@ -62,12 +62,14 @@ export function zig(config: ZigConfig): ExporterPlugin<ZigConfig> {
 		structAlign: number,
 	): string {
 		// Pointer indirection — self-ref structs need `*Foo` not `Foo`.
+		// Pointer-to-primitive routes through the primitive map.
 		if (field.kind === "reference") {
+			const inner = ZIG_PRIMITIVES[field.name] ?? typeName(field.name);
 			if (field.indirection === "pointer") {
-				return `*${typeName(field.name)}`;
+				return `*${inner}`;
 			}
 			if (field.indirection === "reference") {
-				return `*const ${typeName(field.name)}`;
+				return `*const ${inner}`;
 			}
 		}
 		const scalar = mapScalarField(field, ZIG_PRIMITIVES, typeName);
