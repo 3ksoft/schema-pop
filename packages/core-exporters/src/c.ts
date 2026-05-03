@@ -113,6 +113,11 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 				field: Field,
 				fieldSize: number,
 			): { type: string; suffix?: string } {
+				// Pointer indirection — self-ref structs (`struct Node { Node *next; }`)
+				// otherwise render as recursive value types and don't compile.
+				if (field.kind === "reference" && field.indirection === "pointer") {
+					return { type: `${refName(field.name)}*` };
+				}
 				const scalar = mapScalarField(field, C_PRIMITIVES, refName);
 				if (scalar !== undefined) return { type: scalar };
 				if (

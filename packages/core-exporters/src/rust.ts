@@ -331,6 +331,19 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 	 * bytes.
 	 */
 	function fieldInnerType(field: Field): string | undefined {
+		// Pointer / reference indirection takes precedence over the
+		// generic `mapScalarField` ref rendering. A `*mut Foo` is what
+		// the importer recorded (clang `Foo *`), and rendering it as
+		// bare `Foo` produces a recursive value type with infinite size
+		// for self-referential structs (`struct Node { Node *next; }`).
+		if (field.kind === "reference") {
+			if (field.indirection === "pointer") {
+				return `*mut ${typeName(field.name)}`;
+			}
+			if (field.indirection === "reference") {
+				return `&'static ${typeName(field.name)}`;
+			}
+		}
 		const scalar = mapScalarField(field, RUST_PRIMITIVES, typeName);
 		if (scalar !== undefined) return scalar;
 		if (field.kind === "string") {

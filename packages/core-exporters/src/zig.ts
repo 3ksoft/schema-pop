@@ -61,6 +61,15 @@ export function zig(config: ZigConfig): ExporterPlugin<ZigConfig> {
 		fieldSize: number,
 		structAlign: number,
 	): string {
+		// Pointer indirection — self-ref structs need `*Foo` not `Foo`.
+		if (field.kind === "reference") {
+			if (field.indirection === "pointer") {
+				return `*${typeName(field.name)}`;
+			}
+			if (field.indirection === "reference") {
+				return `*const ${typeName(field.name)}`;
+			}
+		}
 		const scalar = mapScalarField(field, ZIG_PRIMITIVES, typeName);
 		if (scalar !== undefined) return scalar;
 		return `[${fieldSize}]u8 align(${structAlign})`;

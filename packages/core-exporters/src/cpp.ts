@@ -63,6 +63,17 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
 		field: Field,
 		fieldSize: number,
 	): { type: string; suffix?: string } {
+		// Pointer / reference indirection wins over the scalar map —
+		// otherwise self-referential structs (`struct Node { Node *next; }`)
+		// render as recursive value types.
+		if (field.kind === "reference") {
+			if (field.indirection === "pointer") {
+				return { type: `${typeName(field.name)}*` };
+			}
+			if (field.indirection === "reference") {
+				return { type: `${typeName(field.name)}&` };
+			}
+		}
 		const scalar = mapScalarField(field, CPP_PRIMITIVES, typeName);
 		if (scalar !== undefined) return { type: scalar };
 		if (

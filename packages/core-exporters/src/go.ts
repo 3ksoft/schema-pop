@@ -181,7 +181,14 @@ export function go(config: GoConfig = {}): ExporterPlugin<GoConfig> {
 		vtn: (n: string) => string,
 	): string {
 		// Re-route reference resolution through `vtn` so version-prefixed
-		// types stay self-consistent within the file.
+		// types stay self-consistent within the file. Pointer / reference
+		// indirection (clang `Foo *`) wins so self-ref structs render as
+		// `*Foo` not bare `Foo` (would be a recursive value type).
+		if (f.kind === "reference") {
+			if (f.indirection === "pointer" || f.indirection === "reference") {
+				return `*${vtn(f.name)}`;
+			}
+		}
 		const scalar = mapScalarField(f, GO_PRIMITIVES, vtn);
 		if (scalar !== undefined) return scalar;
 		switch (f.kind) {

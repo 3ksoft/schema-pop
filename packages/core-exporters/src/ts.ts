@@ -79,6 +79,15 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 	} = ExporterTools(cfg);
 
 	function fieldType(field: Field): string {
+		// Pointer indirection from C imports — TS doesn't have raw
+		// pointers, so model as nullable: `Foo | null`. This communicates
+		// intent (the slot can be empty) without breaking on self-ref
+		// structs (which would otherwise be recursive value types).
+		if (field.kind === "reference") {
+			if (field.indirection === "pointer" || field.indirection === "reference") {
+				return `${typeName(field.name)} | null`;
+			}
+		}
 		const scalar = mapScalarField(field, PRIMITIVE_TS, typeName);
 		if (scalar !== undefined) return scalar;
 		switch (field.kind) {
