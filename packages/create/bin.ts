@@ -515,14 +515,17 @@ async function main() {
 				// Config v2: pop.config.ts is just discovery + global flags.
 				// Targets live in each schema file's `schemaPop({...}, scope({...}))`
 				// wrap, injected during the schema-copy pass below.
-				content = `/**
- * schema-pop config (v2). The discovery glob defaults to
- * \`./**/*.pop.ts\` when omitted; per-schema targets and layout
- * flags live inside each \`<name>.<version>.pop.ts\` file via
- * \`schemaPop({...}, scope({...}))\`.
- *
- * Reference: https://github.com/3ksoft/schema-pop/blob/main/docs/config.md
- */
+				// NOTE: doc-comment uses `// ` lines instead of /** */ because
+				// the default glob string `./**/*.pop.ts` contains `*/`,
+				// which terminates a JSDoc block early. Tools like Biome
+				// auto-strip the escape if you use `/* ... \\*\\/ ... */`,
+				// so plain line-comments are the only safe form here.
+				content = `// schema-pop config (v2). The discovery glob defaults to
+// \`./**/*.pop.ts\` when omitted; per-schema targets and layout flags
+// live inside each \`<name>.<version>.pop.ts\` file via
+// \`schemaPop({...}, scope({...}))\`.
+//
+// Reference: https://github.com/3ksoft/schema-pop/blob/main/docs/config.md
 import { defineConfig } from "schema-pop";
 
 export default defineConfig({

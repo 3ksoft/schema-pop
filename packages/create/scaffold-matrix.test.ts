@@ -123,12 +123,17 @@ describe("create-schema-pop scaffold matrix", () => {
 				expect(existsSync(join(schemaPkgDir, "pop.config.ts"))).toBe(true);
 
 				// pop.config.ts must be v2: defineConfig, no `schemas: [{...versions:` field
-				const popCfg = readFileSync(
-					join(schemaPkgDir, "pop.config.ts"),
-					"utf8",
-				);
+				const popCfgPath = join(schemaPkgDir, "pop.config.ts");
+				const popCfg = readFileSync(popCfgPath, "utf8");
 				expect(popCfg).toContain("defineConfig");
 				expect(popCfg).not.toMatch(/schemas\s*:\s*\[\s*\{[^}]*versions\s*:/);
+
+				// Syntactic parse-check via Bun.Transpiler — catches
+				// JSDoc-`*/`-collisions, mismatched quotes, etc. without
+				// needing dependencies installed.
+				expect(() =>
+					new Bun.Transpiler({ loader: "ts" }).transformSync(popCfg),
+				).not.toThrow();
 
 				// Every schema file must end in `.pop.ts(x)`
 				const schemaSrcDir = join(schemaPkgDir, "src/schema");
@@ -183,19 +188,12 @@ describe("create-schema-pop scaffold matrix", () => {
 						);
 					}
 
-					// Balanced delimiters — string-based injection should
-					// never leave the file with mismatched ()/{}/[].
-					const balance = (open: string, close: string): number => {
-						let depth = 0;
-						for (const c of src) {
-							if (c === open) depth++;
-							else if (c === close) depth--;
-						}
-						return depth;
-					};
-					expect(balance("(", ")"), `${name}: ()-mismatch`).toBe(0);
-					expect(balance("{", "}"), `${name}: {}-mismatch`).toBe(0);
-					expect(balance("[", "]"), `${name}: []-mismatch`).toBe(0);
+					// Bun.Transpiler parse-check on the wrapped schema — final
+					// gatekeeper for the string-based wrap injection.
+					expect(
+						() => new Bun.Transpiler({ loader: "ts" }).transformSync(src),
+						`${name}: schema source doesn't parse`,
+					).not.toThrow();
 				}
 
 				// Harness directories present
