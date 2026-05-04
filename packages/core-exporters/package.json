@@ -1,6 +1,6 @@
 {
 	"name": "@schema-pop/core-exporters",
-	"version": "0.1.41",
+	"version": "0.1.42",
 	"type": "module",
 	"main": "./dist/index.js",
 	"module": "./dist/index.js",
@@ -22,8 +22,8 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"schema-pop": "0.1.41",
-		"@schema-pop/treesitter-importer": "0.1.41",
+		"schema-pop": "0.1.42",
+		"@schema-pop/treesitter-importer": "0.1.42",
 		"web-tree-sitter": "^0.25.0"
 	},
 	"devDependencies": {
