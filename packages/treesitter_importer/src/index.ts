@@ -5,6 +5,17 @@ import { walkRustFile } from "./walk-rust";
 import { walkCFile } from "./walk-c";
 import { walkCppFile } from "./walk-cpp";
 import { walkTsFile } from "./walk-ts";
+import { walkPhpFile } from "./walk-php";
+import { walkJavaFile } from "./walk-java";
+import { walkPythonFile } from "./walk-python";
+import { walkGoFile } from "./walk-go";
+import { walkCSharpFile } from "./walk-csharp";
+import { walkKotlinFile } from "./walk-kotlin";
+import { walkObjcFile } from "./walk-objc";
+import { walkSwiftFile } from "./walk-swift";
+import { walkDartFile } from "./walk-dart";
+import { walkScalaFile } from "./walk-scala";
+import { walkElixirFile } from "./walk-elixir";
 import { emitArktypeScope, type EmitOptions } from "./emit";
 import type { SchemaPopIR } from "schema-pop";
 
@@ -27,6 +38,17 @@ export { walkRustFile } from "./walk-rust";
 export { walkCFile } from "./walk-c";
 export { walkCppFile } from "./walk-cpp";
 export { walkTsFile } from "./walk-ts";
+export { walkPhpFile } from "./walk-php";
+export { walkJavaFile } from "./walk-java";
+export { walkPythonFile } from "./walk-python";
+export { walkGoFile } from "./walk-go";
+export { walkCSharpFile } from "./walk-csharp";
+export { walkKotlinFile } from "./walk-kotlin";
+export { walkObjcFile } from "./walk-objc";
+export { walkSwiftFile } from "./walk-swift";
+export { walkDartFile } from "./walk-dart";
+export { walkScalaFile } from "./walk-scala";
+export { walkElixirFile } from "./walk-elixir";
 export { emitArktypeScope } from "./emit";
 export { downgradeUnknownRefs, SCHEMA_POP_KNOWN_NAMES } from "./known-names";
 
@@ -42,6 +64,17 @@ export { downgradeUnknownRefs, SCHEMA_POP_KNOWN_NAMES } from "./known-names";
 export function langFromPath(filePath: string): Lang | null {
 	const ext = path.extname(filePath).toLowerCase();
 	if (ext === ".rs") return "rust";
+	if (ext === ".php") return "php";
+	if (ext === ".java") return "java";
+	if (ext === ".py") return "python";
+	if (ext === ".go") return "go";
+	if (ext === ".cs") return "c_sharp";
+	if (ext === ".kt" || ext === ".kts") return "kotlin";
+	if (ext === ".m" || ext === ".mm") return "objc";
+	if (ext === ".swift") return "swift";
+	if (ext === ".dart") return "dart";
+	if (ext === ".scala" || ext === ".sc") return "scala";
+	if (ext === ".ex" || ext === ".exs") return "elixir";
 	if (ext === ".c" || ext === ".h") return "c";
 	if (
 		ext === ".cpp" ||
@@ -88,6 +121,17 @@ export async function importFile(
 	if (resolved === "rust") return walkRustFile(tree, rel, walkOpts);
 	if (resolved === "c") return walkCFile(tree, rel, walkOpts);
 	if (resolved === "cpp") return walkCppFile(tree, rel, walkOpts);
+	if (resolved === "php") return walkPhpFile(tree, rel, walkOpts);
+	if (resolved === "java") return walkJavaFile(tree, rel, walkOpts);
+	if (resolved === "python") return walkPythonFile(tree, rel, walkOpts);
+	if (resolved === "go") return walkGoFile(tree, rel, walkOpts);
+	if (resolved === "c_sharp") return walkCSharpFile(tree, rel, walkOpts);
+	if (resolved === "kotlin") return walkKotlinFile(tree, rel, walkOpts);
+	if (resolved === "objc") return walkObjcFile(tree, rel, walkOpts);
+	if (resolved === "swift") return walkSwiftFile(tree, rel, walkOpts);
+	if (resolved === "dart") return walkDartFile(tree, rel, walkOpts);
+	if (resolved === "scala") return walkScalaFile(tree, rel, walkOpts);
+	if (resolved === "elixir") return walkElixirFile(tree, rel, walkOpts);
 	return walkTsFile(tree, rel, walkOpts);
 }
 

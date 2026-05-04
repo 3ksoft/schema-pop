@@ -11,8 +11,8 @@ Usage:
 
 Options:
   -o, --output <path>   Output .ts file (required)
-  -l, --lang <lang>     Force language: rust | c | cpp (default: infer from
-                        extension — .rs / .c .h / .cpp .hpp .cc .hxx)
+  -l, --lang <lang>     Force language: rust | c | cpp | typescript | php | java | python | go | c_sharp | kotlin | objc | swift | dart | scala | elixir (default: infer from
+                        extension — .rs / .c .h / .cpp .hpp .cc .hxx / .ts / .php / .java / .py / .go / .cs / .kt / .m / .swift / .dart / .scala / .ex)
   -n, --scope <name>    Exported scope binding name (default: $)
   -h, --help            Show this help
 
@@ -52,7 +52,7 @@ async function main() {
 	const lang = (values.lang as Lang | undefined) ?? langFromPath(absInput);
 	if (!lang) {
 		console.error(
-			`error: cannot infer language from "${input}"; pass --lang rust|c|cpp`,
+			`error: cannot infer language from "${input}"; pass --lang rust|c|cpp|typescript|php|java|python|go|c_sharp|kotlin|objc|swift|dart|scala|elixir`,
 		);
 		process.exit(2);
 	}
