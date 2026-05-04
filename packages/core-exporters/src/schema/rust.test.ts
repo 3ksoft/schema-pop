@@ -15,23 +15,14 @@ function analyze(s: any, version: string) {
 
 describe("rust exporter — generateMigration", () => {
 	test("identical plans → no migration emitted", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
-		const v2 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v2",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
+		const v2 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v2");
 		const out = rust({ dest: "out.rs" }).generateMigration!(v1, v2);
 		expect(out).toBe("");
 	});
 
 	test("ArkType default → emits literal in From impl", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
 		const v2 = analyze(
 			scope({
 				...binary.import(),
@@ -64,27 +55,15 @@ describe("rust exporter — generateMigration", () => {
 	});
 
 	test("Widening primitive → emits cast", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u8" } }),
-			"v1",
-		);
-		const v2 = analyze(
-			scope({ ...binary.import(), B: { x: "u16" } }),
-			"v2",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u8" } }), "v1");
+		const v2 = analyze(scope({ ...binary.import(), B: { x: "u16" } }), "v2");
 		const out = rust({ dest: "out.rs" }).generateMigration!(v1, v2);
 		expect(out).toContain("x: v1.x as u16,");
 	});
 
 	test("Narrowing → comment hint, NO impl emitted", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
-		const v2 = analyze(
-			scope({ ...binary.import(), B: { x: "u16" } }),
-			"v2",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
+		const v2 = analyze(scope({ ...binary.import(), B: { x: "u16" } }), "v2");
 		const out = rust({ dest: "out.rs" }).generateMigration!(v1, v2);
 		expect(out).toContain("// schema-pop: write");
 		expect(out).toContain("impl From<v1::B> for v2::B");
@@ -94,10 +73,7 @@ describe("rust exporter — generateMigration", () => {
 	});
 
 	test("New field without default → Default::default()", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
 		const v2 = analyze(
 			scope({ ...binary.import(), B: { x: "u32", flag: "bool" } }),
 			"v2",
@@ -132,7 +108,9 @@ describe("rust exporter — SharedString / SharedVec impls", () => {
 	test("file header includes alloc-gated From impls", () => {
 		const exp = rust({ dest: "out.rs" });
 		const header = exp.getFileHeader!();
-		expect(header).toContain("impl<T: Default + Copy, const N: usize> From<&[T]>");
+		expect(header).toContain(
+			"impl<T: Default + Copy, const N: usize> From<&[T]>",
+		);
 		expect(header).toContain('#[cfg(feature = "alloc")]');
 		expect(header).toContain("From<alloc::string::String>");
 		expect(header).toContain("From<&alloc::string::String>");

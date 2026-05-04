@@ -5,6 +5,7 @@ import path from "node:path";
 import { buildConfig } from "./node";
 import { runBindings, type BindingSpec } from "./bind";
 import { createJiti } from "jiti";
+import type { LayoutJsonEnvelope } from "./layout-io";
 
 function printHelp() {
 	console.log(`schema-pop — schema codegen
@@ -84,7 +85,7 @@ const EMIT_PACKAGE_BY_TYPE: Record<string, "core" | "extra"> = {
 	zig: "core",
 	go: "core",
 	random: "core",
-	md: "extra",
+	md: "core",
 	html: "extra",
 	wgsl: "extra",
 	glsl: "extra",
@@ -121,7 +122,11 @@ async function loadEmitExporter(
 		// Without the explicit resolveSync the dynamic import would
 		// look in `packages/core/node_modules/` which doesn't carry
 		// the exporter packages (no circular dep).
-		const Bun = (globalThis as { Bun?: { resolveSync?: (s: string, from: string) => string } }).Bun;
+		const Bun = (
+			globalThis as {
+				Bun?: { resolveSync?: (s: string, from: string) => string };
+			}
+		).Bun;
 		const resolved = Bun?.resolveSync
 			? Bun.resolveSync(moduleName, process.cwd())
 			: moduleName;
@@ -232,19 +237,44 @@ async function emitCommand(args: string[]) {
 	// Single-file path (back-compat). Falls through to original behaviour
 	// — stdin, type inference from -o extension, all of it.
 	const input = expandedInputs[0];
-	const useStdin =
-		input === "-" || (!input && !process.stdin.isTTY);
+	const useStdin = input === "-" || (!input && !process.stdin.isTTY);
 	let absInput: string;
 	let cleanupTmp: (() => void) | null = null;
 	if (useStdin) {
 		const chunks: Buffer[] = [];
-		for await (const chunk of process.stdin)
-			chunks.push(chunk as Buffer);
+		for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
 		const source = Buffer.concat(chunks).toString("utf8");
+		const trimmed = source.trimStart();
+
+		if (trimmed.startsWith("[")) {
+			// JSON array of LayoutJsonEnvelopes from schema-pop-import pipe.
+			let resolvedType = typeName;
+			if (!resolvedType && output) {
+				const ext = path.extname(output).replace(/^\./, "").toLowerCase();
+				resolvedType = EMIT_TYPE_BY_EXT[ext];
+			}
+			if (!resolvedType) {
+				console.error(
+					"schema-pop emit: -t <type> required for piped LayoutPlan array.\n  schema-pop-import ... | schema-pop emit -t md -o docs/",
+				);
+				process.exit(2);
+			}
+			await emitFromPipedPlans(
+				JSON.parse(trimmed) as LayoutJsonEnvelope[],
+				resolvedType,
+				nameOverride,
+				output,
+			);
+			return;
+		}
+
 		const os = await import("node:os");
+		// `{...}` is a LayoutJsonEnvelope (from `cat foo.layout.json`); anything
+		// else is a .pop.ts arktype scope source.
+		const tmpExt = trimmed.startsWith("{") ? "layout.json" : "pop.ts";
 		const tmp = path.join(
 			os.tmpdir(),
-			`schema-pop-emit-${process.pid}-${Date.now()}.pop.ts`,
+			`schema-pop-emit-${process.pid}-${Date.now()}.${tmpExt}`,
 		);
 		fs.writeFileSync(tmp, source);
 		absInput = tmp;
@@ -286,6 +316,86 @@ async function emitCommand(args: string[]) {
 		process.stdout.write(content);
 	}
 	cleanupTmp?.();
+}
+
+async function emitFromPipedPlans(
+	envelopes: LayoutJsonEnvelope[],
+	typeName: string,
+	nameOverride: string | undefined,
+	output: string | undefined,
+): Promise<void> {
+	const fs = await import("node:fs");
+	const exporter = await loadEmitExporter(typeName);
+	if (!exporter) {
+		const known = Object.keys(EMIT_PACKAGE_BY_TYPE).sort().join(", ");
+		console.error(
+			`schema-pop emit: unknown target "${typeName}". Known: ${known}`,
+		);
+		process.exit(2);
+	}
+	const instance = exporter.instance;
+	const ext: string = instance.extension ?? typeName;
+
+	const render = (envelope: LayoutJsonEnvelope): string => {
+		const plan = envelope.plan;
+		let content = instance.generate(plan);
+		if (typeof content !== "string") {
+			throw new Error(
+				`${typeName} exporter produces multiple files — write a config + run \`schema-pop\` instead.`,
+			);
+		}
+		const wrapName = nameOverride ?? plan.version;
+		if (instance.wrapVersion) content = instance.wrapVersion(wrapName, content);
+		if (instance.getFileHeader) content = instance.getFileHeader() + content;
+		if (instance.getFileFooter) content += instance.getFileFooter();
+		return content;
+	};
+
+	const outputLooksLikeDir =
+		!!output &&
+		(output.endsWith("/") ||
+			output.endsWith(path.sep) ||
+			(fs.existsSync(path.resolve(process.cwd(), output)) &&
+				fs.statSync(path.resolve(process.cwd(), output)).isDirectory()));
+	const isBatch = envelopes.length > 1 || outputLooksLikeDir;
+
+	if (!isBatch) {
+		const envelope = envelopes[0];
+		if (!envelope) return;
+		const content = render(envelope);
+		if (output) {
+			const absOut = path.resolve(process.cwd(), output);
+			fs.mkdirSync(path.dirname(absOut), { recursive: true });
+			fs.writeFileSync(absOut, content);
+			console.error(
+				`✅ [Schema-Pop] Generated: ${path.relative(process.cwd(), absOut)}`,
+			);
+		} else {
+			process.stdout.write(content);
+		}
+		return;
+	}
+
+	if (!output) {
+		console.error(
+			"schema-pop emit: piped batch needs -o <dir>/ (can't pipe multiple outputs to stdout).",
+		);
+		process.exit(2);
+	}
+	const absOutDir = path.resolve(process.cwd(), output);
+	fs.mkdirSync(absOutDir, { recursive: true });
+	for (const envelope of envelopes) {
+		const dest = path.join(absOutDir, `${envelope.plan.version}.${ext}`);
+		try {
+			const content = render(envelope);
+			fs.writeFileSync(dest, content);
+			console.error(
+				`✅ [Schema-Pop] Generated: ${path.relative(process.cwd(), dest)}`,
+			);
+		} catch (e) {
+			console.error(`❌ ${envelope.plan.version}: ${(e as Error).message}`);
+		}
+	}
 }
 
 /**
@@ -374,7 +484,9 @@ async function emitOne(
 		nameOverride ??
 		fileCfg.schemaName ??
 		parsed?.schemaName ??
-		(useStdin ? "stdin" : path.basename(absInput).replace(/\.(pop\.)?tsx?$/, ""));
+		(useStdin
+			? "stdin"
+			: path.basename(absInput).replace(/\.(pop\.)?tsx?$/, ""));
 	const version = fileCfg.version ?? parsed?.version ?? "1";
 
 	const { SchemaAnalyzer } = await import("./layout/analyzer");
@@ -526,9 +638,7 @@ async function layoutCommand(args: string[]) {
 	const analyzer = new SchemaAnalyzer(scope, {
 		wordSize: config.wordSize,
 		autoLayout:
-			schema.autoLayout !== undefined
-				? schema.autoLayout
-				: config.autoLayout,
+			schema.autoLayout !== undefined ? schema.autoLayout : config.autoLayout,
 		layoutType: schema.layout || config.layout || "aligned",
 		mode: version.mode === "rich" ? "rich" : "binary",
 	});

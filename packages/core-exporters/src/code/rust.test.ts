@@ -5,29 +5,67 @@ import { compileMigration } from "./rust";
 // ── Minimal plan fixtures ─────────────────────────────────────────────────────
 
 function prim(name: string, size: number): any {
-	return { kind: "primitive", name, size, align: size, paddedSize: size, bitSize: size * 8 };
+	return {
+		kind: "primitive",
+		name,
+		size,
+		align: size,
+		paddedSize: size,
+		bitSize: size * 8,
+	};
 }
 
 function f(name: string, typeName: string, size: number, offset: number): any {
-	return { name, type: prim(typeName, size), offset, size, paddingAfter: 0, bitOffset: 0, bitSize: size * 8 };
+	return {
+		name,
+		type: prim(typeName, size),
+		offset,
+		size,
+		paddingAfter: 0,
+		bitOffset: 0,
+		bitSize: size * 8,
+	};
 }
 
 // Src: a(i32@0)  b(i32@4)  flag(bool@8)  rate(f32@12)
 const SRC: any = {
-	version: "v1", endian: "le", wordSize: 64, autoLayout: false,
-	types: [{
-		kind: "struct", name: "Src", size: 16, paddedSize: 16, align: 4,
-		fields: [f("a", "i32", 4, 0), f("b", "i32", 4, 4), f("flag", "bool", 1, 8), f("rate", "f32", 4, 12)],
-	}],
+	version: "v1",
+	endian: "le",
+	wordSize: 64,
+	autoLayout: false,
+	types: [
+		{
+			kind: "struct",
+			name: "Src",
+			size: 16,
+			paddedSize: 16,
+			align: 4,
+			fields: [
+				f("a", "i32", 4, 0),
+				f("b", "i32", 4, 4),
+				f("flag", "bool", 1, 8),
+				f("rate", "f32", 4, 12),
+			],
+		},
+	],
 };
 
 // Dst: x(i32@0)  y(f64@8)
 const DST: any = {
-	version: "v2", endian: "le", wordSize: 64, autoLayout: false,
-	types: [{
-		kind: "struct", name: "Dst", size: 16, paddedSize: 16, align: 8,
-		fields: [f("x", "i32", 4, 0), f("y", "f64", 8, 8)],
-	}],
+	version: "v2",
+	endian: "le",
+	wordSize: 64,
+	autoLayout: false,
+	types: [
+		{
+			kind: "struct",
+			name: "Dst",
+			size: 16,
+			paddedSize: 16,
+			align: 8,
+			fields: [f("x", "i32", 4, 0), f("y", "f64", 8, 8)],
+		},
+	],
 };
 
 function migrate(body: string): Promise<string> {
@@ -68,12 +106,25 @@ describe("member access", () => {
 	test("bool field reads as u8 with != 0 guard", async () => {
 		// Use a bool plan where dst also accepts a bool-like field.
 		const boolDst: any = {
-			version: "v2", endian: "le", wordSize: 64, autoLayout: false,
-			types: [{ kind: "struct", name: "Dst", size: 1, paddedSize: 1, align: 1, fields: [f("flag", "bool", 1, 0)] }],
+			version: "v2",
+			endian: "le",
+			wordSize: 64,
+			autoLayout: false,
+			types: [
+				{
+					kind: "struct",
+					name: "Dst",
+					size: 1,
+					paddedSize: 1,
+					align: 1,
+					fields: [f("flag", "bool", 1, 0)],
+				},
+			],
 		};
 		const out = await compileMigration(
 			"function m(v1: Src): Dst { return { flag: v1.flag }; }",
-			SRC, boolDst,
+			SRC,
+			boolDst,
 		);
 		expect(out).toContain("*(src.as_ptr().add(8) as *const u8) != 0");
 	});
@@ -89,16 +140,41 @@ describe("member access", () => {
 describe("shorthand property", () => {
 	test("shorthand copies src→dst offsets with correct pointer types", async () => {
 		const from: any = {
-			version: "v1", endian: "le", wordSize: 64, autoLayout: false,
-			types: [{ kind: "struct", name: "S", size: 4, paddedSize: 4, align: 4, fields: [f("count", "u32", 4, 0)] }],
+			version: "v1",
+			endian: "le",
+			wordSize: 64,
+			autoLayout: false,
+			types: [
+				{
+					kind: "struct",
+					name: "S",
+					size: 4,
+					paddedSize: 4,
+					align: 4,
+					fields: [f("count", "u32", 4, 0)],
+				},
+			],
 		};
 		const to: any = {
-			version: "v2", endian: "le", wordSize: 64, autoLayout: false,
-			types: [{ kind: "struct", name: "S", size: 8, paddedSize: 8, align: 4, fields: [f("pad", "u32", 4, 0), f("count", "u32", 4, 4)] }],
+			version: "v2",
+			endian: "le",
+			wordSize: 64,
+			autoLayout: false,
+			types: [
+				{
+					kind: "struct",
+					name: "S",
+					size: 8,
+					paddedSize: 8,
+					align: 4,
+					fields: [f("pad", "u32", 4, 0), f("count", "u32", 4, 4)],
+				},
+			],
 		};
 		const out = await compileMigration(
 			"function m(v1: S): S { return { count }; }",
-			from, to,
+			from,
+			to,
 		);
 		expect(out).toContain("*(dst.as_mut_ptr().add(4) as *mut u32)");
 		expect(out).toContain("*(src.as_ptr().add(0) as *const u32)");

@@ -107,10 +107,18 @@ export function mermaid(
 
 			// Class hints so renderers can color by kind without us
 			// hardcoding a palette.
-			lines.push("  classDef struct fill:#fffae3,stroke:#404e7c,color:#00241b;");
-			lines.push("  classDef union  fill:#f7567c20,stroke:#f7567c,color:#00241b;");
-			lines.push("  classDef enum   fill:#1f8a5a20,stroke:#1f8a5a,color:#00241b;");
-			lines.push("  classDef alias  fill:#404e7c20,stroke:#404e7c,color:#00241b;");
+			lines.push(
+				"  classDef struct fill:#fffae3,stroke:#404e7c,color:#00241b;",
+			);
+			lines.push(
+				"  classDef union  fill:#f7567c20,stroke:#f7567c,color:#00241b;",
+			);
+			lines.push(
+				"  classDef enum   fill:#1f8a5a20,stroke:#1f8a5a,color:#00241b;",
+			);
+			lines.push(
+				"  classDef alias  fill:#404e7c20,stroke:#404e7c,color:#00241b;",
+			);
 			for (const t of plan.types) {
 				lines.push(`  class ${typeName(t.name)} ${t.kind};`);
 			}

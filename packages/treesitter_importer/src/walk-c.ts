@@ -181,9 +181,23 @@ export function walkCLike(
 					opts,
 				);
 			} else if (child.type === "struct_specifier") {
-				handleStructSpecifier(child, null, description, scopePrefix, items, skipped);
+				handleStructSpecifier(
+					child,
+					null,
+					description,
+					scopePrefix,
+					items,
+					skipped,
+				);
 			} else if (child.type === "enum_specifier") {
-				handleEnumSpecifier(child, null, description, scopePrefix, items, skipped);
+				handleEnumSpecifier(
+					child,
+					null,
+					description,
+					scopePrefix,
+					items,
+					skipped,
+				);
 			} else if (child.type === "union_specifier") {
 				// Treat union as struct for layout purposes — first field "wins".
 				const it = handleUnionSpecifier(
@@ -198,13 +212,19 @@ export function walkCLike(
 				opts.allowClass &&
 				(child.type === "class_specifier" || child.type === "struct_specifier")
 			) {
-				handleStructSpecifier(child, null, description, scopePrefix, items, skipped);
+				handleStructSpecifier(
+					child,
+					null,
+					description,
+					scopePrefix,
+					items,
+					skipped,
+				);
 			} else if (opts.allowClass && child.type === "namespace_definition") {
 				const nameNode = child.childForFieldName("name");
 				const body = child.childForFieldName("body");
 				const ns = nameNode?.text ?? "anon";
-				if (body)
-					visit(body, scopePrefix ? `${scopePrefix}::${ns}` : ns);
+				if (body) visit(body, scopePrefix ? `${scopePrefix}::${ns}` : ns);
 			} else if (opts.allowClass && child.type === "alias_declaration") {
 				// C++ `using Foo = bar;`
 				const nameNode = child.childForFieldName("name");
@@ -317,11 +337,24 @@ function handleTypedef(
 		);
 		if (it) items.push(it);
 	} else if (innerType.type === "enum_specifier") {
-		handleEnumSpecifier(innerType, aliasName, description, scopePrefix, items, skipped);
+		handleEnumSpecifier(
+			innerType,
+			aliasName,
+			description,
+			scopePrefix,
+			items,
+			skipped,
+		);
 	} else {
 		// `typedef <primitive|sized|ref> Name;` → alias
 		const t = parseCType(innerType);
-		items.push({ kind: "alias", name: aliasName, type: t, description, pub: true });
+		items.push({
+			kind: "alias",
+			name: aliasName,
+			type: t,
+			description,
+			pub: true,
+		});
 	}
 }
 
@@ -341,7 +374,13 @@ function handleBareDeclaration(
 
 	const fnDecl = findNestedFunctionDeclarator(node);
 	if (fnDecl) {
-		const fn = handleFunctionPrototype(node, fnDecl, description, scopePrefix, skipped);
+		const fn = handleFunctionPrototype(
+			node,
+			fnDecl,
+			description,
+			scopePrefix,
+			skipped,
+		);
 		if (fn) items.push(fn);
 		return;
 	}
@@ -354,7 +393,13 @@ function handleBareDeclaration(
 		} else if (c.type === "enum_specifier") {
 			handleEnumSpecifier(c, null, description, scopePrefix, items, skipped);
 		} else if (c.type === "union_specifier") {
-			const it = handleUnionSpecifier(c, null, description, scopePrefix, skipped);
+			const it = handleUnionSpecifier(
+				c,
+				null,
+				description,
+				scopePrefix,
+				skipped,
+			);
 			if (it) items.push(it);
 		} else if (opts.allowClass && c.type === "class_specifier") {
 			handleStructSpecifier(c, null, description, scopePrefix, items, skipped);
@@ -371,7 +416,10 @@ function findNestedFunctionDeclarator(decl: TSNode): TSNode | null {
 	for (const c of decl.namedChildren) {
 		if (!c) continue;
 		if (c.type === "function_declarator") return c;
-		if (c.type === "pointer_declarator" || c.type === "parenthesized_declarator") {
+		if (
+			c.type === "pointer_declarator" ||
+			c.type === "parenthesized_declarator"
+		) {
 			const inner = c.childForFieldName("declarator");
 			if (inner?.type === "function_declarator") return inner;
 		}
@@ -563,7 +611,8 @@ function handleEnumSpecifier(
 			continue;
 		}
 		if (c.type !== "enumerator") continue;
-		const vname = c.childForFieldName("name")?.text ?? c.text.split("=")[0]!.trim();
+		const vname =
+			c.childForFieldName("name")?.text ?? c.text.split("=")[0]!.trim();
 		variants.push({
 			kind: "unit",
 			name: vname,
@@ -604,8 +653,7 @@ function parseFieldDeclaration(node: TSNode): IRField | null {
 	// Skip if this is a function pointer declarator or has bitfield_clause.
 	if (
 		node.namedChildren.some(
-			(c) =>
-				c?.type === "function_declarator" || c?.type === "bitfield_clause",
+			(c) => c?.type === "function_declarator" || c?.type === "bitfield_clause",
 		)
 	) {
 		return null;
@@ -649,12 +697,18 @@ function parseArrayDeclarator(
 	if (Number.isNaN(len)) return null;
 
 	if (inner.type === "field_identifier" || inner.type === "identifier") {
-		return { name: inner.text, type: { kind: "array", item: baseType, exactLength: len } };
+		return {
+			name: inner.text,
+			type: { kind: "array", item: baseType, exactLength: len },
+		};
 	}
 	if (inner.type === "array_declarator") {
 		const sub = parseArrayDeclarator(inner, baseType);
 		if (!sub) return null;
-		return { name: sub.name, type: { kind: "array", item: sub.type, exactLength: len } };
+		return {
+			name: sub.name,
+			type: { kind: "array", item: sub.type, exactLength: len },
+		};
 	}
 	return null;
 }
@@ -670,7 +724,9 @@ function parseCType(node: TSNode): IRType {
 			// C++ wraps the type in `type_descriptor` for `using ... = T`. Unwrap.
 			const inner =
 				node.childForFieldName("type") ??
-				node.namedChildren.find((c): c is TSNode => !!c && c.type !== "type_qualifier") ??
+				node.namedChildren.find(
+					(c): c is TSNode => !!c && c.type !== "type_qualifier",
+				) ??
 				null;
 			if (inner) return parseCType(inner);
 			return { kind: "unsupported", raw: node.text };

@@ -73,9 +73,13 @@ export function walkTsFile(
 			}
 			// `export interface X {...}` is wrapped in `export_statement`.
 			if (child.type === "export_statement") {
-				const inner = child.namedChildren.find((c) => c && c.type !== "comment");
+				const inner = child.namedChildren.find(
+					(c) => c && c.type !== "comment",
+				);
 				if (inner) {
-					const description = pendingDoc.length ? pendingDoc.join("\n") : undefined;
+					const description = pendingDoc.length
+						? pendingDoc.join("\n")
+						: undefined;
 					handleDecl(inner, description, items, skipped);
 				}
 				pendingDoc = [];
@@ -197,7 +201,8 @@ function handleEnum(
 	const variants: IREnumVariant[] = [];
 	for (const c of body.namedChildren) {
 		if (!c) continue;
-		if (c.type !== "property_identifier" && c.type !== "enum_assignment") continue;
+		if (c.type !== "property_identifier" && c.type !== "enum_assignment")
+			continue;
 		const variantName =
 			c.type === "property_identifier"
 				? c.text
@@ -255,7 +260,9 @@ function parseProperty(node: TSNode): IRField | null {
 	const name = nameNode.text;
 	// `?` mark on name means optional.
 	const optional = node.text.includes(`${name}?:`);
-	const typeNode = typeAnnot?.namedChildren.find((c) => c && c.type !== "comment");
+	const typeNode = typeAnnot?.namedChildren.find(
+		(c) => c && c.type !== "comment",
+	);
 	if (!typeNode) return null;
 	let t = parseTsType(typeNode);
 	if (optional) t = { kind: "optional", inner: t };

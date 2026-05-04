@@ -76,11 +76,7 @@ describe("c++ importer — IR extraction", () => {
 		const it = r.items[0]!;
 		if (it.kind !== "enum") throw new Error();
 		expect(it.name).toBe("Status");
-		expect(it.variants.map((v) => v.name)).toEqual([
-			"Idle",
-			"Active",
-			"Error",
-		]);
+		expect(it.variants.map((v) => v.name)).toEqual(["Idle", "Active", "Error"]);
 	});
 
 	test("end-to-end emit", async () => {

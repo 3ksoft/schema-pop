@@ -42,7 +42,9 @@ describe("diffPlans", () => {
 			"v2",
 		);
 		const diff = diffPlans(v1, v2);
-		const battery = diff.types.find((t) => "to" in t && t.to.name === "Battery");
+		const battery = diff.types.find(
+			(t) => "to" in t && t.to.name === "Battery",
+		);
 		if (!battery || battery.kind !== "changed") throw new Error();
 		expect(battery.status).toBe("auto");
 		const firmware = battery.fieldChanges[0]!;
@@ -53,10 +55,7 @@ describe("diffPlans", () => {
 	});
 
 	test("field added without default (primitive) → language-default, auto", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
 		const v2 = analyze(
 			scope({ ...binary.import(), B: { x: "u32", y: "u8" } }),
 			"v2",
@@ -76,10 +75,7 @@ describe("diffPlans", () => {
 			scope({ ...binary.import(), B: { x: "u32", legacy: "u16" } }),
 			"v1",
 		);
-		const v2 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v2",
-		);
+		const v2 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v2");
 		const diff = diffPlans(v1, v2);
 		const b = diff.types.find((t) => "to" in t && t.to.name === "B");
 		if (!b || b.kind !== "changed") throw new Error();
@@ -129,14 +125,8 @@ describe("diffPlans", () => {
 	});
 
 	test("type widened (u8 → u16) → auto", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u8" } }),
-			"v1",
-		);
-		const v2 = analyze(
-			scope({ ...binary.import(), B: { x: "u16" } }),
-			"v2",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u8" } }), "v1");
+		const v2 = analyze(scope({ ...binary.import(), B: { x: "u16" } }), "v2");
 		const diff = diffPlans(v1, v2);
 		const b = diff.types.find((t) => "to" in t && t.to.name === "B");
 		if (!b || b.kind !== "changed") throw new Error();
@@ -146,14 +136,8 @@ describe("diffPlans", () => {
 	});
 
 	test("type narrowed (u32 → u16) → user-supplied", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
-		const v2 = analyze(
-			scope({ ...binary.import(), B: { x: "u16" } }),
-			"v2",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
+		const v2 = analyze(scope({ ...binary.import(), B: { x: "u16" } }), "v2");
 		const diff = diffPlans(v1, v2);
 		const b = diff.types.find((t) => "to" in t && t.to.name === "B");
 		if (!b || b.kind !== "changed") throw new Error();
@@ -164,14 +148,8 @@ describe("diffPlans", () => {
 	});
 
 	test("type changed across families (u32 → f32) → user-supplied", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
-		const v2 = analyze(
-			scope({ ...binary.import(), B: { x: "f32" } }),
-			"v2",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
+		const v2 = analyze(scope({ ...binary.import(), B: { x: "f32" } }), "v2");
 		const diff = diffPlans(v1, v2);
 		const b = diff.types.find((t) => "to" in t && t.to.name === "B");
 		if (!b || b.kind !== "changed") throw new Error();
@@ -181,10 +159,7 @@ describe("diffPlans", () => {
 	});
 
 	test("type added → auto (no inputs from v1)", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), A: { x: "u32" } }),
-			"v1",
-		);
+		const v1 = analyze(scope({ ...binary.import(), A: { x: "u32" } }), "v1");
 		const v2 = analyze(
 			scope({
 				...binary.import(),
@@ -209,22 +184,14 @@ describe("diffPlans", () => {
 			}),
 			"v1",
 		);
-		const v2 = analyze(
-			scope({ ...binary.import(), A: { x: "u32" } }),
-			"v2",
-		);
+		const v2 = analyze(scope({ ...binary.import(), A: { x: "u32" } }), "v2");
 		const diff = diffPlans(v1, v2);
-		const old = diff.types.find(
-			(t) => "from" in t && t.from?.name === "Old",
-		);
+		const old = diff.types.find((t) => "from" in t && t.from?.name === "Old");
 		expect(old?.kind).toBe("removed");
 	});
 
 	test("type-level Renamed (alias) → renamed TypeDiff", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), DeviceStatus: "u8" }),
-			"v1",
-		);
+		const v1 = analyze(scope({ ...binary.import(), DeviceStatus: "u8" }), "v1");
 		const v2 = analyze(
 			scope({
 				...binary.import(),
@@ -263,9 +230,7 @@ describe("diffPlans", () => {
 			"v2",
 		);
 		const diff = diffPlans(v1, v2);
-		const status = diff.types.find(
-			(t) => "to" in t && t.to.name === "Status",
-		);
+		const status = diff.types.find((t) => "to" in t && t.to.name === "Status");
 		if (!status || status.kind !== "changed") throw new Error();
 		const added = status.variantChanges.filter((c) => c.kind === "added");
 		expect(added).toHaveLength(1);
@@ -322,9 +287,7 @@ describe("diffPlans", () => {
 			"v2",
 		);
 		const diff = diffPlans(v1, v2);
-		const status = diff.types.find(
-			(t) => "to" in t && t.to.name === "Status",
-		);
+		const status = diff.types.find((t) => "to" in t && t.to.name === "Status");
 		if (!status || status.kind !== "changed") throw new Error();
 		const renamed = status.variantChanges.find((c) => c.kind === "renamed");
 		if (!renamed || renamed.kind !== "renamed") throw new Error();
@@ -333,18 +296,13 @@ describe("diffPlans", () => {
 		expect(renamed.status).toBe("auto");
 		// no spurious added/removed for the renamed variant
 		const added = status.variantChanges.filter((c) => c.kind === "added");
-		const removed = status.variantChanges.filter(
-			(c) => c.kind === "removed",
-		);
+		const removed = status.variantChanges.filter((c) => c.kind === "removed");
 		expect(added).toHaveLength(0);
 		expect(removed).toHaveLength(0);
 	});
 
 	test("plan status aggregates to user-supplied if any change is", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
 		const v2 = analyze(
 			scope({ ...binary.import(), B: { x: "u16" } }), // narrowing
 			"v2",

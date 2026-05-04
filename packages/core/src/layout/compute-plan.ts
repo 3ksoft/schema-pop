@@ -118,7 +118,11 @@ function deriveStructLayout(
 	return {
 		...item,
 		fields: result.fields,
-		layout: { size: result.size, align: result.align, paddedSize: result.paddedSize },
+		layout: {
+			size: result.size,
+			align: result.align,
+			paddedSize: result.paddedSize,
+		},
 	};
 }
 
@@ -146,7 +150,10 @@ function deriveUnionLayout(
 	const tagSize = item.tagType === "u8" ? 1 : item.tagType === "u16" ? 2 : 4;
 	const payloadAlign = item.variants.reduce(
 		(max, v) =>
-			Math.max(max, v.type.kind !== "unit" ? getTypeLayout(v.type, ctx).align : 1),
+			Math.max(
+				max,
+				v.type.kind !== "unit" ? getTypeLayout(v.type, ctx).align : 1,
+			),
 		1,
 	);
 	const payloadSize = item.variants.reduce(
@@ -198,7 +205,7 @@ function layoutFields(fields: IRField[], ctx: DeriveCtx): LayoutFieldsResult {
 			layout,
 			isBitwise,
 			bitSize: isBitwise
-				? (f.type as { bitSize?: number }).bitSize ?? 0
+				? ((f.type as { bitSize?: number }).bitSize ?? 0)
 				: layout.size * 8,
 		};
 	});
@@ -283,7 +290,12 @@ function layoutFields(fields: IRField[], ctx: DeriveCtx): LayoutFieldsResult {
 		return packTight(meta);
 	}
 
-	return { fields: out, size: totalSize, align: finalAlign, paddedSize: totalSize };
+	return {
+		fields: out,
+		size: totalSize,
+		align: finalAlign,
+		paddedSize: totalSize,
+	};
 }
 
 /**
@@ -292,7 +304,12 @@ function layoutFields(fields: IRField[], ctx: DeriveCtx): LayoutFieldsResult {
  * aggregate into byte containers.
  */
 function packTight(
-	meta: { f: IRField; layout: IRTypeLayout; isBitwise: boolean; bitSize: number }[],
+	meta: {
+		f: IRField;
+		layout: IRTypeLayout;
+		isBitwise: boolean;
+		bitSize: number;
+	}[],
 ): LayoutFieldsResult {
 	const out: IRField[] = [];
 	let off = 0;
@@ -370,7 +387,7 @@ function getTypeLayoutInternal(t: IRType, ctx: DeriveCtx): IRTypeLayout {
 		}
 		case "array": {
 			const isFixed = t.exactLength !== undefined;
-			const max = isFixed ? t.exactLength! : t.maxLength ?? 0;
+			const max = isFixed ? t.exactLength! : (t.maxLength ?? 0);
 			const itemL = getTypeLayout(t.item, ctx);
 			let align = isFixed ? itemL.align : Math.max(4, itemL.align);
 			let stride = itemL.paddedSize;
@@ -401,7 +418,11 @@ function getTypeLayoutInternal(t: IRType, ctx: DeriveCtx): IRTypeLayout {
 			const align = inner.align;
 			const padBefore = (align - (tagSize % align)) % align;
 			const total = tagSize + padBefore + inner.size;
-			return { size: total, align, paddedSize: Math.ceil(total / align) * align };
+			return {
+				size: total,
+				align,
+				paddedSize: Math.ceil(total / align) * align,
+			};
 		}
 		case "inlineStruct": {
 			if (t.layout) return t.layout;

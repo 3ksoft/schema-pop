@@ -54,7 +54,10 @@ interface JsonSchemaNode {
 	[key: `x-${string}`]: unknown;
 }
 
-const INT_RANGES: Record<string, { min: number; max: number; format?: string }> = {
+const INT_RANGES: Record<
+	string,
+	{ min: number; max: number; format?: string }
+> = {
 	u8: { min: 0, max: 255 },
 	u16: { min: 0, max: 65535 },
 	u32: { min: 0, max: 4294967295, format: "uint32" },
@@ -62,7 +65,11 @@ const INT_RANGES: Record<string, { min: number; max: number; format?: string }> 
 	i8: { min: -128, max: 127 },
 	i16: { min: -32768, max: 32767 },
 	i32: { min: -2147483648, max: 2147483647, format: "int32" },
-	i64: { min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER, format: "int64" },
+	i64: {
+		min: Number.MIN_SAFE_INTEGER,
+		max: Number.MAX_SAFE_INTEGER,
+		format: "int64",
+	},
 };
 
 const FLOAT_FORMATS: Record<string, string> = {
@@ -139,8 +146,9 @@ export function jsonSchema(
 					properties: {},
 					required: [],
 				};
-				for (const f of (field as { fields: Array<{ name: string; type: Field }> })
-					.fields) {
+				for (const f of (
+					field as { fields: Array<{ name: string; type: Field }> }
+				).fields) {
 					if (f.type.kind === "unit") continue;
 					node.properties![f.name] = fieldNode(f.type);
 					if (f.type.kind !== "optional") node.required!.push(f.name);
@@ -157,12 +165,16 @@ export function jsonSchema(
 		}
 	}
 
-	function attachMeta(node: JsonSchemaNode, meta: Record<string, unknown>): void {
+	function attachMeta(
+		node: JsonSchemaNode,
+		meta: Record<string, unknown>,
+	): void {
 		// `$ref` nodes shouldn't carry sibling description / x-* keys —
 		// older JSON Schema drafts ignore them and the auto-generated
 		// arktype description ("{ x: non-negative... }") just adds noise.
 		if (node.$ref) return;
-		if (typeof meta.description === "string") node.description = meta.description;
+		if (typeof meta.description === "string")
+			node.description = meta.description;
 		if (meta.obsolete) {
 			node.deprecated = true;
 			if (typeof meta.obsoleteReason === "string") {
@@ -231,7 +243,11 @@ export function jsonSchema(
 			const node: JsonSchemaNode = {
 				oneOf: t.variants.map((v) => {
 					if (v.type.kind === "unit") {
-						return { type: "object", properties: { kind: { const: v.name } }, required: ["kind"] };
+						return {
+							type: "object",
+							properties: { kind: { const: v.name } },
+							required: ["kind"],
+						};
 					}
 					if (v.type.kind === "inlineStruct") {
 						const inner = fieldNode(v.type);

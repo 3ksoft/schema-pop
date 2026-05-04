@@ -62,7 +62,11 @@ function resolveMember(
 		const struct = structs.get(paramTypeName);
 		const field = struct?.fields.find((f) => f.name === prop);
 		if (!field) return null;
-		return { rt: rustPtrType(field), offset: field.offset, isBool: isBool(field) };
+		return {
+			rt: rustPtrType(field),
+			offset: field.offset,
+			isBool: isBool(field),
+		};
 	}
 
 	const chain = buildChain(objNode, paramName);
@@ -121,11 +125,9 @@ function emitExpr(
 			const r = right
 				? emitExpr(right, structs, paramName, paramTypeName)
 				: "0";
-			if (rawOp === "??")
-				return `(if (${l}) != 0 { ${l} } else { ${r} })`;
+			if (rawOp === "??") return `(if (${l}) != 0 { ${l} } else { ${r} })`;
 			// TS strict equality operators map to Rust equality.
-			const op =
-				rawOp === "===" ? "==" : rawOp === "!==" ? "!=" : rawOp;
+			const op = rawOp === "===" ? "==" : rawOp === "!==" ? "!=" : rawOp;
 			return `(${l} ${op} ${r})`;
 		}
 		// Older tree-sitter-typescript versions emit a dedicated node for ??.
@@ -145,12 +147,8 @@ function emitExpr(
 			const c = cond
 				? emitExpr(cond, structs, paramName, paramTypeName)
 				: "false";
-			const t = cons
-				? emitExpr(cons, structs, paramName, paramTypeName)
-				: "0";
-			const f = alt
-				? emitExpr(alt, structs, paramName, paramTypeName)
-				: "0";
+			const t = cons ? emitExpr(cons, structs, paramName, paramTypeName) : "0";
+			const f = alt ? emitExpr(alt, structs, paramName, paramTypeName) : "0";
 			return `(if ${c} { ${t} } else { ${f} })`;
 		}
 		case "parenthesized_expression": {

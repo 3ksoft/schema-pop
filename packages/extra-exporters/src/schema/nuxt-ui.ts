@@ -66,14 +66,30 @@ export interface NuxtUiConfig extends BaseConfig {
  */
 const PRIMITIVE_UI: Record<
 	string,
-	{ arkDef: string; min?: number; max?: number; step?: number; bigint?: boolean }
+	{
+		arkDef: string;
+		min?: number;
+		max?: number;
+		step?: number;
+		bigint?: boolean;
+	}
 > = {
 	bool: { arkDef: "boolean" },
 	u8: { arkDef: "0 <= number.integer <= 255", min: 0, max: 255, step: 1 },
 	i8: { arkDef: "-128 <= number.integer <= 127", min: -128, max: 127, step: 1 },
 	u16: { arkDef: "0 <= number.integer <= 65535", min: 0, max: 65535, step: 1 },
-	i16: { arkDef: "-32768 <= number.integer <= 32767", min: -32768, max: 32767, step: 1 },
-	u32: { arkDef: "0 <= number.integer <= 4294967295", min: 0, max: 4294967295, step: 1 },
+	i16: {
+		arkDef: "-32768 <= number.integer <= 32767",
+		min: -32768,
+		max: 32767,
+		step: 1,
+	},
+	u32: {
+		arkDef: "0 <= number.integer <= 4294967295",
+		min: 0,
+		max: 4294967295,
+		step: 1,
+	},
 	i32: {
 		arkDef: "-2147483648 <= number.integer <= 2147483647",
 		min: -2147483648,
@@ -114,7 +130,9 @@ function buildIndex(plan: LayoutPlan): TypeIndex {
  * raw JS literal (used for nested object shapes / scope references
  * that aren't expressible in the arktype string DSL).
  */
-type ArkExpr = { kind: "string"; value: string } | { kind: "raw"; value: string };
+type ArkExpr =
+	| { kind: "string"; value: string }
+	| { kind: "raw"; value: string };
 
 function ark(value: string): ArkExpr {
 	return { kind: "string", value };
@@ -146,14 +164,17 @@ function arkForField(
 			return ark("unknown");
 		}
 		case "string": {
-			return ark(f.maxLength !== undefined ? `string <= ${f.maxLength}` : "string");
+			return ark(
+				f.maxLength !== undefined ? `string <= ${f.maxLength}` : "string",
+			);
 		}
 		case "array": {
 			const inner = arkForField(f.item, idx, typeName);
 			// arktype string DSL only chains array suffixes on string defs;
 			// for raw object items we drop length constraints (they can be
 			// re-added via .narrow() in user-land if needed).
-			if (inner.kind === "raw") return { kind: "raw", value: `[${inner.value}, "[]"]` };
+			if (inner.kind === "raw")
+				return { kind: "raw", value: `[${inner.value}, "[]"]` };
 			let s = `${inner.value}[]`;
 			if (f.exactLength !== undefined) s += ` == ${f.exactLength}`;
 			else if (f.maxLength !== undefined) s += ` <= ${f.maxLength}`;
@@ -214,7 +235,8 @@ function emitObjectLiteral(
 		const isOpt = fp.type.kind === "optional";
 		const expr = arkForField(fp.type, idx, typeName);
 		const key = JSON.stringify(`${fp.name}${isOpt ? "?" : ""}`);
-		const val = expr.kind === "string" ? JSON.stringify(expr.value) : expr.value;
+		const val =
+			expr.kind === "string" ? JSON.stringify(expr.value) : expr.value;
 		return `${indent}${key}: ${val},`;
 	});
 	return `{\n${lines.join("\n")}\n${indent.slice(1)}}`;
@@ -240,7 +262,8 @@ function inputForField(
 		case "primitive": {
 			const b = PRIMITIVE_UI[field.name];
 			if (!b) return { template: `<UInput v-model="${bind}" />`, imports };
-			if (field.name === "bool") return { template: `<UCheckbox v-model="${bind}" />`, imports };
+			if (field.name === "bool")
+				return { template: `<UCheckbox v-model="${bind}" />`, imports };
 			if (b.bigint) {
 				return {
 					template: `<UInput v-model="${bind}" type="text" inputmode="numeric" placeholder="${field.name}" />`,
@@ -254,7 +277,10 @@ function inputForField(
 			]
 				.filter(Boolean)
 				.join(" ");
-			return { template: `<UInputNumber v-model="${bind}" ${attrs} />`, imports };
+			return {
+				template: `<UInputNumber v-model="${bind}" ${attrs} />`,
+				imports,
+			};
 		}
 		case "reference": {
 			const enumPlan = idx.enums.get(field.name);
@@ -275,7 +301,8 @@ function inputForField(
 		case "string": {
 			const max = field.maxLength ?? 0;
 			const useTextarea = max > (cfg.textareaThreshold ?? 80);
-			const attrs = field.maxLength !== undefined ? ` :maxlength="${field.maxLength}"` : "";
+			const attrs =
+				field.maxLength !== undefined ? ` :maxlength="${field.maxLength}"` : "";
 			return {
 				template: useTextarea
 					? `<UTextarea v-model="${bind}"${attrs} />`
@@ -284,12 +311,22 @@ function inputForField(
 			};
 		}
 		case "optional": {
-			const inner = inputForField(field.inner, bind, idx, typeName, cfg, depth + 1);
+			const inner = inputForField(
+				field.inner,
+				bind,
+				idx,
+				typeName,
+				cfg,
+				depth + 1,
+			);
 			inner.imports?.forEach((i) => imports.add(i));
 			// `defaultLiteralFor` may emit a value containing `"` (e.g. `""` for
 			// strings). Vue attributes use `"` as the delimiter, so escape any
 			// double-quote in the literal so it survives template parsing.
-			const defLit = defaultLiteralFor(field.inner, idx).replace(/"/g, "&quot;");
+			const defLit = defaultLiteralFor(field.inner, idx).replace(
+				/"/g,
+				"&quot;",
+			);
 			return {
 				template: `<div class="flex items-center gap-2">
 \t\t\t\t<UCheckbox :model-value="${bind} !== undefined && ${bind} !== null" @update:model-value="(v) => ${bind} = v ? ${defLit} : undefined" />
@@ -301,27 +338,35 @@ function inputForField(
 		}
 		case "array": {
 			const itemBind = `${bind}[i]`;
-			const inner = inputForField(field.item, itemBind, idx, typeName, cfg, depth + 1);
+			const inner = inputForField(
+				field.item,
+				itemBind,
+				idx,
+				typeName,
+				cfg,
+				depth + 1,
+			);
 			inner.imports?.forEach((i) => imports.add(i));
 			const fixed = field.exactLength !== undefined;
 			const lenCap = field.exactLength ?? field.maxLength;
-			const canAdd = lenCap !== undefined ? `${bind}.length < ${lenCap}` : "true";
+			const canAdd =
+				lenCap !== undefined ? `${bind}.length < ${lenCap}` : "true";
 			return {
 				template: `<div class="space-y-2">
 \t\t\t\t<div v-for="(_, i) in (${bind} || [])" :key="i" class="flex items-center gap-2">
 \t\t\t\t\t<span class="text-xs opacity-50 font-mono w-6">[{{ i }}]</span>
 \t\t\t\t\t<div class="flex-1">${inner.template}</div>
 \t\t\t\t\t${
-				fixed
-					? ""
-					: `<UButton size="xs" color="neutral" variant="ghost" icon="i-lucide-x" @click="${bind}.splice(i, 1)" />`
-			}
+					fixed
+						? ""
+						: `<UButton size="xs" color="neutral" variant="ghost" icon="i-lucide-x" @click="${bind}.splice(i, 1)" />`
+				}
 \t\t\t\t</div>
 \t\t\t\t${
-				fixed
-					? ""
-					: `<UButton size="xs" variant="soft" icon="i-lucide-plus" :disabled="!(${canAdd})" @click="${bind}.push(${defaultLiteralFor(field.item, idx)})">add</UButton>`
-			}
+					fixed
+						? ""
+						: `<UButton size="xs" variant="soft" icon="i-lucide-plus" :disabled="!(${canAdd})" @click="${bind}.push(${defaultLiteralFor(field.item, idx)})">add</UButton>`
+				}
 \t\t\t</div>`,
 				imports,
 			};
@@ -329,7 +374,14 @@ function inputForField(
 		case "inlineStruct": {
 			const blocks = field.fields
 				.map((fp) => {
-					const sub = inputForField(fp.type, `${bind}.${fp.name}`, idx, typeName, cfg, depth + 1);
+					const sub = inputForField(
+						fp.type,
+						`${bind}.${fp.name}`,
+						idx,
+						typeName,
+						cfg,
+						depth + 1,
+					);
 					sub.imports?.forEach((i) => imports.add(i));
 					return `<UFormField label=${JSON.stringify(fp.name)} name=${JSON.stringify(fp.name)}>\n\t\t\t\t\t${sub.template}\n\t\t\t\t</UFormField>`;
 				})
@@ -425,7 +477,8 @@ function collectReferencedPrimitives(plan: LayoutPlan): string[] {
 	for (const t of plan.types) {
 		if (t.kind === "struct") for (const fp of t.fields) walk(fp.type);
 		else if (t.kind === "alias") walk(t.type);
-		else if (t.kind === "union") for (const v of t.variants) walk(v.type as Field);
+		else if (t.kind === "union")
+			for (const v of t.variants) walk(v.type as Field);
 	}
 	// Stable order — keeps the diff between regenerations minimal.
 	const order = Object.keys(PRIMITIVE_UI);
@@ -446,7 +499,9 @@ function emitSchemasFile(
 	lines.push(` * \`arktype\` itself — primitive bounds (u8, i32, …) are`);
 	lines.push(` * inlined at the top of the scope, not imported from`);
 	lines.push(` * \`schema-pop\`. Each named type is re-exported below as`);
-	lines.push(` * \`\${Name}Schema\` (a Type instance) plus a \`type \${Name}\``);
+	lines.push(
+		` * \`\${Name}Schema\` (a Type instance) plus a \`type \${Name}\``,
+	);
 	lines.push(` * inferred from it.`);
 	lines.push(` */`);
 	lines.push(`export const $ = scope({`);
@@ -588,7 +643,10 @@ ${fieldBlocks.join("\n")}
 `;
 }
 
-function emitIndex(structs: StructPlan[], typeName: (n: string) => string): string {
+function emitIndex(
+	structs: StructPlan[],
+	typeName: (n: string) => string,
+): string {
 	const lines: string[] = [`export * from "./schemas";`];
 	for (const s of structs) {
 		const c = `${typeName(s.name)}Form`;
@@ -615,7 +673,9 @@ function attrJson(s: string): string {
 
 /* ─────────────────────────── plugin api ──────────────────────────── */
 
-export function nuxtUi(config: NuxtUiConfig = {}): ExporterPlugin<NuxtUiConfig> {
+export function nuxtUi(
+	config: NuxtUiConfig = {},
+): ExporterPlugin<NuxtUiConfig> {
 	const cfg: NuxtUiConfig = {
 		fieldNaming: "camelCase",
 		typeNaming: "PascalCase",
@@ -643,7 +703,13 @@ export function nuxtUi(config: NuxtUiConfig = {}): ExporterPlugin<NuxtUiConfig> 
 			);
 			for (const s of renderable) {
 				const compName = `${typeName(s.name)}Form`;
-				out[`${compName}.vue`] = emitStructForm(s, idx, typeName, fieldName, cfg);
+				out[`${compName}.vue`] = emitStructForm(
+					s,
+					idx,
+					typeName,
+					fieldName,
+					cfg,
+				);
 			}
 			out["index.ts"] = emitIndex(renderable, typeName);
 			return out;

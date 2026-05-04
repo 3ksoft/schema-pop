@@ -69,10 +69,7 @@ describe("go exporter — primitives + struct shape", () => {
 	});
 
 	test("size assertion via unsafe.Sizeof — pulls in `unsafe` import", () => {
-		const plan = analyze(
-			scope({ ...binary.import(), S: { x: "u32" } }),
-			"v1",
-		);
+		const plan = analyze(scope({ ...binary.import(), S: { x: "u32" } }), "v1");
 		const out = emit(plan);
 		expect(out).toContain('import "unsafe"');
 		expect(out).toMatch(/unsafe\.Sizeof\(S\{\}\) - \d+/);
@@ -98,10 +95,7 @@ describe("go exporter — enums, aliases, optional, arrays", () => {
 	});
 
 	test("alias renders as `type X = Y`", () => {
-		const plan = analyze(
-			scope({ ...binary.import(), Counter: "u32" }),
-			"v1",
-		);
+		const plan = analyze(scope({ ...binary.import(), Counter: "u32" }), "v1");
 		const out = emit(plan);
 		expect(out).toContain("type Counter = uint32");
 	});
@@ -144,19 +138,13 @@ describe("go exporter — deprecation + config", () => {
 	});
 
 	test("custom package name overrides default", () => {
-		const plan = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
+		const plan = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
 		const out = emit(plan, { package: "telemetry" });
 		expect(out).toMatch(/^package telemetry/);
 	});
 
 	test("includeSizeAssertions: false omits unsafe import", () => {
-		const plan = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
+		const plan = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
 		const out = emit(plan, { includeSizeAssertions: false });
 		expect(out).not.toContain('import "unsafe"');
 		expect(out).not.toContain("unsafe.Sizeof");
@@ -186,10 +174,7 @@ describe("go exporter — versionNamespace prefix", () => {
 	});
 
 	test("default (versionNamespace: false) leaves types unprefixed", () => {
-		const plan = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"1",
-		);
+		const plan = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "1");
 		const out = emit(plan);
 		expect(out).toContain("type B struct");
 		expect(out).not.toContain("V1B");
@@ -246,10 +231,7 @@ describe("go exporter — generateMigration", () => {
 
 describe("go exporter — getHarness", () => {
 	test("emits main.go + go.mod + package.json with build script", () => {
-		const plan = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"1",
-		);
+		const plan = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "1");
 		const harnessFiles = go({ harness: true }).getHarness!([plan]);
 		// Canonical Go layout keeps schema/ and cmd/harness/ as siblings
 		// under the module root so they don't collide on `package` decls.

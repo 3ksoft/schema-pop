@@ -302,9 +302,7 @@ function injectSchemaPopWraps(
 			: "";
 
 		const targetsBody =
-			targetLines.length > 0
-				? `\n${targetLines.join("\n")}\n\t\t`
-				: "";
+			targetLines.length > 0 ? `\n${targetLines.join("\n")}\n\t\t` : "";
 
 		const wrapped = original
 			.replace(popImportRe, `${fixedPopImport}${importsBlock}`)

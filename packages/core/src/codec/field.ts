@@ -480,7 +480,8 @@ function readMeta(meta: unknown): {
 	if (typeof m["addr"] === "number") out.addr = m["addr"];
 	if (typeof m["isBinary"] === "boolean") out.isBinary = m["isBinary"];
 	if (m["obsolete"] === true) out.obsolete = true;
-	if (typeof m["obsoleteReason"] === "string") out.obsoleteReason = m["obsoleteReason"];
+	if (typeof m["obsoleteReason"] === "string")
+		out.obsoleteReason = m["obsoleteReason"];
 	if (typeof m["renamedFrom"] === "string") out.renamedFrom = m["renamedFrom"];
 	return out;
 }

@@ -25,10 +25,7 @@ function extractDiff(emitted: string): {
 
 describe("html exporter — renamed status", () => {
 	test("type-level Renamed → status 'renamed' with old name in note", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), DeviceStatus: "u8" }),
-			"v1",
-		);
+		const v1 = analyze(scope({ ...binary.import(), DeviceStatus: "u8" }), "v1");
 		const v2 = analyze(
 			scope({
 				...binary.import(),

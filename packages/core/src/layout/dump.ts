@@ -72,9 +72,7 @@ function renderType(
 		return renderUnion(t, plan, indent, offWidth, layout);
 	}
 	if (t.kind === "enum") {
-		const variants = t.variants
-			.map((v) => `${v.name}=${v.value}`)
-			.join(", ");
+		const variants = t.variants.map((v) => `${v.name}=${v.value}`).join(", ");
 		return [
 			`enum ${t.name}  ${layout}  underlying=${t.underlyingType}`,
 			`${indent}${variants}`,
@@ -194,9 +192,7 @@ function renderField(f: Field, _plan: LayoutPlan): string {
 		case "reference":
 			return f.name;
 		case "string":
-			return f.maxLength !== undefined
-				? `string<=${f.maxLength}`
-				: "string";
+			return f.maxLength !== undefined ? `string<=${f.maxLength}` : "string";
 		case "array": {
 			const inner = renderField(f.item, _plan);
 			if (f.exactLength !== undefined) return `${inner}[${f.exactLength}]`;

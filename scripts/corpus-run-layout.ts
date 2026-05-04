@@ -41,7 +41,9 @@ import {
 import { writeLayoutPlan } from "../packages/core/src/layout-io";
 
 declare const Bun: {
-	Glob: new (pattern: string) => {
+	Glob: new (
+		pattern: string,
+	) => {
 		scan(opts: { cwd: string; onlyFiles?: boolean }): AsyncIterable<string>;
 	};
 };
@@ -72,7 +74,10 @@ interface PerFile {
  * for us to emit (impl files / stub headers / pure macros). We skip
  * the write to keep `out/` focused on actual content.
  */
-function isEmptyPlan(plan: { types: unknown[]; functions?: unknown[] }): boolean {
+function isEmptyPlan(plan: {
+	types: unknown[];
+	functions?: unknown[];
+}): boolean {
 	return plan.types.length === 0 && (plan.functions?.length ?? 0) === 0;
 }
 
@@ -118,7 +123,7 @@ async function main() {
 			const eta =
 				i === 0
 					? "?"
-					: `${(((Date.now() - t0) / i) * (files.length - i) / 1000).toFixed(0)}s`;
+					: `${((((Date.now() - t0) / i) * (files.length - i)) / 1000).toFixed(0)}s`;
 			console.log(
 				`  [${i}/${files.length}] elapsed ${((Date.now() - t0) / 1000).toFixed(0)}s eta ${eta}`,
 			);
@@ -198,7 +203,10 @@ async function main() {
 	);
 	await fs.writeFile(
 		path.join(outBase, "import-errors.csv"),
-		toCsv(["file", "reason"], importErrors.map((e) => [e.file, e.reason])),
+		toCsv(
+			["file", "reason"],
+			importErrors.map((e) => [e.file, e.reason]),
+		),
 		"utf8",
 	);
 	await fs.writeFile(
@@ -254,9 +262,7 @@ async function main() {
 }
 
 function bucketReason(reason: string): string {
-	const stripped = reason
-		.replace(/"[^"]*"/g, '"…"')
-		.replace(/`[^`]*`/g, "`…`");
+	const stripped = reason.replace(/"[^"]*"/g, '"…"').replace(/`[^`]*`/g, "`…`");
 	const head = stripped.split(/[:(]/)[0]!.trim();
 	return head.length > 80 ? head.slice(0, 77) + "..." : head;
 }

@@ -159,7 +159,7 @@ function compareFields(
 			if (fr === undefined || tr === undefined) return "changed";
 			// Don't treat int↔float or signed↔unsigned cross-family as widening.
 			const sameFamily =
-				(f.name[0] === t.name[0]) ||
+				f.name[0] === t.name[0] ||
 				(f.name.startsWith("f") && t.name.startsWith("f"));
 			if (!sameFamily) return "changed";
 			if (tr > fr) return "widened";
@@ -258,16 +258,18 @@ function classifyAddedField(field: FieldPlan): {
  * 2. Same name (default).
  * Returns paired field changes plus list of unmatched (added/removed).
  */
-function diffStructFields(
-	from: StructPlan,
-	to: StructPlan,
-): FieldChange[] {
+function diffStructFields(from: StructPlan, to: StructPlan): FieldChange[] {
 	const changes: FieldChange[] = [];
 	const fromByName = new Map(from.fields.map((f) => [f.name, f]));
 	const usedFromNames = new Set<string>();
 	// Track shared (preserved) fields so we can detect relative reorder
 	// without false positives from adjacent add/remove.
-	type SharedRef = { ffIdx: number; tfIdx: number; ff: FieldPlan; tf: FieldPlan };
+	type SharedRef = {
+		ffIdx: number;
+		tfIdx: number;
+		ff: FieldPlan;
+		tf: FieldPlan;
+	};
 	const shared: SharedRef[] = [];
 
 	// Pass 1: explicit renames (to.migrationMeta.renamedFrom)
@@ -378,10 +380,7 @@ function diffStructFields(
 	return changes;
 }
 
-function diffUnionVariants(
-	from: UnionPlan,
-	to: UnionPlan,
-): VariantChange[] {
+function diffUnionVariants(from: UnionPlan, to: UnionPlan): VariantChange[] {
 	const changes: VariantChange[] = [];
 	const fromByName = new Map(from.variants.map((v) => [v.name, v]));
 	const usedFromNames = new Set<string>();
@@ -470,7 +469,8 @@ function diffEnumVariants(from: EnumPlan, to: EnumPlan): VariantChange[] {
 }
 
 function aggregateStatus(items: { status: DiffStatus }[]): DiffStatus {
-	for (const it of items) if (it.status === "user-supplied") return "user-supplied";
+	for (const it of items)
+		if (it.status === "user-supplied") return "user-supplied";
 	return "auto";
 }
 
@@ -498,7 +498,7 @@ function diffMatchedTypes(
 					fieldChanges: [],
 					variantChanges: [],
 					status: "user-supplied",
-			  }
+				}
 			: {
 					kind: "changed",
 					from,
@@ -506,14 +506,12 @@ function diffMatchedTypes(
 					fieldChanges: [],
 					variantChanges: [],
 					status: "user-supplied",
-			  };
+				};
 	}
 
 	let fieldChanges: FieldChange[] = [];
 	let variantChanges: VariantChange[] = [];
-	let aliasChange:
-		| { from: Field; to: Field; status: DiffStatus }
-		| undefined;
+	let aliasChange: { from: Field; to: Field; status: DiffStatus } | undefined;
 
 	if (from.kind === "struct") {
 		fieldChanges = diffStructFields(from as StructPlan, to as StructPlan);
@@ -562,7 +560,7 @@ function diffMatchedTypes(
 				variantChanges,
 				...(aliasChange ? { aliasChange } : {}),
 				status,
-		  }
+			}
 		: {
 				kind: "changed",
 				from,
@@ -571,7 +569,7 @@ function diffMatchedTypes(
 				variantChanges,
 				...(aliasChange ? { aliasChange } : {}),
 				status,
-		  };
+			};
 }
 
 /**

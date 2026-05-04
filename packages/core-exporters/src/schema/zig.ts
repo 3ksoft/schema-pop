@@ -187,16 +187,12 @@ export function zig(config: ZigConfig): ExporterPlugin<ZigConfig> {
 		change: FieldChange | undefined,
 		toField: FieldPlan,
 	): string {
-		if (change?.kind === "renamed")
-			return `src.${fieldName(change.from.name)}`;
+		if (change?.kind === "renamed") return `src.${fieldName(change.from.name)}`;
 		if (change?.kind === "type-widened")
 			return `@as(${ZIG_PRIMITIVES[(change.to.type as any).name] ?? "u32"}, src.${fieldName(change.from.name)})`;
 		if (change?.kind === "added" && change.default.kind === "literal")
 			return zigLiteral(change.default.value);
-		if (
-			change?.kind === "added" &&
-			change.default.kind === "language-default"
-		)
+		if (change?.kind === "added" && change.default.kind === "language-default")
 			return languageDefault(toField.type);
 		if (toField.migrationMeta?.defaultValue !== undefined)
 			return zigLiteral(toField.migrationMeta.defaultValue);

@@ -53,7 +53,9 @@ import { isArktypeScope } from "../packages/core/src/bind";
 import { createJiti } from "../packages/core/node_modules/jiti/lib/jiti.mjs";
 
 declare const Bun: {
-	Glob: new (pattern: string) => {
+	Glob: new (
+		pattern: string,
+	) => {
 		scan(opts: { cwd: string; onlyFiles?: boolean }): AsyncIterable<string>;
 	};
 };
@@ -89,9 +91,7 @@ interface DiffRow {
 async function main() {
 	const root = process.argv[2];
 	if (!root) {
-		console.error(
-			"usage: bun scripts/corpus-run.ts <source-dir> [output-dir]",
-		);
+		console.error("usage: bun scripts/corpus-run.ts <source-dir> [output-dir]");
 		process.exit(1);
 	}
 	const absRoot = path.resolve(root);
@@ -136,7 +136,7 @@ async function main() {
 			const eta =
 				i === 0
 					? "?"
-					: `${(((Date.now() - t0) / i) * (files.length - i) / 1000).toFixed(0)}s`;
+					: `${((((Date.now() - t0) / i) * (files.length - i)) / 1000).toFixed(0)}s`;
 			console.log(
 				`  [${i}/${files.length}] elapsed ${((Date.now() - t0) / 1000).toFixed(0)}s eta ${eta}`,
 			);
@@ -154,11 +154,7 @@ async function main() {
 			}
 			const code = await fileToArktypeScope(abs, { lang });
 			const safeName = rel.replace(/[/\\]/g, "__");
-			await fs.writeFile(
-				path.join(outDir, `${safeName}.ts`),
-				code,
-				"utf8",
-			);
+			await fs.writeFile(path.join(outDir, `${safeName}.ts`), code, "utf8");
 			importedNames.push(safeName);
 			importedItems.set(safeName, ir.items);
 		} catch (e) {
@@ -221,7 +217,10 @@ async function main() {
 			await fs.writeFile(outAbs, content, "utf8");
 			emittedNames.push(safeName);
 		} catch (e) {
-			emitErrors.push({ file: safeName, reason: oneLine((e as Error).message) });
+			emitErrors.push({
+				file: safeName,
+				reason: oneLine((e as Error).message),
+			});
 		}
 	}
 	const t2 = Date.now();
@@ -286,7 +285,10 @@ async function main() {
 	const totalOut = diffs.reduce((s, d) => s + Math.max(0, d.typesOut), 0);
 	const totalLost = diffs.reduce((s, d) => s + Math.max(0, d.typesLost), 0);
 	const fieldsTotalIn = diffs.reduce((s, d) => s + Math.max(0, d.fieldsIn), 0);
-	const fieldsTotalOut = diffs.reduce((s, d) => s + Math.max(0, d.fieldsOut), 0);
+	const fieldsTotalOut = diffs.reduce(
+		(s, d) => s + Math.max(0, d.fieldsOut),
+		0,
+	);
 	const fieldsTotalLost = diffs.reduce(
 		(s, d) => s + Math.max(0, d.fieldsLost),
 		0,
@@ -331,7 +333,10 @@ async function main() {
 	);
 	await fs.writeFile(
 		path.join(outBase, "import-errors.csv"),
-		toCsv(["file", "reason"], importErrors.map((e) => [e.file, e.reason])),
+		toCsv(
+			["file", "reason"],
+			importErrors.map((e) => [e.file, e.reason]),
+		),
 		"utf8",
 	);
 	await fs.writeFile(
@@ -344,7 +349,10 @@ async function main() {
 	);
 	await fs.writeFile(
 		path.join(outBase, "emit-errors.csv"),
-		toCsv(["file", "reason"], emitErrors.map((e) => [e.file, e.reason])),
+		toCsv(
+			["file", "reason"],
+			emitErrors.map((e) => [e.file, e.reason]),
+		),
 		"utf8",
 	);
 	await fs.writeFile(
@@ -407,8 +415,12 @@ async function main() {
 			console.log(`  ${String(count).padStart(6)}  ${n}`);
 		}
 	}
-	console.log(`\nfull report:           ${path.relative(process.cwd(), path.join(outBase, "report.json"))}`);
-	console.log(`diff.csv:              ${path.relative(process.cwd(), path.join(outBase, "diff.csv"))}`);
+	console.log(
+		`\nfull report:           ${path.relative(process.cwd(), path.join(outBase, "report.json"))}`,
+	);
+	console.log(
+		`diff.csv:              ${path.relative(process.cwd(), path.join(outBase, "diff.csv"))}`,
+	);
 }
 
 /**
@@ -424,7 +436,11 @@ async function main() {
  * side would inflate the loss number with function declarations the
  * ts exporter never aimed to render.
  */
-function diffIRs(file: string, inItems: RustItem[], outItems: RustItem[]): DiffRow {
+function diffIRs(
+	file: string,
+	inItems: RustItem[],
+	outItems: RustItem[],
+): DiffRow {
 	const isType = (it: RustItem): boolean => it.kind !== "function";
 	const inTypes = inItems.filter(isType);
 	const outTypes = outItems.filter(isType);

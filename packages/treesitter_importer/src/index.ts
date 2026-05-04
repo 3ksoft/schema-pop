@@ -105,9 +105,7 @@ export async function importFile(
 ): Promise<SchemaPopIR> {
 	const abs = path.resolve(filePath);
 	const opts: ImportFileOptions =
-		typeof langOrOpts === "string"
-			? { lang: langOrOpts }
-			: (langOrOpts ?? {});
+		typeof langOrOpts === "string" ? { lang: langOrOpts } : (langOrOpts ?? {});
 	const resolved = opts.lang ?? langFromPath(abs);
 	if (!resolved) {
 		throw new Error(
@@ -148,7 +146,8 @@ export async function fileToArktypeScope(
 }
 
 /** @deprecated Use `importFile`. */
-export const importRustFile = (filePath: string) => importFile(filePath, "rust");
+export const importRustFile = (filePath: string) =>
+	importFile(filePath, "rust");
 /** @deprecated Use `fileToArktypeScope`. */
 export const rustFileToArktypeScope = (filePath: string, opts?: EmitOptions) =>
 	fileToArktypeScope(filePath, { ...opts, lang: "rust" });

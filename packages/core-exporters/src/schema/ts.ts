@@ -55,11 +55,23 @@ export interface TsConfig extends Omit<BaseConfig, "commentStyle"> {
 // ArkType expression names — binary primitives match the schemaPop spread.
 // bool stays "bool" (schemaPop binary boolean), plain boolean → "boolean".
 const ARKTYPE_BIN: Record<string, string> = {
-	u8: "u8", u16: "u16", u32: "u32", u64: "u64", u128: "u128",
-	i8: "i8", i16: "i16", i32: "i32", i64: "i64", i128: "i128",
-	f32: "f32", f64: "f64",
-	bool: "bool", boolean: "boolean",
-	number: "number", bigint: "bigint", string: "string",
+	u8: "u8",
+	u16: "u16",
+	u32: "u32",
+	u64: "u64",
+	u128: "u128",
+	i8: "i8",
+	i16: "i16",
+	i32: "i32",
+	i64: "i64",
+	i128: "i128",
+	f32: "f32",
+	f64: "f64",
+	bool: "bool",
+	boolean: "boolean",
+	number: "number",
+	bigint: "bigint",
+	string: "string",
 };
 
 const PRIMITIVE_TS: Record<string, string> = {
@@ -106,7 +118,10 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 		// structs (which would otherwise be recursive value types).
 		// Pointer-to-primitive routes through the primitive map.
 		if (field.kind === "reference") {
-			if (field.indirection === "pointer" || field.indirection === "reference") {
+			if (
+				field.indirection === "pointer" ||
+				field.indirection === "reference"
+			) {
 				const inner = PRIMITIVE_TS[field.name] ?? typeName(field.name);
 				return `${inner} | null`;
 			}
@@ -141,7 +156,10 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 
 	function fieldToArktypeExpr(field: Field): string {
 		if (field.kind === "reference") {
-			if (field.indirection === "pointer" || field.indirection === "reference") {
+			if (
+				field.indirection === "pointer" ||
+				field.indirection === "reference"
+			) {
 				const inner = ARKTYPE_BIN[field.name] ?? typeName(field.name);
 				return `${inner} | null`;
 			}
@@ -165,7 +183,9 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 			case "any":
 				return "unknown";
 			case "inlineStruct": {
-				const parts = ((field as any).fields as Array<{ name: string; type: Field }>)
+				const parts = (
+					(field as any).fields as Array<{ name: string; type: Field }>
+				)
 					.filter((f) => f.type.kind !== "unit")
 					.map((f) => `${fieldName(f.name)}: ${fieldToArktypeExpr(f.type)}`);
 				return `{ ${parts.join("; ")} }`;
@@ -187,7 +207,9 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 					if (f.type.kind === "unit") continue;
 					const optional = f.type.kind === "optional";
 					const inner = optional ? (f.type as any).inner : f.type;
-					const expr = fieldToArktypeExpr(inner).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+					const expr = fieldToArktypeExpr(inner)
+						.replace(/\\/g, "\\\\")
+						.replace(/"/g, '\\"');
 					const key = optional ? `"${fieldName(f.name)}?"` : fieldName(f.name);
 					s += `${indent()}${indent()}${key}: "${expr}",\n`;
 				}
@@ -203,10 +225,15 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 						return `{ kind: '${v.name}' } & ${inner}`;
 					return `{ kind: '${v.name}'; value: ${inner} }`;
 				});
-				const expr = branches.join(" | ").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+				const expr = branches
+					.join(" | ")
+					.replace(/\\/g, "\\\\")
+					.replace(/"/g, '\\"');
 				s += `${indent()}${name}: "${expr}",\n`;
 			} else if (t.kind === "alias") {
-				const expr = fieldToArktypeExpr(t.type).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+				const expr = fieldToArktypeExpr(t.type)
+					.replace(/\\/g, "\\\\")
+					.replace(/"/g, '\\"');
 				s += `${indent()}${name}: "${expr}",\n`;
 			}
 		}
@@ -347,7 +374,10 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 			return tsLiteral(change.default.value);
 		}
 		// 4. Added with language-default fallback.
-		if (change?.kind === "added" && change.default.kind === "language-default") {
+		if (
+			change?.kind === "added" &&
+			change.default.kind === "language-default"
+		) {
 			return languageDefault(toField.type);
 		}
 		// 5. Added user-supplied / type-narrowed / type-changed → no auto.
@@ -447,10 +477,7 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 		toNs: string,
 		moduleConfigured: boolean,
 	): string {
-		if (
-			td.kind !== "changed" &&
-			td.kind !== "renamed"
-		) {
+		if (td.kind !== "changed" && td.kind !== "renamed") {
 			return "";
 		}
 		const fromType = (td as any).from;
@@ -506,9 +533,10 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 			s += `${indent()}${indent()}return v1 as unknown as ${retType};\n`;
 		} else if (toType.kind === "enum") {
 			// Per-variant Renamed → switch with explicit string mapping.
-			const renamedVariants = (td as any).variantChanges?.filter?.(
-				(c: any) => c.kind === "renamed",
-			) ?? [];
+			const renamedVariants =
+				(td as any).variantChanges?.filter?.(
+					(c: any) => c.kind === "renamed",
+				) ?? [];
 			if (renamedVariants.length > 0) {
 				s += `${indent()}${indent()}switch (v1) {\n`;
 				for (const r of renamedVariants) {
@@ -594,8 +622,7 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 				const tn = typeName(toType.name);
 				const fnName = `migrate_${tn}_${fromNs}_to_${toNs}`;
 				dispatchEntries.push({
-					typeName:
-						td.kind === "renamed" ? td.oldName : toType.name,
+					typeName: td.kind === "renamed" ? td.oldName : toType.name,
 					fromNs,
 					toNs,
 					fnName,

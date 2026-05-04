@@ -18,7 +18,9 @@ function ok(result: unknown): unknown {
 	return result;
 }
 function fail(result: unknown): void {
-	expect(result !== null && typeof result === "object" && " arkKind" in result).toBe(true);
+	expect(
+		result !== null && typeof result === "object" && " arkKind" in result,
+	).toBe(true);
 }
 
 describe("getArkType", () => {
@@ -42,19 +44,32 @@ describe("getArkType", () => {
 	});
 
 	test("enum validates string literals", () => {
-		const t = getArkType({ label: "E", type: "enum", options: ["a", "b", "c"] });
+		const t = getArkType({
+			label: "E",
+			type: "enum",
+			options: ["a", "b", "c"],
+		});
 		expect(ok(t("a"))).toBe("a");
 		fail(t("d"));
 	});
 
 	test("array validates arrays of items", () => {
-		const t = getArkType({ label: "A", type: "array", item: { label: "n", type: "number" } });
+		const t = getArkType({
+			label: "A",
+			type: "array",
+			item: { label: "n", type: "number" },
+		});
 		expect(ok(t([1, 2, 3]))).toEqual([1, 2, 3]);
 		fail(t(["x"]));
 	});
 
 	test("array with maxItems enforces length", () => {
-		const t = getArkType({ label: "A", type: "array", item: { label: "n", type: "number" }, maxItems: 2 });
+		const t = getArkType({
+			label: "A",
+			type: "array",
+			item: { label: "n", type: "number" },
+			maxItems: 2,
+		});
 		expect(ok(t([1, 2]))).toEqual([1, 2]);
 		fail(t([1, 2, 3]));
 	});
@@ -68,7 +83,10 @@ describe("getArkType", () => {
 				age: { label: "age", type: "number" },
 			},
 		});
-		expect(ok(t({ name: "Alice", age: 30 }))).toEqual({ name: "Alice", age: 30 });
+		expect(ok(t({ name: "Alice", age: 30 }))).toEqual({
+			name: "Alice",
+			age: 30,
+		});
 		fail(t({ name: "Alice" }));
 	});
 
@@ -82,7 +100,10 @@ describe("getArkType", () => {
 			},
 		});
 		expect(ok(t({ name: "Alice" }))).toEqual({ name: "Alice" });
-		expect(ok(t({ name: "Alice", note: "hi" }))).toEqual({ name: "Alice", note: "hi" });
+		expect(ok(t({ name: "Alice", note: "hi" }))).toEqual({
+			name: "Alice",
+			note: "hi",
+		});
 	});
 
 	test("any accepts anything", () => {
@@ -136,7 +157,9 @@ describe("fromArktype", () => {
 	});
 
 	test("object type", () => {
-		const f = fromArktype(type({ name: "string", age: "number" }), { label: "O" });
+		const f = fromArktype(type({ name: "string", age: "number" }), {
+			label: "O",
+		});
 		expect(f.type).toBe("object");
 		expect((f as any).fields).toHaveProperty("name");
 		expect((f as any).fields).toHaveProperty("age");
@@ -176,7 +199,12 @@ describe("FormField round-trip (getArkType → fromArktype)", () => {
 	});
 
 	test("number with constraints", () => {
-		const rt = roundTrip({ label: "N", type: "number", min: 1, max: 99 }) as any;
+		const rt = roundTrip({
+			label: "N",
+			type: "number",
+			min: 1,
+			max: 99,
+		}) as any;
 		expect(rt.type).toBe("number");
 		expect(rt.min).toBe(1);
 		expect(rt.max).toBe(99);
@@ -187,13 +215,21 @@ describe("FormField round-trip (getArkType → fromArktype)", () => {
 	});
 
 	test("enum options preserved", () => {
-		const rt = roundTrip({ label: "E", type: "enum", options: ["x", "y"] }) as any;
+		const rt = roundTrip({
+			label: "E",
+			type: "enum",
+			options: ["x", "y"],
+		}) as any;
 		expect(rt.type).toBe("enum");
 		expect(rt.options).toEqual(["x", "y"]);
 	});
 
 	test("array with item type", () => {
-		const rt = roundTrip({ label: "A", type: "array", item: { label: "n", type: "number" } }) as any;
+		const rt = roundTrip({
+			label: "A",
+			type: "array",
+			item: { label: "n", type: "number" },
+		}) as any;
 		expect(rt.type).toBe("array");
 		expect(rt.item?.type).toBe("number");
 	});
@@ -213,7 +249,11 @@ describe("FormField round-trip (getArkType → fromArktype)", () => {
 	});
 
 	test("description preserved", () => {
-		const rt = roundTrip({ label: "S", type: "string", description: "A name" } as any) as any;
+		const rt = roundTrip({
+			label: "S",
+			type: "string",
+			description: "A name",
+		} as any) as any;
 		expect(rt.description).toBe("A name");
 	});
 

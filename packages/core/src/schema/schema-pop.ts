@@ -89,9 +89,13 @@ function schemaPopFn<S extends object>(config: SchemaPopConfig, scope: S): S {
 }
 
 /** Runtime extractor — `undefined` for plain scopes (no `schemaPop()` wrap). */
-export function getSchemaPopConfig(scope: unknown): SchemaPopConfig | undefined {
+export function getSchemaPopConfig(
+	scope: unknown,
+): SchemaPopConfig | undefined {
 	if (typeof scope !== "object" || scope === null) return undefined;
-	return (scope as { [SCHEMA_POP_CONFIG]?: SchemaPopConfig })[SCHEMA_POP_CONFIG];
+	return (scope as { [SCHEMA_POP_CONFIG]?: SchemaPopConfig })[
+		SCHEMA_POP_CONFIG
+	];
 }
 
 /**

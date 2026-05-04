@@ -20,7 +20,11 @@ describe("objc importer", () => {
 		const s = r.items[0]!;
 		expect(s.kind).toBe("struct");
 		if (s.kind === "struct") {
-			expect(s.fields.map(f => f.name)).toEqual(["uptime_ms", "status", "isActive"]);
+			expect(s.fields.map((f) => f.name)).toEqual([
+				"uptime_ms",
+				"status",
+				"isActive",
+			]);
 			expect(s.fields[0]!.type).toEqual({ kind: "primitive", name: "i64" });
 			expect(s.fields[1]!.type).toEqual({ kind: "string" });
 			expect(s.fields[2]!.type).toEqual({ kind: "primitive", name: "bool" });
@@ -36,7 +40,7 @@ describe("objc importer", () => {
         `);
 		const s = r.items[0]!;
 		if (s.kind === "struct") {
-			expect(s.fields.map(f => f.name)).toEqual(["length", "scale"]);
+			expect(s.fields.map((f) => f.name)).toEqual(["length", "scale"]);
 			expect(s.fields[0]!.type).toEqual({ kind: "primitive", name: "i32" });
 		}
 	});
@@ -51,7 +55,10 @@ describe("objc importer", () => {
 		const e = r.items[0]!;
 		expect(e.kind).toBe("enum");
 		if (e.kind === "enum") {
-			expect(e.variants.map(v => v.name)).toEqual(["StatusIdle", "StatusActive"]);
+			expect(e.variants.map((v) => v.name)).toEqual([
+				"StatusIdle",
+				"StatusActive",
+			]);
 		}
 	});
 

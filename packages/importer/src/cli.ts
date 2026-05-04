@@ -1,17 +1,20 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
 import * as fs from "node:fs/promises";
+import { fstatSync } from "node:fs";
 import * as path from "node:path";
 
 // Bun.Glob is provided by the bun runtime (this CLI runs only under
 // bun via the shebang). Declared inline so we don't pull @types/bun
 // into the importer package's devDeps just for one symbol.
 declare const Bun: {
-	Glob: new (pattern: string) => {
+	Glob: new (
+		pattern: string,
+	) => {
 		scan(opts: { cwd: string; onlyFiles?: boolean }): AsyncIterable<string>;
 	};
 };
-import { writeLayoutPlan } from "schema-pop/node";
+import { writeLayoutPlan, LAYOUT_JSON_SCHEMA_VERSION } from "schema-pop/node";
 import {
 	type Engine,
 	type Lang,
@@ -28,6 +31,13 @@ Usage:
   schema-pop-import 'src/**/*.{h,hpp}' -o out/ [options]                   # glob → directory
   schema-pop-import a.h b.h c.h -o out/ [options]                          # multi-arg → directory
   schema-pop-import <input> -o <output.ts> -- -I./inc -DFOO=1              # clang flags after \`--\`
+  schema-pop-import 'src/**/*.h' | schema-pop emit -t md -o docs/          # pipe to schema-pop
+
+Pipe mode (omit -o or pass -o -):
+  When stdout is a pipe, outputs LayoutPlan JSON instead of writing files.
+  Single input  → one JSON object  (same envelope as .layout.json on disk).
+  Multiple inputs → JSON array of envelopes, consumed by \`schema-pop emit\`.
+  Progress and errors are written to stderr so they don't corrupt the stream.
 
 Engines:
   Rust         → tree-sitter (bundled wasm grammar, zero runtime deps)
@@ -45,7 +55,11 @@ Options:
                           multiple positionals are passed, or the path
                           ends with \`/\`. In directory mode each input
                           \`<name>.<ext>\` becomes \`<outDir>/<name>.ts\`.
-  -l, --lang <lang>       Force language: rust | c | c++ | typescript (default: from extension)
+  -l, --lang <lang>       Force language (default: from extension).
+						  Supported for treesitter:
+						  c, cpp, c-sharp, dart, elixir, go, java, 
+						  kotlin, kotlin, objc, php, python, rust, 
+						  scala, swift, typescript						  
   -e, --engine <engine>   Force engine: treesitter | clang (default: auto)
   -n, --scope <name>      Exported scope binding name (default: $)
   -t, --type <kind>       Filter the emitted IR: \`types\` (drop function
@@ -103,11 +117,21 @@ async function main() {
 	}
 
 	const output = values.output as string | undefined;
-	if (!output) {
+	// fstatSync(1) checks the actual stdout file descriptor — more reliable
+	// than process.stdout.isTTY which Bun leaves undefined in all cases.
+	const isStdoutPipe = (() => {
+		try {
+			return fstatSync(1).isFIFO();
+		} catch {
+			return false;
+		}
+	})();
+	const isPipeMode = output === "-" || (!output && isStdoutPipe);
+
+	if (!isPipeMode && !output) {
 		console.error("error: --output is required");
 		process.exit(2);
 	}
-	const absOutput = path.resolve(output);
 
 	// Expand positionals: each entry is either a literal file or a glob
 	// pattern (presence of `*` / `?` / `[` / `{` triggers Bun.Glob expand).
@@ -121,11 +145,40 @@ async function main() {
 		inputs.push(...expanded);
 	}
 
+	// Pipe mode: stream LayoutPlan JSON to stdout, progress to stderr.
+	if (isPipeMode) {
+		if (inputs.length === 1) {
+			const plan = await runOnePlan(inputs[0]!, values, passthrough);
+			process.stdout.write(
+				JSON.stringify(
+					{ $schemaVersion: LAYOUT_JSON_SCHEMA_VERSION, plan },
+					null,
+					2,
+				) + "\n",
+			);
+		} else {
+			const envelopes: { $schemaVersion: string; plan: unknown }[] = [];
+			for (const inp of inputs) {
+				try {
+					const plan = await runOnePlan(inp, values, passthrough);
+					envelopes.push({ $schemaVersion: LAYOUT_JSON_SCHEMA_VERSION, plan });
+				} catch (e) {
+					console.error(`❌ ${inp}: ${(e as Error).message}`);
+				}
+			}
+			process.stdout.write(JSON.stringify(envelopes, null, 2) + "\n");
+		}
+		return;
+	}
+
+	// Normal mode: write to output path.
+	const absOutput = path.resolve(output!);
+
 	// Output is a directory when explicitly slash-suffixed, when it
 	// already exists as a dir, or when the input fan-out is > 1.
 	const outputLooksLikeDir =
-		output.endsWith("/") ||
-		output.endsWith(path.sep) ||
+		output!.endsWith("/") ||
+		output!.endsWith(path.sep) ||
 		(await isExistingDir(absOutput));
 	const isDirMode = inputs.length > 1 || outputLooksLikeDir;
 
@@ -155,14 +208,12 @@ async function main() {
 	}
 }
 
-async function runOne(
-	input: string,
-	absOutput: string,
+async function buildImportArgs(
+	absInput: string,
 	values: Record<string, unknown>,
 	passthrough: string[],
-): Promise<void> {
-	const absInput = path.resolve(input);
-
+	outFileForExtras: string,
+) {
 	const langOverride = values.lang as Lang | undefined;
 	const engineOverride = values.engine as Engine | undefined;
 	if (
@@ -212,12 +263,56 @@ async function runOne(
 	const extras = [];
 	for (const spec of extrasSpecs) {
 		try {
-			extras.push(await loadExtras(spec, { outFile: absOutput }));
+			extras.push(await loadExtras(spec, { outFile: outFileForExtras }));
 		} catch (e) {
 			console.error(`error: ${(e as Error).message}`);
 			process.exit(2);
 		}
 	}
+
+	return { engine, lang, extraArgs, extras, filter };
+}
+
+async function runOnePlan(
+	input: string,
+	values: Record<string, unknown>,
+	passthrough: string[],
+) {
+	const absInput = path.resolve(input);
+	const { engine, lang, extraArgs, extras, filter } = await buildImportArgs(
+		absInput,
+		values,
+		passthrough,
+		absInput,
+	);
+	const plan = await fileToLayoutPlan(absInput, {
+		engine,
+		lang,
+		clangBin: values.clang as string | undefined,
+		extraClangArgs: extraArgs,
+		extras,
+		filter,
+	});
+	console.error(
+		`✅ ${path.relative(process.cwd(), absInput)} (${lang}, ${engine}, layout-json)`,
+	);
+	return plan;
+}
+
+async function runOne(
+	input: string,
+	absOutput: string,
+	values: Record<string, unknown>,
+	passthrough: string[],
+): Promise<void> {
+	const absInput = path.resolve(input);
+
+	const { engine, lang, extraArgs, extras, filter } = await buildImportArgs(
+		absInput,
+		values,
+		passthrough,
+		absOutput,
+	);
 
 	// Output extension picks the format:
 	//   .layout.json — direct LayoutPlan, no arktype round-trip (preferred)

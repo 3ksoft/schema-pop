@@ -28,8 +28,19 @@ type FunctionPlan = {
 };
 
 const BIN_PRIMS = [
-	"u8", "i8", "u16", "i16", "u32", "i32",
-	"u64", "i64", "u128", "i128", "f32", "f64", "bool",
+	"u8",
+	"i8",
+	"u16",
+	"i16",
+	"u32",
+	"i32",
+	"u64",
+	"i64",
+	"u128",
+	"i128",
+	"f32",
+	"f64",
+	"bool",
 ] as const;
 
 /** Renders a Field as a single arktype-syntax string. */
@@ -84,7 +95,12 @@ function baseExpr(f: Field): string {
 			const bt = (f as any).binaryType as string | undefined;
 			const popKind = (f as any).popKind as string | undefined;
 			const size = (f as any).size as number | undefined;
-			if (popKind === "bitwise" && typeof size === "number" && size >= 1 && size <= 7) {
+			if (
+				popKind === "bitwise" &&
+				typeof size === "number" &&
+				size >= 1 &&
+				size <= 7
+			) {
 				return `u${size}`;
 			}
 			if (bt && (BIN_PRIMS as readonly string[]).includes(bt)) return bt;
@@ -115,7 +131,9 @@ function baseExpr(f: Field): string {
 		case "any":
 			return "unknown";
 		case "enum": {
-			const options = ((f as any).options ?? []) as Array<string | { value: string | number }>;
+			const options = ((f as any).options ?? []) as Array<
+				string | { value: string | number }
+			>;
 			const lits = options.map((o) =>
 				typeof o === "string" ? quote(o) : quote(String(o.value)),
 			);
@@ -233,14 +251,17 @@ function emitFunction(fn: FunctionPlan): string {
 	const lines: string[] = [`\t{`];
 	lines.push(`\t\tname: ${quote(fn.name)},`);
 	if (fn.symbol) lines.push(`\t\tsymbol: ${quote(fn.symbol)},`);
-	lines.push(`\t\treturnType: ${JSON.stringify(fieldToSchemaPopExpr(fn.returnType))},`);
+	lines.push(
+		`\t\treturnType: ${JSON.stringify(fieldToSchemaPopExpr(fn.returnType))},`,
+	);
 	lines.push(`\t\targs: [${fn.args.map(emitArg).join(", ")}],`);
 	if (fn.abi) lines.push(`\t\tabi: ${quote(fn.abi)},`);
 	if (fn.async) lines.push(`\t\tasync: true,`);
 	if (fn.throws) lines.push(`\t\tthrows: true,`);
 	if (fn.description) lines.push(`\t\tdescription: ${quote(fn.description)},`);
 	if (fn.obsolete) lines.push(`\t\tobsolete: true,`);
-	if (fn.obsoleteReason) lines.push(`\t\tobsoleteReason: ${quote(fn.obsoleteReason)},`);
+	if (fn.obsoleteReason)
+		lines.push(`\t\tobsoleteReason: ${quote(fn.obsoleteReason)},`);
 	if (fn.renamedFrom) lines.push(`\t\trenamedFrom: ${quote(fn.renamedFrom)},`);
 	lines.push(`\t},`);
 	return lines.join("\n");
@@ -264,7 +285,11 @@ function topLevelEntry(f: Field): string {
 		for (const [k, v] of Object.entries(fields)) {
 			const opt = (v as any).required === false ? "?" : "";
 			const expr = fieldToSchemaPopExpr(v);
-			parts.push(`\t\t${quote(`${k}${opt}`).replace(/^'(.*)'$/, '"$1"')}: ${quote(expr).replace(/^'(.*)'$/, '"$1"').replace(/\\'/g, "'")},`);
+			parts.push(
+				`\t\t${quote(`${k}${opt}`).replace(/^'(.*)'$/, '"$1"')}: ${quote(expr)
+					.replace(/^'(.*)'$/, '"$1"')
+					.replace(/\\'/g, "'")},`,
+			);
 		}
 		// Use double-quoted keys + values for safety; rough but parseable.
 		return `{\n${parts.join("\n")}\n\t}`;

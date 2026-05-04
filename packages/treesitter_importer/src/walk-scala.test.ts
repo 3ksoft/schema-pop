@@ -16,7 +16,7 @@ describe("scala importer", () => {
 		const s = r.items[0]!;
 		expect(s.kind).toBe("struct");
 		if (s.kind === "struct") {
-			expect(s.fields.map(f => f.name)).toEqual(["uptimeMs", "status"]);
+			expect(s.fields.map((f) => f.name)).toEqual(["uptimeMs", "status"]);
 			expect(s.fields[0]!.type).toEqual({ kind: "primitive", name: "i32" });
 			expect(s.fields[1]!.type).toEqual({ kind: "string" });
 		}
@@ -31,8 +31,14 @@ describe("scala importer", () => {
         `);
 		const s = r.items[0]!;
 		if (s.kind === "struct") {
-			expect(s.fields[0]!.type).toEqual({ kind: "array", item: { kind: "primitive", name: "i32" } });
-			expect(s.fields[1]!.type).toEqual({ kind: "optional", inner: { kind: "string" } });
+			expect(s.fields[0]!.type).toEqual({
+				kind: "array",
+				item: { kind: "primitive", name: "i32" },
+			});
+			expect(s.fields[1]!.type).toEqual({
+				kind: "optional",
+				inner: { kind: "string" },
+			});
 		}
 	});
 });

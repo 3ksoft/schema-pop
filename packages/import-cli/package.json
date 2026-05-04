@@ -1,6 +1,6 @@
 {
 	"name": "schema-pop-import",
-	"version": "0.1.39",
+	"version": "0.1.40",
 	"description": "Top-level alias so `bunx schema-pop-import <file>` resolves without the `@schema-pop/importer` scope. Thin shim — all logic lives in @schema-pop/importer.",
 	"type": "module",
 	"bin": {
@@ -14,6 +14,6 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@schema-pop/importer": "0.1.39"
+		"@schema-pop/importer": "0.1.40"
 	}
 }

@@ -7,12 +7,7 @@ import type {
 	IRType,
 } from "@schema-pop/treesitter-importer";
 import { downgradeUnknownRefs } from "@schema-pop/treesitter-importer";
-import {
-	type ClangNode,
-	isFromInclude,
-	isImplicit,
-	locFile,
-} from "./clang";
+import { type ClangNode, isFromInclude, isImplicit, locFile } from "./clang";
 
 /**
  * stdint / common-typedef table — same set as the tree-sitter walker so
@@ -724,7 +719,11 @@ function handleEnum(
 	for (const child of node.inner ?? []) {
 		if (child.kind !== "EnumConstantDecl") continue;
 		if (!child.name) continue;
-		variants.push({ kind: "unit", name: child.name, description: extractDoc(child) });
+		variants.push({
+			kind: "unit",
+			name: child.name,
+			description: extractDoc(child),
+		});
 	}
 
 	// Detect explicit underlying type (C++11 / C23 `enum Name : uint8_t`).

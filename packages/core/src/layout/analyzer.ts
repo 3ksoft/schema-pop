@@ -438,9 +438,7 @@ export class SchemaAnalyzer {
 			// prefix, so the array as a whole sits on a 4-byte boundary
 			// regardless of element alignment. Fixed arrays inherit the
 			// element's own alignment.
-			let align = isFixed
-				? itemLayout.align
-				: Math.max(4, itemLayout.align);
+			let align = isFixed ? itemLayout.align : Math.max(4, itemLayout.align);
 			// Stride (element-to-element distance) tracks the element's
 			// own alignment, NOT the container's. A u8[] should pack at
 			// 1 byte per element even when the array sits on a 4-byte
@@ -651,9 +649,7 @@ export class SchemaAnalyzer {
 			if (fieldRenamedFrom) migrationMeta.renamedFrom = fieldRenamedFrom;
 			if (meta.hasDefault) migrationMeta.defaultValue = meta.defaultValue;
 			const migrationMetaSpread =
-				Object.keys(migrationMeta).length > 0
-					? { migrationMeta }
-					: {};
+				Object.keys(migrationMeta).length > 0 ? { migrationMeta } : {};
 
 			if (isBitwise) {
 				if (currentBitOffset + bitSize > 8) {

@@ -15,24 +15,15 @@ function analyze(s: any, version: string) {
 
 describe("ts exporter — generateMigration", () => {
 	test("identical plans → no migration emitted", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
-		const v2 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v2",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
+		const v2 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v2");
 		const exp = ts({ dest: "out.ts" });
 		const code = exp.generateMigration!(v1, v2);
 		expect(code).toBe("");
 	});
 
 	test("ArkType default → emits literal in body", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
 		const v2 = analyze(
 			scope({
 				...binary.import(),
@@ -65,14 +56,8 @@ describe("ts exporter — generateMigration", () => {
 	});
 
 	test("Narrowing → throw stub with reason", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
-		const v2 = analyze(
-			scope({ ...binary.import(), B: { x: "u16" } }),
-			"v2",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
+		const v2 = analyze(scope({ ...binary.import(), B: { x: "u16" } }), "v2");
 		const code = ts({ dest: "out.ts" }).generateMigration!(v1, v2);
 		expect(code).toContain("status: user-supplied");
 		expect(code).toContain("throw new Error");
@@ -81,14 +66,8 @@ describe("ts exporter — generateMigration", () => {
 	});
 
 	test("Widening → simple passthrough", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u8" } }),
-			"v1",
-		);
-		const v2 = analyze(
-			scope({ ...binary.import(), B: { x: "u16" } }),
-			"v2",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u8" } }), "v1");
+		const v2 = analyze(scope({ ...binary.import(), B: { x: "u16" } }), "v2");
 		const code = ts({ dest: "out.ts" }).generateMigration!(v1, v2);
 		expect(code).toContain("status: auto");
 		expect(code).toContain("x: v1.x");
@@ -96,10 +75,7 @@ describe("ts exporter — generateMigration", () => {
 	});
 
 	test("New field without default → language-default emitted", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
 		const v2 = analyze(
 			scope({ ...binary.import(), B: { x: "u32", flag: "bool" } }),
 			"v2",
@@ -226,10 +202,7 @@ describe("ts exporter — user mapper integration", () => {
 	});
 
 	test("renamed alias type: dispatcher registers both old and new names", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), DeviceStatus: "u8" }),
-			"v1",
-		);
+		const v1 = analyze(scope({ ...binary.import(), DeviceStatus: "u8" }), "v1");
 		const v2 = analyze(
 			scope({
 				...binary.import(),

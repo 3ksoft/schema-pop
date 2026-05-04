@@ -63,7 +63,9 @@ export function walkJavaFile(
 				}
 
 				const attrs = pendingAttrs;
-				const description = pendingDoc.length ? pendingDoc.join("\n") : undefined;
+				const description = pendingDoc.length
+					? pendingDoc.join("\n")
+					: undefined;
 				pendingDoc = [];
 				pendingAttrs = [];
 
@@ -121,14 +123,18 @@ function handleClass(
 	if (node.type === "record_declaration") {
 		const params =
 			node.childForFieldName("parameters") ??
-			node.namedChildren.find(n => n?.type === "formal_parameters");
+			node.namedChildren.find((n) => n?.type === "formal_parameters");
 		if (params) {
 			for (const param of params.namedChildren) {
 				if (!param) continue;
 				if (param.type === "formal_parameter") {
 					// formal_parameter: type node + identifier (name)
-					const pType = param.namedChildren.find(n => n?.type !== "identifier");
-					const pName = param.namedChildren.find(n => n?.type === "identifier")?.text;
+					const pType = param.namedChildren.find(
+						(n) => n?.type !== "identifier",
+					);
+					const pName = param.namedChildren.find(
+						(n) => n?.type === "identifier",
+					)?.text;
 					if (pName && pType) {
 						fields.push({ name: pName, type: parseJavaType(pType), pub: true });
 					}
@@ -266,10 +272,10 @@ function parseJavaType(node: TSNode): IRType {
 		// In tree-sitter-java, generic_type children are accessed via namedChildren, not fields
 		const name =
 			node.childForFieldName("name")?.text ??
-			node.namedChildren.find(c => c?.type === "type_identifier")?.text;
+			node.namedChildren.find((c) => c?.type === "type_identifier")?.text;
 		const args =
 			node.childForFieldName("type_arguments") ??
-			node.namedChildren.find(c => c?.type === "type_arguments");
+			node.namedChildren.find((c) => c?.type === "type_arguments");
 		if ((name === "List" || name === "ArrayList") && args) {
 			const inner = args.namedChildren.find(
 				(c) => c && (c.type === "type_identifier" || c.type === "generic_type"),

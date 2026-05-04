@@ -70,7 +70,9 @@ export function md(config: MdConfig = {}): ExporterPlugin<MdConfig> {
 		const obsoleteTag = tAny.obsolete
 			? ` _[deprecated${tAny.obsoleteReason ? `: ${tAny.obsoleteReason}` : ""}]_`
 			: "";
-		lines.push(`### \`${typeName(t.name)}\` <small>${t.kind}</small>${obsoleteTag}`);
+		lines.push(
+			`### \`${typeName(t.name)}\` <small>${t.kind}</small>${obsoleteTag}`,
+		);
 		lines.push("");
 		if (tAny.description) {
 			lines.push(`> ${tAny.description.replace(/\n/g, "\n> ")}`);
@@ -87,8 +89,11 @@ export function md(config: MdConfig = {}): ExporterPlugin<MdConfig> {
 				const fAny = f as any;
 				const notes: string[] = [];
 				if (fAny.obsolete)
-					notes.push(`_deprecated${fAny.obsoleteReason ? `: ${fAny.obsoleteReason}` : ""}_`);
-				if (fAny.description) notes.push(fAny.description.replace(/\|/g, "\\|"));
+					notes.push(
+						`_deprecated${fAny.obsoleteReason ? `: ${fAny.obsoleteReason}` : ""}_`,
+					);
+				if (fAny.description)
+					notes.push(fAny.description.replace(/\|/g, "\\|"));
 				lines.push(
 					`| ${f.offset} | \`${fieldName(f.name)}\` | ${fieldText(f.type)} | ${f.size} | ${notes.join("; ")} |`,
 				);
@@ -100,7 +105,9 @@ export function md(config: MdConfig = {}): ExporterPlugin<MdConfig> {
 				lines.push(`| \`${v.name}\` | ${v.value} |`);
 			}
 		} else if (t.kind === "union") {
-			lines.push(`<sub>tag size **${t.tagSize}** at offset **${t.tagOffset}**</sub>`);
+			lines.push(
+				`<sub>tag size **${t.tagSize}** at offset **${t.tagOffset}**</sub>`,
+			);
 			lines.push("");
 			lines.push("| Variant | Type |");
 			lines.push("|---------|------|");
@@ -134,9 +141,7 @@ export function md(config: MdConfig = {}): ExporterPlugin<MdConfig> {
 		lines.push(`\`\`\``);
 		lines.push(
 			`${fn.name}(${fn.args
-				.map((a) =>
-					`${a.name ?? "_"}: ${plainFieldText(a.type)}`,
-				)
+				.map((a) => `${a.name ?? "_"}: ${plainFieldText(a.type)}`)
 				.join(", ")}) -> ${plainFieldText(fn.returnType)}`,
 		);
 		lines.push(`\`\`\``);
@@ -176,8 +181,7 @@ export function md(config: MdConfig = {}): ExporterPlugin<MdConfig> {
 		name: "md",
 		extension: "md",
 		config: cfg,
-		wrapVersion: (version, code) =>
-			`# v${version}\n\n${code}\n`,
+		wrapVersion: (version, code) => `# v${version}\n\n${code}\n`,
 		generate: (plan: LayoutPlan) => {
 			const parts: string[] = [];
 			if (cfg.preamble) {

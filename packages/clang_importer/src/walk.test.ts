@@ -114,7 +114,7 @@ describe("importFile", () => {
 		}
 	});
 
-	test("complex C++ header — namespace, enum class, using, extern \"C\"", async () => {
+	test('complex C++ header — namespace, enum class, using, extern "C"', async () => {
 		const ir = await importFile(path.join(FIXTURES, "complex.hpp"));
 		const names = ir.items.map((i) => `${i.kind}:${i.name}`).sort();
 		expect(names).toEqual([

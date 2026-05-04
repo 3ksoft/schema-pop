@@ -26,6 +26,10 @@ const PACKAGES = [
 	"packages/core-exporters",
 	"packages/extra-exporters",
 	"packages/create",
+	"packages/treesitter_importer",
+	"packages/clang_importer",
+	"packages/importer",
+	"packages/import-cli",
 ];
 
 describe("create-schema-pop Integration", () => {

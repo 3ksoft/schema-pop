@@ -18,7 +18,11 @@ const SCALA_PRIMITIVES: Record<string, IRType> = {
 	String: { kind: "string" },
 };
 
-export function walkScalaFile(tree: Tree, sourcePath: string, opts: WalkScalaOptions = {}): SchemaPopIR {
+export function walkScalaFile(
+	tree: Tree,
+	sourcePath: string,
+	opts: WalkScalaOptions = {},
+): SchemaPopIR {
 	const items: IRItem[] = [];
 	const skipped: { name: string; reason: string }[] = [];
 
@@ -40,10 +44,15 @@ export function walkScalaFile(tree: Tree, sourcePath: string, opts: WalkScalaOpt
 					continue;
 				}
 
-				const description = pendingDoc.length ? pendingDoc.join("\n") : undefined;
+				const description = pendingDoc.length
+					? pendingDoc.join("\n")
+					: undefined;
 				pendingDoc = [];
 
-				if (child.type === "class_definition" || child.type === "object_definition") {
+				if (
+					child.type === "class_definition" ||
+					child.type === "object_definition"
+				) {
 					const item = handleClass(child, description);
 					if (item) items.push(item);
 				} else {
@@ -60,7 +69,11 @@ export function walkScalaFile(tree: Tree, sourcePath: string, opts: WalkScalaOpt
 }
 
 function stripStarLines(block: string): string {
-	return block.split("\n").map(l => l.replace(/^\s*\*\s?/, "")).join("\n").trim();
+	return block
+		.split("\n")
+		.map((l) => l.replace(/^\s*\*\s?/, ""))
+		.join("\n")
+		.trim();
 }
 
 function isPublic(node: TSNode): boolean {
@@ -68,32 +81,48 @@ function isPublic(node: TSNode): boolean {
 	return !text.includes("private ") && !text.includes("protected ");
 }
 
-function handleClass(node: TSNode, description: string | undefined): IRItem | null {
-	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c && c.type === "identifier");
+function handleClass(
+	node: TSNode,
+	description: string | undefined,
+): IRItem | null {
+	const nameNode =
+		node.childForFieldName("name") ||
+		node.namedChildren.find((c) => c && c.type === "identifier");
 	const name = nameNode?.text;
 	if (!name || !isPublic(node)) return null;
 
 	const fields: IRField[] = [];
-	
-	const params = node.childForFieldName("class_parameters") || node.namedChildren.find(n => n && n.type === "class_parameters");
+
+	const params =
+		node.childForFieldName("class_parameters") ||
+		node.namedChildren.find((n) => n && n.type === "class_parameters");
 	if (params) {
 		for (const p of params.namedChildren) {
 			if (p && p.type === "class_parameter") {
 				if (!isPublic(p)) continue;
-				const pName = p.childForFieldName("name") || p.namedChildren.find(n => n && n.type === "identifier");
-				const pType = p.childForFieldName("type") || p.namedChildren.find(n => n && (n.type === "type_identifier" || n.type === "generic_type"));
+				const pName =
+					p.childForFieldName("name") ||
+					p.namedChildren.find((n) => n && n.type === "identifier");
+				const pType =
+					p.childForFieldName("type") ||
+					p.namedChildren.find(
+						(n) =>
+							n && (n.type === "type_identifier" || n.type === "generic_type"),
+					);
 				if (pName && pType) {
 					fields.push({
 						name: pName.text,
 						type: parseScalaType(pType),
-						pub: true
+						pub: true,
 					});
 				}
 			}
 		}
 	}
 
-	const body = node.childForFieldName("body") || node.namedChildren.find(n => n && n.type === "template_body");
+	const body =
+		node.childForFieldName("body") ||
+		node.namedChildren.find((n) => n && n.type === "template_body");
 	if (body) {
 		let fieldDoc: string[] = [];
 		for (const c of body.namedChildren) {
@@ -108,24 +137,31 @@ function handleClass(node: TSNode, description: string | undefined): IRItem | nu
 				}
 				continue;
 			}
-			if (c.type === "val_declaration" || c.type === "var_declaration" ||
-				c.type === "val_definition" || c.type === "var_definition") {
+			if (
+				c.type === "val_declaration" ||
+				c.type === "var_declaration" ||
+				c.type === "val_definition" ||
+				c.type === "var_definition"
+			) {
 				if (!isPublic(c)) {
 					fieldDoc = [];
 					continue;
 				}
 				const pName =
 					c.childForFieldName("name") ??
-					c.namedChildren.find(n => n?.type === "identifier");
+					c.namedChildren.find((n) => n?.type === "identifier");
 				const pType =
 					c.childForFieldName("type") ??
-					c.namedChildren.find(n => n && (n.type === "type_identifier" || n.type === "generic_type"));
+					c.namedChildren.find(
+						(n) =>
+							n && (n.type === "type_identifier" || n.type === "generic_type"),
+					);
 				if (pName && pType) {
 					fields.push({
 						name: pName.text,
 						type: parseScalaType(pType),
 						description: fieldDoc.length ? fieldDoc.join("\n") : undefined,
-						pub: true
+						pub: true,
 					});
 				}
 			}
@@ -149,7 +185,10 @@ function parseScalaType(node: TSNode): IRType {
 			return { kind: "array", item: parseScalaType({ text: inner } as TSNode) };
 		}
 		if (base === "Option") {
-			return { kind: "optional", inner: parseScalaType({ text: inner } as TSNode) };
+			return {
+				kind: "optional",
+				inner: parseScalaType({ text: inner } as TSNode),
+			};
 		}
 	}
 

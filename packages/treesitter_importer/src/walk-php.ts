@@ -52,7 +52,9 @@ export function walkPhpFile(
 				}
 
 				const attrs = pendingAttrs;
-				const description = pendingDoc.length ? pendingDoc.join("\n") : undefined;
+				const description = pendingDoc.length
+					? pendingDoc.join("\n")
+					: undefined;
 				pendingDoc = [];
 				pendingAttrs = [];
 
@@ -66,7 +68,9 @@ export function walkPhpFile(
 						walk(body);
 						currentNamespace = oldNs;
 					} else {
-						currentNamespace = currentNamespace ? `${currentNamespace}\\${ns}` : ns;
+						currentNamespace = currentNamespace
+							? `${currentNamespace}\\${ns}`
+							: ns;
 					}
 				} else if (child.type === "class_declaration") {
 					const item = handleClass(child, attrs, description, currentNamespace);
@@ -126,7 +130,9 @@ function handleClass(
 		if (c.type === "property_declaration") {
 			const isPublic = c.namedChildren.some(
 				(m) =>
-					m && (m.type === "visibility_modifier" || m.type === "readonly_modifier") &&
+					m &&
+					(m.type === "visibility_modifier" ||
+						m.type === "readonly_modifier") &&
 					m.text.includes("public"),
 			);
 			if (!isPublic) {

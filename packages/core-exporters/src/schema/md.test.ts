@@ -46,10 +46,7 @@ describe("md exporter", () => {
 	});
 
 	test("renders alias as inline reference", () => {
-		const plan = analyze(
-			scope({ ...binary.import(), DeviceId: "u32" }),
-			"v1",
-		);
+		const plan = analyze(scope({ ...binary.import(), DeviceId: "u32" }), "v1");
 		const out = md().generate(plan);
 		expect(out).toContain("### `DeviceId`");
 		expect(out).toMatch(/Alias for `u32`/);
@@ -92,19 +89,13 @@ describe("md exporter", () => {
 	});
 
 	test("no functions → no functions section", () => {
-		const plan = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
+		const plan = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
 		const out = md().generate(plan);
 		expect(out).not.toContain("## functions");
 	});
 
 	test("preamble option prepends raw markdown", () => {
-		const plan = analyze(
-			scope({ ...binary.import(), B: { x: "u32" } }),
-			"v1",
-		);
+		const plan = analyze(scope({ ...binary.import(), B: { x: "u32" } }), "v1");
 		const out = md({ preamble: "# Custom title\n\nIntro paragraph." }).generate(
 			plan,
 		);

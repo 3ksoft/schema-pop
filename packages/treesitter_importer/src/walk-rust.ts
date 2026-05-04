@@ -386,9 +386,7 @@ function handleFunction(
 			const typeNode = p.childForFieldName("type");
 			if (!typeNode) continue;
 			const argName =
-				nameNode && nameNode.type === "identifier"
-					? nameNode.text
-					: undefined;
+				nameNode && nameNode.type === "identifier" ? nameNode.text : undefined;
 			args.push({ name: argName, type: parseRustType(typeNode) });
 		}
 	}

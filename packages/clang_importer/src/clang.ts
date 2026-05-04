@@ -98,9 +98,7 @@ export async function parseWithClang(
 			const stdout = Buffer.concat(stdoutChunks).toString("utf8");
 			if (!stdout) {
 				reject(
-					new Error(
-						`clang produced no output (exit ${code}).\n${stderr}`,
-					),
+					new Error(`clang produced no output (exit ${code}).\n${stderr}`),
 				);
 				return;
 			}

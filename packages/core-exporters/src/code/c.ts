@@ -95,10 +95,19 @@ function emitExpr(
 			const right = node.childForFieldName("right");
 			const op =
 				node.children
-					.find((n) => n !== null && !n.isNamed && /^([+\-*/%^]|&&?|\|\|?|\?\?|<<=?|>>=?|[<>!=]=?|[&|^]=?)$/.test(n.text.trim()))
+					.find(
+						(n) =>
+							n !== null &&
+							!n.isNamed &&
+							/^([+\-*/%^]|&&?|\|\|?|\?\?|<<=?|>>=?|[<>!=]=?|[&|^]=?)$/.test(
+								n.text.trim(),
+							),
+					)
 					?.text.trim() ?? "+";
 			const l = left ? emitExpr(left, structs, paramName, paramTypeName) : "0";
-			const r = right ? emitExpr(right, structs, paramName, paramTypeName) : "0";
+			const r = right
+				? emitExpr(right, structs, paramName, paramTypeName)
+				: "0";
 			// ?? has no C equivalent; double-evaluation of lhs is safe for field reads.
 			if (op === "??") return `((${l}) != 0 ? (${l}) : (${r}))`;
 			return `(${l} ${op} ${r})`;
@@ -108,7 +117,9 @@ function emitExpr(
 			const left = node.childForFieldName("left");
 			const right = node.childForFieldName("right");
 			const l = left ? emitExpr(left, structs, paramName, paramTypeName) : "0";
-			const r = right ? emitExpr(right, structs, paramName, paramTypeName) : "0";
+			const r = right
+				? emitExpr(right, structs, paramName, paramTypeName)
+				: "0";
 			return `((${l}) != 0 ? (${l}) : (${r}))`;
 		}
 		case "ternary_expression": {
@@ -124,7 +135,8 @@ function emitExpr(
 				: "0";
 		}
 		case "unary_expression": {
-			const op = node.children.find((n) => n !== null && !n.isNamed)?.text ?? "!";
+			const op =
+				node.children.find((n) => n !== null && !n.isNamed)?.text ?? "!";
 			const arg = node.namedChildren[0];
 			return `${op}${arg ? emitExpr(arg, structs, paramName, paramTypeName) : "0"}`;
 		}
@@ -234,7 +246,9 @@ export async function compileMigration(
 	const paramTypeNode = firstParam
 		?.childForFieldName("type")
 		?.namedChildren.find(
-			(n) => n !== null && (n.type === "type_identifier" || n.type === "member_expression"),
+			(n) =>
+				n !== null &&
+				(n.type === "type_identifier" || n.type === "member_expression"),
 		);
 	const paramTypeName =
 		paramTypeNode?.type === "member_expression"
@@ -254,7 +268,9 @@ export async function compileMigration(
 	const retTypeNode = fn
 		.childForFieldName("return_type")
 		?.namedChildren.find(
-			(n) => n !== null && (n.type === "type_identifier" || n.type === "member_expression"),
+			(n) =>
+				n !== null &&
+				(n.type === "type_identifier" || n.type === "member_expression"),
 		);
 	const retTypeName =
 		retTypeNode?.type === "member_expression"
@@ -276,7 +292,9 @@ export async function compileMigration(
 		`void ${fnName}(const uint8_t* src, uint8_t* dst) {`,
 	];
 
-	for (const pair of returnObj.namedChildren.filter((n): n is Node => n !== null)) {
+	for (const pair of returnObj.namedChildren.filter(
+		(n): n is Node => n !== null,
+	)) {
 		if (pair.type === "pair") {
 			const destName = pair.childForFieldName("key")?.text ?? "";
 			const valueNode = pair.childForFieldName("value");

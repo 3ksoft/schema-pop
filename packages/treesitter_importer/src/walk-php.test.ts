@@ -38,7 +38,9 @@ describe("php importer — walker", () => {
 	});
 
 	test("enum declaration → enum", async () => {
-		const r = await ir(`<?php enum Severity { case Info; case Warn; case Error; }`);
+		const r = await ir(
+			`<?php enum Severity { case Info; case Warn; case Error; }`,
+		);
 		const e = r.items[0]!;
 		expect(e.kind).toBe("enum");
 		if (e.kind === "enum") {

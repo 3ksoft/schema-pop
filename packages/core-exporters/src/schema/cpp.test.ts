@@ -21,7 +21,9 @@ describe("cpp exporter — generateMigration", () => {
 			"v2",
 		);
 		const out = cpp({ dest: "out.cpp" }).generateMigration!(v1, v2);
-		expect(out).toContain("void migrate_B_v1_to_v2(const v1::B *src, v2::B *dst)");
+		expect(out).toContain(
+			"void migrate_B_v1_to_v2(const v1::B *src, v2::B *dst)",
+		);
 		expect(out).toContain("dst->firmware = 7;");
 	});
 

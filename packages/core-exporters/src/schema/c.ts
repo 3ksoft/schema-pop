@@ -83,8 +83,14 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 		commentStyle: "star",
 		...config,
 	};
-	const { typeName, fieldName, indent, mapScalarField, isRichType, toSafeVersionIdentifier } =
-		ExporterTools(cfg);
+	const {
+		typeName,
+		fieldName,
+		indent,
+		mapScalarField,
+		isRichType,
+		toSafeVersionIdentifier,
+	} = ExporterTools(cfg);
 	return {
 		name: "c",
 		extension: "h",
@@ -163,8 +169,7 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 					}
 					code += `} ${tn};\n\n`;
 				} else if (t.kind === "enum") {
-					const underlying =
-						C_PRIMITIVES[t.underlyingType] ?? "uint8_t";
+					const underlying = C_PRIMITIVES[t.underlyingType] ?? "uint8_t";
 					code += `typedef ${underlying} ${tn};\n`;
 					for (const v of t.variants) {
 						const constName = `${tn}_${v.name}`
@@ -222,10 +227,7 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 			return `src->${fieldName(change.from.name)}`;
 		if (change?.kind === "added" && change.default.kind === "literal")
 			return cLiteral(change.default.value);
-		if (
-			change?.kind === "added" &&
-			change.default.kind === "language-default"
-		)
+		if (change?.kind === "added" && change.default.kind === "language-default")
 			return languageDefault(toField.type);
 		if (toField.migrationMeta?.defaultValue !== undefined)
 			return cLiteral(toField.migrationMeta.defaultValue);
@@ -281,8 +283,7 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 					changeByToName.set(c.to.name, c);
 			}
 			let s = `/* status: ${td.status} */\n`;
-			if (td.kind === "renamed")
-				s += `/* renamed from "${td.oldName}" */\n`;
+			if (td.kind === "renamed") s += `/* renamed from "${td.oldName}" */\n`;
 			s += `static inline ${sig} {\n`;
 			for (const f of stToType.fields) {
 				if (f.type.kind === "unit") continue;

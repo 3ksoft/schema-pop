@@ -22,10 +22,17 @@ describe("elixir importer", () => {
 		const s = r.items[0]!;
 		expect(s.kind).toBe("struct");
 		if (s.kind === "struct") {
-			expect(s.fields.map(f => f.name)).toEqual(["uptime", "status", "flags"]);
+			expect(s.fields.map((f) => f.name)).toEqual([
+				"uptime",
+				"status",
+				"flags",
+			]);
 			expect(s.fields[0]!.type).toEqual({ kind: "primitive", name: "i64" });
 			expect(s.fields[1]!.type).toEqual({ kind: "string" });
-			expect(s.fields[2]!.type).toEqual({ kind: "array", item: { kind: "primitive", name: "i64" } });
+			expect(s.fields[2]!.type).toEqual({
+				kind: "array",
+				item: { kind: "primitive", name: "i64" },
+			});
 		}
 	});
 
@@ -37,7 +44,7 @@ describe("elixir importer", () => {
         `);
 		const s = r.items[0]!;
 		if (s.kind === "struct") {
-			expect(s.fields.map(f => f.name)).toEqual(["items", "tag"]);
+			expect(s.fields.map((f) => f.name)).toEqual(["items", "tag"]);
 			expect(s.fields[0]!.type).toEqual({ kind: "unknown", raw: "any" });
 		}
 	});

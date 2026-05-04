@@ -3,7 +3,22 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type Lang = "rust" | "c" | "cpp" | "typescript" | "php" | "java" | "python" | "go" | "c_sharp" | "kotlin" | "objc" | "swift" | "dart" | "scala" | "elixir";
+export type Lang =
+	| "rust"
+	| "c"
+	| "cpp"
+	| "typescript"
+	| "php"
+	| "java"
+	| "python"
+	| "go"
+	| "c_sharp"
+	| "kotlin"
+	| "objc"
+	| "swift"
+	| "dart"
+	| "scala"
+	| "elixir";
 
 let initialized = false;
 const parsers = new Map<Lang, Parser>();
@@ -16,9 +31,7 @@ function defaultWasmPath(lang: Lang): string {
 		path.resolve(here, "../../wasm", file),
 	];
 	for (const c of candidates) if (fs.existsSync(c)) return c;
-	throw new Error(
-		`${file} not found (looked in: ${candidates.join(", ")})`,
-	);
+	throw new Error(`${file} not found (looked in: ${candidates.join(", ")})`);
 }
 
 export async function getParser(

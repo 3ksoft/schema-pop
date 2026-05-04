@@ -29,7 +29,11 @@ function isExported(name: string) {
 	return name.length > 0 && name[0] === name[0].toUpperCase();
 }
 
-export function walkGoFile(tree: Tree, sourcePath: string, opts: WalkGoOptions = {}): SchemaPopIR {
+export function walkGoFile(
+	tree: Tree,
+	sourcePath: string,
+	opts: WalkGoOptions = {},
+): SchemaPopIR {
 	const items: IRItem[] = [];
 	const skipped: { name: string; reason: string }[] = [];
 
@@ -45,21 +49,34 @@ export function walkGoFile(tree: Tree, sourcePath: string, opts: WalkGoOptions =
 					continue;
 				}
 
-				const description = pendingDoc.length ? pendingDoc.join("\n") : undefined;
+				const description = pendingDoc.length
+					? pendingDoc.join("\n")
+					: undefined;
 				pendingDoc = [];
 
 				if (child.type === "type_declaration") {
 					for (const spec of child.namedChildren) {
-						if (spec && (spec.type === "type_spec" || spec.type === "alias_declaration")) {
+						if (
+							spec &&
+							(spec.type === "type_spec" || spec.type === "alias_declaration")
+						) {
 							const nameNode = spec.childForFieldName("name");
-							const typeNode = spec.childForFieldName("type") || spec.namedChildren.find(c => c && c.type !== "type_identifier" && c.type !== "comment");
+							const typeNode =
+								spec.childForFieldName("type") ||
+								spec.namedChildren.find(
+									(c) =>
+										c && c.type !== "type_identifier" && c.type !== "comment",
+								);
 							if (!nameNode || !typeNode) continue;
-							
+
 							const name = nameNode.text;
 							if (!isExported(name)) continue;
 
 							if (typeNode.type === "struct_type") {
-								const list = typeNode.namedChildren.find(c => c && c.type === "field_declaration_list") || typeNode;
+								const list =
+									typeNode.namedChildren.find(
+										(c) => c && c.type === "field_declaration_list",
+									) || typeNode;
 								const fields: IRField[] = [];
 								let fieldDoc: string[] = [];
 
@@ -70,31 +87,71 @@ export function walkGoFile(tree: Tree, sourcePath: string, opts: WalkGoOptions =
 										continue;
 									}
 									if (c.type === "field_declaration") {
-										const tNode = c.childForFieldName("type") || c.namedChildren.find(x => x && x.type !== "field_identifier" && x.type !== "comment" && x.type !== "raw_string_literal" && x.type !== "interpreted_string_literal");
-										const names = c.namedChildren.filter(x => x && x.type === "field_identifier");
-										if (!tNode) { fieldDoc = []; continue; }
+										const tNode =
+											c.childForFieldName("type") ||
+											c.namedChildren.find(
+												(x) =>
+													x &&
+													x.type !== "field_identifier" &&
+													x.type !== "comment" &&
+													x.type !== "raw_string_literal" &&
+													x.type !== "interpreted_string_literal",
+											);
+										const names = c.namedChildren.filter(
+											(x) => x && x.type === "field_identifier",
+										);
+										if (!tNode) {
+											fieldDoc = [];
+											continue;
+										}
 
 										const t = parseGoType(tNode);
-										const fDoc = fieldDoc.length ? fieldDoc.join("\n") : undefined;
+										const fDoc = fieldDoc.length
+											? fieldDoc.join("\n")
+											: undefined;
 
 										if (names.length === 0) {
-											const embedName = tNode.text.split(".").pop()?.replace(/^\*/, "") || tNode.text;
+											const embedName =
+												tNode.text.split(".").pop()?.replace(/^\*/, "") ||
+												tNode.text;
 											if (isExported(embedName)) {
-												fields.push({ name: embedName, type: t, description: fDoc, pub: true });
+												fields.push({
+													name: embedName,
+													type: t,
+													description: fDoc,
+													pub: true,
+												});
 											}
 										} else {
 											for (const nNode of names) {
 												if (nNode && isExported(nNode.text)) {
-													fields.push({ name: nNode.text, type: t, description: fDoc, pub: true });
+													fields.push({
+														name: nNode.text,
+														type: t,
+														description: fDoc,
+														pub: true,
+													});
 												}
 											}
 										}
 									}
 									fieldDoc = [];
 								}
-								items.push({ kind: "struct", name, fields, description, pub: true });
+								items.push({
+									kind: "struct",
+									name,
+									fields,
+									description,
+									pub: true,
+								});
 							} else if (typeNode.type !== "interface_type") {
-								items.push({ kind: "alias", name, type: parseGoType(typeNode), description, pub: true });
+								items.push({
+									kind: "alias",
+									name,
+									type: parseGoType(typeNode),
+									description,
+									pub: true,
+								});
 							}
 						}
 					}
@@ -118,16 +175,24 @@ function parseGoType(node: TSNode): IRType {
 	}
 	if (node.type === "pointer_type") {
 		const inner = node.namedChildren[0];
-		return { kind: "optional", inner: inner ? parseGoType(inner) : { kind: "unknown", raw: "any" } };
+		return {
+			kind: "optional",
+			inner: inner ? parseGoType(inner) : { kind: "unknown", raw: "any" },
+		};
 	}
 	if (node.type === "slice_type") {
 		const inner = node.childForFieldName("element") || node.namedChildren[0];
-		return { kind: "array", item: inner ? parseGoType(inner) : { kind: "unknown", raw: "any" } };
+		return {
+			kind: "array",
+			item: inner ? parseGoType(inner) : { kind: "unknown", raw: "any" },
+		};
 	}
 	if (node.type === "array_type") {
 		const lenNode = node.childForFieldName("length");
 		const elNode = node.childForFieldName("element");
-		const item = (elNode ? parseGoType(elNode) : { kind: "unknown", raw: "any" }) as IRType;
+		const item = (
+			elNode ? parseGoType(elNode) : { kind: "unknown", raw: "any" }
+		) as IRType;
 		const len = lenNode ? parseInt(lenNode.text, 10) : NaN;
 		if (!isNaN(len)) {
 			return { kind: "array", item, exactLength: len };

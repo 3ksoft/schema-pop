@@ -26,7 +26,9 @@ describe("java importer — walker", () => {
 	});
 
 	test("record → struct", async () => {
-		const r = await ir(`public record Telemetry(int uptime_ms, String status) {}`);
+		const r = await ir(
+			`public record Telemetry(int uptime_ms, String status) {}`,
+		);
 		expect(r.items).toHaveLength(1);
 		const s = r.items[0]!;
 		expect(s.kind).toBe("struct");

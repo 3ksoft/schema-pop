@@ -28,7 +28,7 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"schema-pop": "0.1.39",
+		"schema-pop": "0.1.40",
 		"web-tree-sitter": "^0.25.0"
 	}
 }

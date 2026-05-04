@@ -18,7 +18,7 @@ describe("kotlin importer", () => {
 		const s = r.items[0]!;
 		expect(s.kind).toBe("struct");
 		if (s.kind === "struct") {
-			expect(s.fields.map(f => f.name)).toEqual(["uptimeMs", "status"]);
+			expect(s.fields.map((f) => f.name)).toEqual(["uptimeMs", "status"]);
 			expect(s.fields[0]!.type).toEqual({ kind: "primitive", name: "i32" });
 			expect(s.fields[1]!.type).toEqual({ kind: "string" });
 		}
@@ -34,8 +34,11 @@ describe("kotlin importer", () => {
 		const s = r.items[0]!;
 		expect(s.kind).toBe("struct");
 		if (s.kind === "struct") {
-			expect(s.fields.map(f => f.name)).toEqual(["id", "isActive"]);
-			expect(s.fields[0]!.type).toEqual({ kind: "optional", inner: { kind: "primitive", name: "i64" } });
+			expect(s.fields.map((f) => f.name)).toEqual(["id", "isActive"]);
+			expect(s.fields[0]!.type).toEqual({
+				kind: "optional",
+				inner: { kind: "primitive", name: "i64" },
+			});
 			expect(s.fields[1]!.type).toEqual({ kind: "primitive", name: "bool" });
 		}
 	});
@@ -50,9 +53,18 @@ describe("kotlin importer", () => {
         `);
 		const s = r.items[0]!;
 		if (s.kind === "struct") {
-			expect(s.fields[0]!.type).toEqual({ kind: "array", item: { kind: "string" } });
-			expect(s.fields[1]!.type).toEqual({ kind: "array", item: { kind: "primitive", name: "i8" } });
-			expect(s.fields[2]!.type).toEqual({ kind: "array", item: { kind: "primitive", name: "i32" } });
+			expect(s.fields[0]!.type).toEqual({
+				kind: "array",
+				item: { kind: "string" },
+			});
+			expect(s.fields[1]!.type).toEqual({
+				kind: "array",
+				item: { kind: "primitive", name: "i8" },
+			});
+			expect(s.fields[2]!.type).toEqual({
+				kind: "array",
+				item: { kind: "primitive", name: "i32" },
+			});
 		}
 	});
 
@@ -61,7 +73,7 @@ describe("kotlin importer", () => {
 		const e = r.items[0]!;
 		expect(e.kind).toBe("enum");
 		if (e.kind === "enum") {
-			expect(e.variants.map(v => v.name)).toEqual(["Idle", "Active"]);
+			expect(e.variants.map((v) => v.name)).toEqual(["Idle", "Active"]);
 		}
 	});
 
@@ -76,7 +88,7 @@ describe("kotlin importer", () => {
 		expect(r.items).toHaveLength(1);
 		const s = r.items[0]!;
 		if (s.kind === "struct") {
-			expect(s.fields.map(f => f.name)).toEqual(["publicValue"]);
+			expect(s.fields.map((f) => f.name)).toEqual(["publicValue"]);
 		}
 	});
 });

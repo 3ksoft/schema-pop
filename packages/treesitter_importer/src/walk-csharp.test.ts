@@ -19,7 +19,7 @@ describe("c# importer", () => {
 		const s = r.items[0]!;
 		expect(s.kind).toBe("struct");
 		if (s.kind === "struct") {
-			expect(s.fields.map(f => f.name)).toEqual(["Uptime", "Status"]);
+			expect(s.fields.map((f) => f.name)).toEqual(["Uptime", "Status"]);
 			expect(s.fields[0]!.type).toEqual({ kind: "primitive", name: "i32" });
 			expect(s.fields[1]!.type).toEqual({ kind: "string" });
 		}
@@ -30,7 +30,7 @@ describe("c# importer", () => {
 		const s = r.items[0]!;
 		expect(s.kind).toBe("struct");
 		if (s.kind === "struct") {
-			expect(s.fields.map(f => f.name)).toEqual(["Uptime", "Status"]);
+			expect(s.fields.map((f) => f.name)).toEqual(["Uptime", "Status"]);
 		}
 	});
 
@@ -39,7 +39,7 @@ describe("c# importer", () => {
 		const e = r.items[0]!;
 		expect(e.kind).toBe("enum");
 		if (e.kind === "enum") {
-			expect(e.variants.map(v => v.name)).toEqual(["Idle", "Active"]);
+			expect(e.variants.map((v) => v.name)).toEqual(["Idle", "Active"]);
 		}
 	});
 
@@ -52,8 +52,14 @@ describe("c# importer", () => {
         `);
 		const s = r.items[0]!;
 		if (s.kind === "struct") {
-			expect(s.fields[0]!.type).toEqual({ kind: "array", item: { kind: "primitive", name: "i32" } });
-			expect(s.fields[1]!.type).toEqual({ kind: "array", item: { kind: "string" } });
+			expect(s.fields[0]!.type).toEqual({
+				kind: "array",
+				item: { kind: "primitive", name: "i32" },
+			});
+			expect(s.fields[1]!.type).toEqual({
+				kind: "array",
+				item: { kind: "string" },
+			});
 		}
 	});
 });

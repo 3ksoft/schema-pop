@@ -1,9 +1,4 @@
-import type {
-	IRField,
-	IRItem,
-	SchemaPopIR,
-	IRType,
-} from "schema-pop";
+import type { IRField, IRItem, SchemaPopIR, IRType } from "schema-pop";
 
 /**
  * @deprecated Legacy IR → arktype scope source emitter. Kept for the
@@ -93,8 +88,7 @@ export function emitArktypeScope(
 	// binary stays the default for cheaper TS inference.
 	const needsSchemaPopBundle = anyTypeMatches(
 		typeItems,
-		(t) =>
-			t.kind === "bit" || t.kind === "unknown" || t.kind === "unsupported",
+		(t) => t.kind === "bit" || t.kind === "unknown" || t.kind === "unsupported",
 	);
 	const fnsImport = fnItems.length
 		? `\nimport type { FunctionPlan } from "schema-pop";`
@@ -107,7 +101,10 @@ export function emitArktypeScope(
 		: "...binary.import(),";
 
 	const extraImports = extras
-		.map((e) => `\nimport { ${e.importName} } from ${JSON.stringify(e.importPath)};`)
+		.map(
+			(e) =>
+				`\nimport { ${e.importName} } from ${JSON.stringify(e.importPath)};`,
+		)
 		.join("");
 	const extraSpreads = extras
 		.map((e) => `\n\t...${e.importName}.import(),`)
@@ -164,9 +161,7 @@ function anyTypeMatches(
  * `Field` shapes (no string-form arktype expressions, since functions
  * bypass the arktype scope entirely).
  */
-function emitFunctions(
-	fns: Extract<IRItem, { kind: "function" }>[],
-): string {
+function emitFunctions(fns: Extract<IRItem, { kind: "function" }>[]): string {
 	const entries = fns.map((fn) => {
 		const argEntries = fn.args.map(
 			(a) =>
@@ -240,11 +235,19 @@ function escapeJsBlock(s: string): string {
 
 function primitiveSize(name: string): number {
 	const m: Record<string, number> = {
-		u8: 1, i8: 1, bool: 1,
-		u16: 2, i16: 2,
-		u32: 4, i32: 4, f32: 4,
-		u64: 8, i64: 8, f64: 8,
-		u128: 16, i128: 16,
+		u8: 1,
+		i8: 1,
+		bool: 1,
+		u16: 2,
+		i16: 2,
+		u32: 4,
+		i32: 4,
+		f32: 4,
+		u64: 8,
+		i64: 8,
+		f64: 8,
+		u128: 16,
+		i128: 16,
 	};
 	return m[name] ?? 0;
 }
@@ -284,9 +287,7 @@ function emitItem(item: IRItem): string {
 			const tagLit = String(i);
 			if (v.kind === "unit") {
 				const variantTypeName = `${item.name}_${v.name}`;
-				sub.push(
-					`${quoteTypeName(variantTypeName)}: { tag: '${tagLit}' }`,
-				);
+				sub.push(`${quoteTypeName(variantTypeName)}: { tag: '${tagLit}' }`);
 				variantTypes.push(variantTypeName);
 			} else if (v.kind === "tuple") {
 				// One-arg tuple variant: `Variant(T)` → struct { tag, value }.

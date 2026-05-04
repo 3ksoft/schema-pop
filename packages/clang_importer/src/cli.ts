@@ -2,11 +2,7 @@
 import { parseArgs } from "node:util";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import {
-	type ClangLang,
-	fileToArktypeScope,
-	langFromPath,
-} from "./index";
+import { type ClangLang, fileToArktypeScope, langFromPath } from "./index";
 
 const HELP = `schema-pop-clang-import — convert a C / C++ header to an arktype scope via the system clang.
 
@@ -74,8 +70,7 @@ async function main() {
 
 	const absInput = path.resolve(input);
 	const absOutput = path.resolve(output);
-	const lang =
-		(values.lang as ClangLang | undefined) ?? langFromPath(absInput);
+	const lang = (values.lang as ClangLang | undefined) ?? langFromPath(absInput);
 	if (!lang) {
 		console.error(
 			`error: cannot infer language from "${input}"; pass --lang c|c++`,

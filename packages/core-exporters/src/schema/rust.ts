@@ -96,9 +96,16 @@ function mapOriginalTypeToRust(
 	if (ptr) {
 		const innerRaw = ptr[1]!.trim();
 		const isConst = /\bconst\b/.test(innerRaw);
-		const inner = innerRaw.replace(/\bconst\b/g, "").replace(/\s+/g, " ").trim();
+		const inner = innerRaw
+			.replace(/\bconst\b/g, "")
+			.replace(/\s+/g, " ")
+			.trim();
 		const mut = isConst ? "*const" : "*mut";
-		if (inner === "char" || inner === "signed char" || inner === "unsigned char") {
+		if (
+			inner === "char" ||
+			inner === "signed char" ||
+			inner === "unsigned char"
+		) {
 			return `${mut} core::ffi::c_char`;
 		}
 		if (inner === "void" || inner === "") {
@@ -760,8 +767,7 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 				});
 			let s = `// schema-pop: write \`impl From<${fromNs}::${typeName(fromType.name)}> for ${toNs}::${typeName(toType.name)}\` yourself\n`;
 			for (const r of reasons) s += `//   reason: ${r}\n`;
-			if (reasons.length === 0)
-				s += `//   reason: see build summary\n`;
+			if (reasons.length === 0) s += `//   reason: see build summary\n`;
 			return s;
 		}
 		if (toType.kind === "struct") {

@@ -99,15 +99,16 @@ describe("create-schema-pop scaffold matrix", () => {
 			combo.name,
 			async () => {
 				const projectDir = join(TMP_ROOT, combo.name);
-				const scaffold = await $`bun ${CREATE_BIN} --name ${combo.name} ${combo.args}`
-					.cwd(TMP_ROOT)
-					.env({
-						...process.env,
-						LOCAL_TEST: "1",
-						LOCAL_TEST_PACKAGES_DIR: join(REPO_ROOT, "packages"),
-					})
-					.nothrow()
-					.quiet();
+				const scaffold =
+					await $`bun ${CREATE_BIN} --name ${combo.name} ${combo.args}`
+						.cwd(TMP_ROOT)
+						.env({
+							...process.env,
+							LOCAL_TEST: "1",
+							LOCAL_TEST_PACKAGES_DIR: join(REPO_ROOT, "packages"),
+						})
+						.nothrow()
+						.quiet();
 				if (scaffold.exitCode !== 0) {
 					console.error(`scaffold stderr: ${scaffold.stderr.toString()}`);
 				}
@@ -160,10 +161,7 @@ describe("create-schema-pop scaffold matrix", () => {
 					expect(src, `${name}: missing schemaPop wrap`).toMatch(
 						/schemaPop\(\s*\{/,
 					);
-					expect(
-						src,
-						`${name}: schemaPop not imported`,
-					).toMatch(
+					expect(src, `${name}: schemaPop not imported`).toMatch(
 						/import\s*\{[^}]*schemaPop[^}]*\}\s*from\s*["']schema-pop["']/,
 					);
 
@@ -178,10 +176,7 @@ describe("create-schema-pop scaffold matrix", () => {
 						if (fn !== "schemaPop") callees.add(fn);
 					}
 					for (const fn of callees) {
-						expect(
-							src,
-							`${name}: ${fn} called but not imported`,
-						).toMatch(
+						expect(src, `${name}: ${fn} called but not imported`).toMatch(
 							new RegExp(
 								`import\\s*\\{[^}]*\\b${fn}\\b[^}]*\\}\\s*from\\s*["']@schema-pop/`,
 							),

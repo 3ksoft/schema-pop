@@ -35,7 +35,7 @@ describe("function extraction — Rust", () => {
 		expect(fn.abi).toBeUndefined();
 	});
 
-	test("extern \"C\" function picks up abi", async () => {
+	test('extern "C" function picks up abi', async () => {
 		const r = await rustIR(`pub extern "C" fn cb(x: i32) {}`);
 		const fn = r.items.find((i) => i.kind === "function");
 		if (!fn || fn.kind !== "function") throw new Error();
@@ -151,7 +151,7 @@ describe("emit — functions block", () => {
             uint32_t battery_read(uint32_t id, Battery* out);
         `);
 		const out = emitArktypeScope(r);
-		expect(out).toContain('import type { FunctionPlan }');
+		expect(out).toContain("import type { FunctionPlan }");
 		expect(out).toContain("export const functions: FunctionPlan[]");
 		expect(out).toContain('name: "battery_read"');
 		expect(out).toContain('symbol: "battery_read"');

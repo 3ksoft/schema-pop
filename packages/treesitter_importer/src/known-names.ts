@@ -9,11 +9,27 @@ export const SCHEMA_POP_KNOWN_NAMES: ReadonlySet<string> = new Set([
 	"string",
 	"unknown",
 	// binary primitives
-	"u8", "u16", "u32", "u64", "u128",
-	"i8", "i16", "i32", "i64", "i128",
-	"f32", "f64", "bool",
+	"u8",
+	"u16",
+	"u32",
+	"u64",
+	"u128",
+	"i8",
+	"i16",
+	"i32",
+	"i64",
+	"i128",
+	"f32",
+	"f64",
+	"bool",
 	// bitwise primitives
-	"u1", "u2", "u3", "u4", "u5", "u6", "u7",
+	"u1",
+	"u2",
+	"u3",
+	"u4",
+	"u5",
+	"u6",
+	"u7",
 ]);
 
 /**

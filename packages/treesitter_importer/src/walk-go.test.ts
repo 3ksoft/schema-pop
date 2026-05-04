@@ -19,7 +19,7 @@ describe("go importer", () => {
 		const s = r.items[0]!;
 		expect(s.kind).toBe("struct");
 		if (s.kind === "struct") {
-			expect(s.fields.map(f => f.name)).toEqual(["Uptime", "Status"]);
+			expect(s.fields.map((f) => f.name)).toEqual(["Uptime", "Status"]);
 			expect(s.fields[0]!.type).toEqual({ kind: "primitive", name: "i64" });
 			expect(s.fields[1]!.type).toEqual({ kind: "string" });
 		}
@@ -47,16 +47,16 @@ describe("go importer", () => {
 		if (s.kind === "struct") {
 			expect(s.fields[0]!.type).toEqual({
 				kind: "array",
-				item: { kind: "primitive", name: "i64" }
+				item: { kind: "primitive", name: "i64" },
 			});
 			expect(s.fields[1]!.type).toEqual({
 				kind: "array",
 				item: { kind: "primitive", name: "u8" },
-				exactLength: 16
+				exactLength: 16,
 			});
 			expect(s.fields[2]!.type).toEqual({
 				kind: "optional",
-				inner: { kind: "ref", name: "Config" }
+				inner: { kind: "ref", name: "Config" },
 			});
 		}
 	});

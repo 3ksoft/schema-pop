@@ -28,7 +28,10 @@ describe("jsonSchema exporter", () => {
 		expect(out.$defs.Battery.type).toBe("object");
 		// arktype canonicalises field order alphabetically — match
 		// membership, not source order.
-		expect(out.$defs.Battery.required.sort()).toEqual(["current", "voltage_mv"]);
+		expect(out.$defs.Battery.required.sort()).toEqual([
+			"current",
+			"voltage_mv",
+		]);
 		expect(out.$defs.Battery.properties.voltage_mv.type).toBe("integer");
 		expect(out.$defs.Battery.properties.voltage_mv.minimum).toBe(0);
 		expect(out.$defs.Battery.properties.voltage_mv.maximum).toBe(4294967295);
@@ -73,10 +76,7 @@ describe("jsonSchema exporter", () => {
 	});
 
 	test("idBase emits $id; pretty:false produces single-line JSON", () => {
-		const plan = analyze(
-			scope({ ...binary.import(), Foo: { x: "u8" } }),
-			"v1",
-		);
+		const plan = analyze(scope({ ...binary.import(), Foo: { x: "u8" } }), "v1");
 		const out = jsonSchema({
 			dest: "x.json",
 			idBase: "https://example.com/schemas",
