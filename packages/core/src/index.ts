@@ -27,6 +27,13 @@ export {
 } from "./layout/compute-plan";
 export * from "./migrations";
 export * from "./codec/pop";
+export {
+	fromArktype,
+	getArkType,
+	type FormField,
+	type FormSchema,
+	type FromArktypeOpts,
+} from "./codec/field";
 export * from "./utils/naming";
 export { renderComment } from "./utils/comments";
 export type { BindResult, BindingSpec } from "./bind";

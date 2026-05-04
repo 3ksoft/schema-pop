@@ -23,7 +23,7 @@
     },
     "packages/clang_importer": {
       "name": "@schema-pop/clang-importer",
-      "version": "0.1.31",
+      "version": "0.1.39",
       "bin": {
         "schema-pop-clang-import": "./src/cli.ts",
       },
@@ -34,7 +34,7 @@
     },
     "packages/core": {
       "name": "schema-pop",
-      "version": "0.1.31",
+      "version": "0.1.39",
       "bin": {
         "schema-pop": "./dist/cli.js",
       },
@@ -51,14 +51,16 @@
     },
     "packages/core-exporters": {
       "name": "@schema-pop/core-exporters",
-      "version": "0.1.31",
+      "version": "0.1.39",
       "dependencies": {
-        "schema-pop": "0.1.29",
+        "@schema-pop/treesitter-importer": "0.1.39",
+        "schema-pop": "0.1.39",
+        "web-tree-sitter": "^0.25.0",
       },
     },
     "packages/create": {
       "name": "create-schema-pop",
-      "version": "0.1.31",
+      "version": "0.1.39",
       "bin": {
         "create-schema-pop": "bin.ts",
       },
@@ -75,14 +77,14 @@
     },
     "packages/extra-exporters": {
       "name": "@schema-pop/extra-exporters",
-      "version": "0.1.31",
+      "version": "0.1.39",
       "dependencies": {
         "schema-pop": "0.1.29",
       },
     },
     "packages/import-cli": {
       "name": "schema-pop-import",
-      "version": "0.1.31",
+      "version": "0.1.39",
       "bin": {
         "schema-pop-import": "bin.ts",
       },
@@ -92,7 +94,7 @@
     },
     "packages/importer": {
       "name": "@schema-pop/importer",
-      "version": "0.1.31",
+      "version": "0.1.39",
       "bin": {
         "schema-pop-import": "./src/cli.ts",
       },
@@ -105,12 +107,12 @@
     },
     "packages/treesitter_importer": {
       "name": "@schema-pop/treesitter-importer",
-      "version": "0.1.31",
+      "version": "0.1.39",
       "bin": {
         "schema-pop-import-rust": "./src/cli.ts",
       },
       "dependencies": {
-        "schema-pop": "0.1.31",
+        "schema-pop": "0.1.39",
         "web-tree-sitter": "^0.25.0",
       },
     },

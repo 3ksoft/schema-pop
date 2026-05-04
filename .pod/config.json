@@ -21,6 +21,11 @@
       "query": "+ packages/extra-exporters/**/*.{ts,hpp,cpp,rs,toml,json,md}"
     },
     {
+      "name": "treesitter_importer",
+      "label": "treesitter_importer",
+      "query": "+ packages/treesitter_importer/**/*.{ts,hpp,cpp,rs,toml,json,md}"
+    },
+    {
       "name": "web",
       "label": "web",
       "query": "+ web/**/*.{ts,hpp,cpp,rs,toml,json,md,html}"
@@ -59,5 +64,5 @@
   },
   "forceRoot": false,
   "syncVersion": false,
-  "version": "0.0.150"
+  "version": "0.0.155"
 }
