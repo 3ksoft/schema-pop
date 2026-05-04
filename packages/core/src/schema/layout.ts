@@ -1,4 +1,4 @@
-import { type, scope } from "arktype";
+import { scope, type } from "arktype";
 import { binary } from "./binary";
 
 /**
@@ -291,9 +291,12 @@ export type FunctionPlan = {
 	args: FunctionArg[];
 	/** Calling convention. Common values: `C`, `cdecl`, `stdcall`, `fastcall`, `system`. */
 	abi?: string;
+	async?: boolean;
+	throws?: boolean;
 	description?: string;
 	obsolete?: boolean;
 	obsoleteReason?: string;
+	renamedFrom?: string;
 };
 
 export type LayoutPlan = Omit<typeof LayoutPlan.infer, "types"> & {

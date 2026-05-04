@@ -5,7 +5,27 @@
 // Mirror of schema-pop/packages/core/src/schema/{binary,bitwise,core}.ts.
 // Pure string building — no schema-pop runtime dep.
 
-import type { Field, FunctionArg, FunctionPlan } from "../../schema/src/schema";
+import type { FormField as Field } from "schema-pop";
+
+type FunctionArg = {
+	name?: string;
+	type: Field;
+	variadic?: boolean;
+};
+
+type FunctionPlan = {
+	name: string;
+	symbol?: string;
+	returnType: Field;
+	args: FunctionArg[];
+	abi?: string;
+	async?: boolean;
+	throws?: boolean;
+	description?: string;
+	obsolete?: boolean;
+	obsoleteReason?: string;
+	renamedFrom?: string;
+};
 
 const BIN_PRIMS = [
 	"u8", "i8", "u16", "i16", "u32", "i32",
