@@ -1,17 +1,23 @@
 import type {
-	LayoutPlan,
 	BaseConfig,
 	ExporterPlugin,
-	TypePlan,
-	FieldPlan,
 	Field,
+	FieldPlan,
+	LayoutPlan,
+	TypePlan,
 } from "schema-pop";
-import { svg as defaultSvg, svgInternal } from "./svg";
 import { htmlAppScript } from "./html-app";
+import { svg as defaultSvg, svgInternal } from "./svg";
 
 export interface HtmlConfig extends BaseConfig {
 	title?: string;
 	viz?: ExporterPlugin<any>;
+	/**
+	 * When `false`, hides binary-layout columns (byte offset, size, range) and
+	 * the memory-layout SVG. Use for schemas without binary annotations where
+	 * those values are meaningless.  Default: `true`.
+	 */
+	layout?: boolean;
 }
 
 function fieldTypeLabel(f: Field): string {
@@ -92,16 +98,19 @@ function fieldLabel(f: Field, linkCtx: LinkCtx): string {
 }
 
 function renderFunctionSignature(
-	fn: { name: string; args: { name?: string; type: Field }[]; returnType: Field },
+	fn: {
+		name: string;
+		args: { name?: string; type: Field }[];
+		returnType: Field;
+	},
 	linkCtx: LinkCtx,
 ): string {
 	const argParts = fn.args.map((a) => {
 		const t = fieldLabel(a.type, linkCtx);
 		return a.name ? `${a.name}: ${t}` : t;
 	});
-	const ret = fn.returnType.kind === "unit"
-		? "void"
-		: fieldLabel(fn.returnType, linkCtx);
+	const ret =
+		fn.returnType.kind === "unit" ? "void" : fieldLabel(fn.returnType, linkCtx);
 	return `${fn.name}(${argParts.join(", ")}) → ${ret}`;
 }
 
@@ -109,6 +118,7 @@ function typeToDocs(
 	t: TypePlan,
 	svgBars: string | undefined,
 	linkCtx?: { knownNames: Set<string>; vid: string },
+	withLayout = true,
 ): any {
 	const labelOf = (f: Field) => fieldLabel(f, linkCtx);
 	const tAny = t as any;
@@ -129,15 +139,17 @@ function typeToDocs(
 			fields: t.fields.map((f) => {
 				const fAny = f as any;
 				return {
-					offset: f.offset,
+					...(withLayout && {
+						offset: f.offset,
+						size: f.size,
+						pad: f.paddingAfter || 0,
+						bitSize: f.bitSize,
+						bitOffset: f.bitOffset,
+						range: rangeFor(f),
+					}),
 					name: f.name,
 					type: labelOf(f.type),
 					typeKind: f.type.kind,
-					size: f.size,
-					pad: f.paddingAfter || 0,
-					bitSize: f.bitSize,
-					bitOffset: f.bitOffset,
-					range: rangeFor(f),
 					description: f.description,
 					obsolete: fAny.obsolete === true ? true : undefined,
 					obsoleteReason: fAny.obsoleteReason,
@@ -221,8 +233,7 @@ function diffStatus(
 		const removed = fromNames.filter(
 			(n) => !toNames.includes(n) && !usedFromNames.has(n),
 		);
-		if (fieldRenames.length)
-			notes.push(`renamed: ${fieldRenames.join(", ")}`);
+		if (fieldRenames.length) notes.push(`renamed: ${fieldRenames.join(", ")}`);
 		if (added.length) notes.push(`+${added.length} field`);
 		if (removed.length) notes.push(`-${removed.length} field`);
 	}
@@ -326,7 +337,10 @@ export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
 `;
 		},
 		generate: (plan: LayoutPlan) => {
-			const barsRecords = vizBars.generate(plan) as Record<string, string>;
+			const withLayout = cfg.layout !== false;
+			const barsRecords = withLayout
+				? (vizBars.generate(plan) as Record<string, string>)
+				: {};
 			const knownNames = new Set(plan.types.map((t) => t.name));
 			const vid = plan.version.split(".").join("_");
 			const linkCtx = { knownNames, vid };
@@ -334,8 +348,14 @@ export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
 				id: plan.version,
 				label: plan.version,
 				endian: (plan as any).endian,
+				layout: withLayout,
 				types: (plan.types as TypePlan[]).map((t) =>
-					typeToDocs(t, barsRecords[`${t.name}.svg`], linkCtx),
+					typeToDocs(
+						t,
+						withLayout ? barsRecords[`${t.name}.svg`] : undefined,
+						linkCtx,
+						withLayout,
+					),
 				),
 				functions: (plan.functions ?? []).map((fn) => ({
 					name: fn.name,
@@ -356,8 +376,7 @@ export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
 		},
 		generateMigration: (fromPlan: LayoutPlan, toPlan: LayoutPlan) => {
 			const usedFromNames = new Set<string>();
-			const changes: Array<{ type: string; status: string; note: string }> =
-				[];
+			const changes: Array<{ type: string; status: string; note: string }> = [];
 
 			// Pass 1: type-level Renamed (to.migrationMeta.renamedFrom).
 			for (const to of toPlan.types) {

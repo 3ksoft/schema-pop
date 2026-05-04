@@ -87,7 +87,7 @@ function TypeCard({ type, version, onAnchor, onJump }) {
           </span>
         )}
         <div className="flex-1" />
-        <span className="text-[10px] opacity-50 uppercase tracking-wider">{totalSize}b · align {type.align}</span>
+        {version.layout && <span className="text-[10px] opacity-50 uppercase tracking-wider">{totalSize}b · align {type.align}</span>}
         <button onClick={() => onAnchor(version.id + "/" + type.name)} className="text-[11px] opacity-40 hover:opacity-100 hover:text-accent" title="Copy permalink">#</button>
         <CopyBtn text={version.id + "/" + type.name} label="link" />
       </header>
@@ -100,7 +100,7 @@ function TypeCard({ type, version, onAnchor, onJump }) {
           <p className="italic text-ink/70 dark:text-paper/60 border-l-2 border-accent/60 pl-3 text-[12px] leading-relaxed">{type.docstring}</p>
         )}
 
-        {(type.kind === "struct" || type.kind === "union") && (
+        {version.layout && (type.kind === "struct" || type.kind === "union") && (
           <Section label="memory layout">
             <SvgEmbed markup={svgMarkup} />
           </Section>
@@ -111,17 +111,17 @@ function TypeCard({ type, version, onAnchor, onJump }) {
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="text-[10px] uppercase tracking-wider opacity-50">
-                  <th className="text-left font-normal py-1.5 w-10">+</th>
+                  {version.layout && <th className="text-left font-normal py-1.5 w-10">+</th>}
                   <th className="text-left font-normal py-1.5">field</th>
                   <th className="text-left font-normal py-1.5">type</th>
-                  <th className="text-left font-normal py-1.5">size</th>
-                  <th className="text-left font-normal py-1.5">range</th>
+                  {version.layout && <th className="text-left font-normal py-1.5">size</th>}
+                  {version.layout && <th className="text-left font-normal py-1.5">range</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink/5 dark:divide-paper/5">
                 {type.fields.map((f, i) => (
                   <tr key={i} className={f.obsolete ? "opacity-60" : ""}>
-                    <td className="py-2 opacity-50 font-mono">+{f.offset}</td>
+                    {version.layout && <td className="py-2 opacity-50 font-mono">+{f.offset}</td>}
                     <td className={"py-2 font-medium " + (f.obsolete ? "line-through" : "")}>
                       {f.name}
                       {f.obsolete && (
@@ -131,8 +131,8 @@ function TypeCard({ type, version, onAnchor, onJump }) {
                       )}
                     </td>
                     <td className="py-2 text-accent font-mono" dangerouslySetInnerHTML={{ __html: f.type }} />
-                    <td className="py-2 font-mono">{f.size}{f.pad ? " (+" + f.pad + "p)" : ""}</td>
-                    <td className="py-2 opacity-60">{f.obsolete && f.obsoleteReason ? f.obsoleteReason : (f.range || "—")}</td>
+                    {version.layout && <td className="py-2 font-mono">{f.size}{f.pad ? " (+" + f.pad + "p)" : ""}</td>}
+                    {version.layout && <td className="py-2 opacity-60">{f.obsolete && f.obsoleteReason ? f.obsoleteReason : (f.range || "—")}</td>}
                   </tr>
                 ))}
               </tbody>

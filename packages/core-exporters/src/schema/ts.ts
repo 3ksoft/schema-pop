@@ -39,7 +39,28 @@ export interface TsConfig extends Omit<BaseConfig, "commentStyle"> {
 	 * Mirrors the rust / c exporters' option of the same name.
 	 */
 	versionNamespace?: false;
+	/**
+	 * Emit an ArkType `scope({...})` alongside the TypeScript interfaces.
+	 * Requires `arktype` and `schema-pop` to be installed in the consumer
+	 * project. Binary primitives (`u8`..`u128`, `i8`..`i128`, `f32`/`f64`,
+	 * `bool`) are provided via the `schemaPop` spread.
+	 *
+	 * The scope variable is named `$` by default; override with
+	 * `arktypeScopeVar`.
+	 */
+	withArktype?: boolean;
+	arktypeScopeVar?: string;
 }
+
+// ArkType expression names — binary primitives match the schemaPop spread.
+// bool stays "bool" (schemaPop binary boolean), plain boolean → "boolean".
+const ARKTYPE_BIN: Record<string, string> = {
+	u8: "u8", u16: "u16", u32: "u32", u64: "u64", u128: "u128",
+	i8: "i8", i16: "i16", i32: "i32", i64: "i64", i128: "i128",
+	f32: "f32", f64: "f64",
+	bool: "bool", boolean: "boolean",
+	number: "number", bigint: "bigint", string: "string",
+};
 
 const PRIMITIVE_TS: Record<string, string> = {
 	u8: "number",
@@ -116,6 +137,82 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 			default:
 				return "unknown";
 		}
+	}
+
+	function fieldToArktypeExpr(field: Field): string {
+		if (field.kind === "reference") {
+			if (field.indirection === "pointer" || field.indirection === "reference") {
+				const inner = ARKTYPE_BIN[field.name] ?? typeName(field.name);
+				return `${inner} | null`;
+			}
+		}
+		const scalar = mapScalarField(field, ARKTYPE_BIN, typeName);
+		if (scalar !== undefined) return scalar;
+		switch (field.kind) {
+			case "optional":
+				return fieldToArktypeExpr((field as any).inner);
+			case "string":
+				return "string";
+			case "array": {
+				const item = fieldToArktypeExpr((field as any).item);
+				return /[ |&(<]/.test(item) ? `(${item})[]` : `${item}[]`;
+			}
+			case "map": {
+				const keyT = (field as any).keyKind === "number" ? "number" : "string";
+				const valT = fieldToArktypeExpr((field as any).value);
+				return `Record<${keyT}, ${valT}>`;
+			}
+			case "any":
+				return "unknown";
+			case "inlineStruct": {
+				const parts = ((field as any).fields as Array<{ name: string; type: Field }>)
+					.filter((f) => f.type.kind !== "unit")
+					.map((f) => `${fieldName(f.name)}: ${fieldToArktypeExpr(f.type)}`);
+				return `{ ${parts.join("; ")} }`;
+			}
+			default:
+				return "unknown";
+		}
+	}
+
+	function renderArktypeScope(plan: LayoutPlan): string {
+		const scopeVar = cfg.arktypeScopeVar ?? "$";
+		let s = `export const ${scopeVar} = scope({\n`;
+		s += `${indent()}...schemaPop,\n`;
+		for (const t of plan.types) {
+			const name = typeName(t.name);
+			if (t.kind === "struct") {
+				s += `${indent()}${name}: {\n`;
+				for (const f of t.fields) {
+					if (f.type.kind === "unit") continue;
+					const optional = f.type.kind === "optional";
+					const inner = optional ? (f.type as any).inner : f.type;
+					const expr = fieldToArktypeExpr(inner).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+					const key = optional ? `"${fieldName(f.name)}?"` : fieldName(f.name);
+					s += `${indent()}${indent()}${key}: "${expr}",\n`;
+				}
+				s += `${indent()}},\n`;
+			} else if (t.kind === "enum") {
+				const variants = t.variants.map((v) => `'${v.name}'`).join(" | ");
+				s += `${indent()}${name}: "${variants}",\n`;
+			} else if (t.kind === "union") {
+				const branches = t.variants.map((v) => {
+					if (v.type.kind === "unit") return `{ kind: '${v.name}' }`;
+					const inner = fieldToArktypeExpr(v.type);
+					if (v.type.kind === "reference" || v.type.kind === "inlineStruct")
+						return `{ kind: '${v.name}' } & ${inner}`;
+					return `{ kind: '${v.name}'; value: ${inner} }`;
+				});
+				const expr = branches.join(" | ").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+				s += `${indent()}${name}: "${expr}",\n`;
+			} else if (t.kind === "alias") {
+				const expr = fieldToArktypeExpr(t.type).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+				s += `${indent()}${name}: "${expr}",\n`;
+			}
+		}
+		s += `});\n`;
+		s += `export const types = ${scopeVar}.export();\n`;
+		return s;
 	}
 
 	function jsdoc(
@@ -452,7 +549,12 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 		config: cfg,
 		getFileHeader: () => {
 			let h = "";
-			if (cfg.withCodec) h += `import { PopCodec } from "schema-pop";\n`;
+			const schemaPopImports: string[] = [];
+			if (cfg.withCodec) schemaPopImports.push("PopCodec");
+			if (cfg.withArktype) schemaPopImports.push("schemaPop");
+			if (schemaPopImports.length > 0)
+				h += `import { ${schemaPopImports.join(", ")} } from "schema-pop";\n`;
+			if (cfg.withArktype) h += `import { scope } from "arktype";\n`;
 			if (moduleConfigured) {
 				h += `import * as __popUserMigrations from ${JSON.stringify(cfg.migrationsModule!)};\n`;
 			}
@@ -465,6 +567,7 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 				code += `export const LAYOUT_PLAN = ${JSON.stringify(plan, null, "\t")} as const;\n\n`;
 			}
 			if (cfg.withCodec) code += renderCodec(plan);
+			if (cfg.withArktype) code += "\n" + renderArktypeScope(plan);
 			return code;
 		},
 		wrapVersion: (version, code) => {
