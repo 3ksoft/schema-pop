@@ -86,6 +86,7 @@ const EMIT_PACKAGE_BY_TYPE: Record<string, "core" | "extra"> = {
 	go: "core",
 	random: "core",
 	md: "core",
+	"ts-codec": "core",
 	html: "extra",
 	wgsl: "extra",
 	glsl: "extra",
@@ -111,32 +112,51 @@ async function loadEmitExporter(
 ): Promise<{ name: string; instance: any } | null> {
 	const pkg = EMIT_PACKAGE_BY_TYPE[type];
 	if (!pkg) return null;
+
 	const factoryName = EMIT_FACTORY_BY_TYPE[type] ?? type;
 	const moduleName =
 		pkg === "core"
 			? "@schema-pop/core-exporters"
 			: "@schema-pop/extra-exporters";
-	let mod: Record<string, any>;
-	try {
-		// Resolve from the user's cwd, not from cli.ts's location.
-		// Without the explicit resolveSync the dynamic import would
-		// look in `packages/core/node_modules/` which doesn't carry
-		// the exporter packages (no circular dep).
-		const Bun = (
-			globalThis as {
-				Bun?: { resolveSync?: (s: string, from: string) => string };
+
+	let mod: any;
+
+	// List of locations to search (order matters: local first, then global)
+	const resolvePaths = [
+		process.cwd(), // 1. Local project directory (CWD)
+		require("os").homedir(), // 2. User's home directory (common for global Bun/NPM packages)
+	];
+
+	let resolvedPath: string | null = null;
+	const Bun = (globalThis as any).Bun;
+
+	// Try to resolve the path in the defined locations
+	for (const path of resolvePaths) {
+		try {
+			if (Bun?.resolveSync) {
+				resolvedPath = Bun.resolveSync(moduleName, path);
+				break; // Found it, stop searching
 			}
-		).Bun;
-		const resolved = Bun?.resolveSync
-			? Bun.resolveSync(moduleName, process.cwd())
-			: moduleName;
-		mod = (await import(resolved)) as Record<string, any>;
+		} catch (e) {
+			// Not found in this location, move to the next one
+		}
+	}
+
+	// If resolveSync failed everywhere, fallback to the raw module name.
+	// This is the last chance for the runtime's default resolution.
+	const finalImportPath = resolvedPath ?? moduleName;
+
+	try {
+		mod = await import(finalImportPath);
 	} catch (e) {
 		console.error(
-			`schema-pop emit: failed to load ${moduleName}.\n  ${(e as Error).message}\n  hint: bun add -d ${moduleName}`,
+			`schema-pop emit: failed to load ${moduleName} (tried local and global).\n` +
+				`  Error: ${(e as Error).message}\n` +
+				`  hint: bun add -g ${moduleName} OR bun add -d ${moduleName}`,
 		);
 		process.exit(2);
 	}
+
 	const factory = mod[factoryName];
 	if (typeof factory !== "function") {
 		console.error(
@@ -144,6 +164,7 @@ async function loadEmitExporter(
 		);
 		process.exit(2);
 	}
+
 	return { name: type, instance: factory({}) };
 }
 
