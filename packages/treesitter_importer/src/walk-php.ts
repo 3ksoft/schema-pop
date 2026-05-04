@@ -126,7 +126,7 @@ function handleClass(
 		if (c.type === "property_declaration") {
 			const isPublic = c.namedChildren.some(
 				(m) =>
-					(m.type === "visibility_modifier" || m.type === "readonly_modifier") &&
+					m && (m.type === "visibility_modifier" || m.type === "readonly_modifier") &&
 					m.text.includes("public"),
 			);
 			if (!isPublic) {
@@ -140,8 +140,13 @@ function handleClass(
 				: ({ kind: "unknown", raw: "mixed" } as IRType);
 
 			for (const elem of c.namedChildren) {
-				if (elem.type === "property_element") {
-					const propName = elem.childForFieldName("name")?.text?.replace(/^\$/, "");
+				if (elem && elem.type === "property_element") {
+					// property_element → variable_name → name (text without $)
+					const varName = elem.namedChildren[0];
+					const propName =
+						elem.childForFieldName("name")?.text?.replace(/^\$/, "") ??
+						varName?.namedChildren[0]?.text ??
+						varName?.text?.replace(/^\$/, "");
 					if (propName) {
 						fields.push({
 							name: propName,
@@ -181,7 +186,9 @@ function handleEnum(
 
 	const variants: IREnumVariant[] = [];
 	let variantDoc: string[] = [];
+
 	for (const c of body.namedChildren) {
+		if (!c) continue;
 		if (c.type === "comment") {
 			if (c.text.startsWith("/**")) {
 				const m = c.text.match(/^\/\*\*([\s\S]*?)\*\/$/);

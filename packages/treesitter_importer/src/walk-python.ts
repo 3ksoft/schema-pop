@@ -126,6 +126,7 @@ function handleClass(node: TSNode, description: string | undefined): IRItem | nu
 	} else {
 		const fields: IRField[] = [];
 		let fieldDoc: string[] = [];
+		let classDescription = description;
 
 		for (const c of body.namedChildren) {
 			if (!c) continue;
@@ -133,7 +134,16 @@ function handleClass(node: TSNode, description: string | undefined): IRItem | nu
 				const stringNode = c.namedChildren[0];
 				if (c.namedChildren.length === 1 && stringNode?.type === "string") {
 					const text = stringNode.text.replace(/^["']{3}|["']{3}$/g, "").trim();
-					if (text) fieldDoc.push(text);
+					if (!text) continue;
+					// First docstring before any field → class description
+					if (fields.length === 0 && fieldDoc.length === 0 && !classDescription) {
+						classDescription = text;
+					} else if (fields.length > 0 && fieldDoc.length === 0 && !fields[fields.length - 1]!.description) {
+						// Trailing docstring after the last field → attach to that field
+						fields[fields.length - 1]!.description = text;
+					} else {
+						fieldDoc.push(text);
+					}
 					continue;
 				}
 
@@ -142,14 +152,12 @@ function handleClass(node: TSNode, description: string | undefined): IRItem | nu
 
 				const assign = c.namedChildren.find((n) => n?.type === "assignment");
 				if (assign) {
-					nameNode = assign.childForFieldName("left") || assign.namedChildren[0] || null;
-					typeNode = assign.childForFieldName("type") || assign.namedChildren.find((n) => n?.type === "type") || null;
+					nameNode = assign.childForFieldName("left") ?? assign.namedChildren[0] ?? null;
+					typeNode = assign.childForFieldName("type") ?? assign.namedChildren.find((n) => n?.type === "type") ?? null;
 				} else {
 					// Plain PEP 526 variable annotation without assignment
-					typeNode = c.namedChildren.find((n) => n?.type === "type") || null;
-					if (typeNode) {
-						nameNode = c.namedChildren[0] || null;
-					}
+					typeNode = c.namedChildren.find((n) => n?.type === "type") ?? null;
+					if (typeNode) nameNode = c.namedChildren[0] ?? null;
 				}
 
 				if (nameNode && typeNode) {
@@ -170,7 +178,7 @@ function handleClass(node: TSNode, description: string | undefined): IRItem | nu
 			kind: "struct",
 			name,
 			fields,
-			description,
+			description: classDescription,
 			pub: true,
 		};
 	}
@@ -195,14 +203,28 @@ function parsePythonType(node: TSNode): IRType {
 		return { kind: "ref", name: text };
 	}
 
+	// tree-sitter-python: list[int], Optional[str] → generic_type node
+	if (node.type === "generic_type") {
+		const nameNode = node.namedChildren[0];
+		const paramNode = node.namedChildren[1]; // type_parameter
+		const name = nameNode?.text;
+		const firstInner = paramNode?.namedChildren[0];
+		if (firstInner && name) {
+			if (name === "list" || name === "List" || name === "Sequence") {
+				return { kind: "array", item: parsePythonType(firstInner) };
+			}
+			if (name === "Optional") {
+				return { kind: "optional", inner: parsePythonType(firstInner) };
+			}
+		}
+		return { kind: "unknown", raw: node.text };
+	}
+
 	if (node.type === "subscript") {
 		const value = node.childForFieldName("value");
 		const name = value?.text;
-
-		// Subscript values in python are commonly under an 'index' node wrapper
 		const subs = node.namedChildren.filter((n) => n && n !== value);
 		const firstSub = subs[0];
-
 		if (firstSub && name) {
 			if (name === "list" || name === "List" || name === "Sequence") {
 				return { kind: "array", item: parsePythonType(firstSub) };
@@ -215,16 +237,15 @@ function parsePythonType(node: TSNode): IRType {
 	}
 
 	if (node.type === "binary_operator") {
-		const left = node.childForFieldName("left");
-		const right = node.childForFieldName("right");
-		const op = node.childForFieldName("operator")?.text;
-		if (op === "|") {
-			if (right?.text === "None") {
-				return { kind: "optional", inner: parsePythonType(left!) };
-			}
-			if (left?.text === "None") {
-				return { kind: "optional", inner: parsePythonType(right!) };
-			}
+		// The | operator is a non-named token, so childForFieldName("operator") is null.
+		// Detect union-with-None by checking child types directly.
+		const left = node.childForFieldName("left") ?? node.namedChildren[0] ?? null;
+		const right = node.childForFieldName("right") ?? node.namedChildren[1] ?? null;
+		if (right?.type === "none" || right?.text === "None") {
+			return { kind: "optional", inner: parsePythonType(left!) };
+		}
+		if (left?.type === "none" || left?.text === "None") {
+			return { kind: "optional", inner: parsePythonType(right!) };
 		}
 	}
 

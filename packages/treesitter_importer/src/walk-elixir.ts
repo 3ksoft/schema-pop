@@ -24,7 +24,7 @@ export function walkElixirFile(tree: Tree, sourcePath: string, opts: WalkElixirO
 				const nameNode = n.namedChildren[1];
 				const name = nameNode?.text.replace(/^[^A-Z]+/, ""); // strip aliases if parsed weirdly
 				
-				const block = n.namedChildren.find(c => c.type === "do_block");
+				const block = n.namedChildren.find(c => c && c.type === "do_block");
 				if (name && block) {
 					// Look for @type t :: %{...} or %__MODULE__{...} inside the module
 					const typeCall = findTypeCall(block);
@@ -42,7 +42,7 @@ export function walkElixirFile(tree: Tree, sourcePath: string, opts: WalkElixirO
 				}
 			}
 			for (const child of n.namedChildren) {
-				walk(child);
+				if (child) walk(child);
 			}
 		}
 		walk(node);
@@ -55,8 +55,8 @@ export function walkElixirFile(tree: Tree, sourcePath: string, opts: WalkElixirO
 
 function findTypeCall(block: TSNode): TSNode | null {
 	for (const c of block.namedChildren) {
-		if (c.type === "unary_operator" && c.text.startsWith("@type")) return c;
-		const found = findTypeCall(c);
+		if (c && c.type === "unary_operator" && c.text.startsWith("@type")) return c;
+		const found = c ? findTypeCall(c) : null;
 		if (found) return found;
 	}
 	return null;
@@ -64,8 +64,8 @@ function findTypeCall(block: TSNode): TSNode | null {
 
 function findDefstruct(block: TSNode): TSNode | null {
 	for (const c of block.namedChildren) {
-		if (c.type === "call" && c.namedChildren[0]?.text === "defstruct") return c;
-		const found = findDefstruct(c);
+		if (c && c.type === "call" && c.namedChildren[0]?.text === "defstruct") return c;
+		const found = c ? findDefstruct(c) : null;
 		if (found) return found;
 	}
 	return null;
@@ -73,55 +73,51 @@ function findDefstruct(block: TSNode): TSNode | null {
 
 function handleTypeCall(node: TSNode, moduleName: string): IRItem | null {
 	const fields: IRField[] = [];
-	
-	// Very heuristic AST descent for Elixir's macro-heavy tree
-	const binaryOp = node.namedChildren.find(n => n.type === "binary_operator");
+
+	// Elixir AST: unary_operator(@type) → call → arguments → binary_operator → map
+	const callNode = node.namedChildren.find(n => n?.type === "call");
+	const argsNode = callNode?.namedChildren.find(n => n?.type === "arguments");
+	const binaryOp = argsNode?.namedChildren.find(n => n?.type === "binary_operator");
 	if (!binaryOp) return null;
 
-	const mapNode = binaryOp.namedChildren.find(n => n.type === "map");
+	const mapNode = binaryOp.namedChildren.find(n => n?.type === "map");
 	if (mapNode) {
-		for (const c of mapNode.namedChildren) {
-			if (c.type === "keyword_list") {
-				for (const pair of c.namedChildren) {
-					if (pair.type === "keyword_pair") {
-						const key = pair.namedChildren[0]?.text.replace(/:$/, "");
-						const typeStr = pair.namedChildren[1]?.text;
-						if (key && typeStr) {
-							fields.push({
-								name: key,
-								type: parseElixirType(typeStr),
-								pub: true
-							});
-						}
-					}
-				}
+		// map → map_content → keywords → pair(s)
+		const content = mapNode.namedChildren.find(n => n?.type === "map_content");
+		const keywords = content?.namedChildren.find(n => n?.type === "keywords") ?? content;
+		const pairNodes = keywords?.namedChildren ?? [];
+		for (const pair of pairNodes) {
+			if (!pair || pair.type !== "pair") continue;
+			const key = pair.namedChildren[0]?.text.replace(/:\s*$/, "").trim();
+			const typeStr = pair.namedChildren[1]?.text;
+			if (key && typeStr) {
+				fields.push({ name: key, type: parseElixirType(typeStr), pub: true });
 			}
 		}
 	}
 
-	if (fields.length > 0) {
-		return { kind: "struct", name: moduleName, fields, pub: true };
-	}
-	return null;
+	return fields.length > 0 ? { kind: "struct", name: moduleName, fields, pub: true } : null;
 }
 
 function handleDefstruct(node: TSNode, moduleName: string): IRItem | null {
 	const fields: IRField[] = [];
-	const args = node.namedChildren.find(n => n.type === "arguments");
+	const args = node.namedChildren.find(n => n?.type === "arguments");
 	if (!args) return null;
-	
-	const list = args.namedChildren.find(n => n.type === "list" || n.type === "keyword_list");
+
+	const list = args.namedChildren.find(n => n?.type === "list" || n?.type === "keyword_list");
 	if (list) {
-		for (const pair of list.namedChildren) {
-			if (pair.type === "keyword_pair") {
-				const key = pair.namedChildren[0]?.text.replace(/:$/, "");
-				if (key) {
-					fields.push({
-						name: key,
-						type: { kind: "unknown", raw: "any" }, // defstruct lacks types
-						pub: true
-					});
-				}
+		// Elixir list can be atoms [:x, :y] or keyword list [items: [], tag: nil]
+		// keyword list is stored as list → keywords → pair(s)
+		const keywords = list.namedChildren.find(n => n?.type === "keywords");
+		const children = keywords?.namedChildren ?? list.namedChildren;
+		for (const child of children) {
+			if (!child) continue;
+			if (child.type === "atom") {
+				const key = child.text.replace(/^:/, "");
+				if (key) fields.push({ name: key, type: { kind: "unknown", raw: "any" }, pub: true });
+			} else if (child.type === "pair" || child.type === "keyword_pair") {
+				const key = child.namedChildren[0]?.text.replace(/:\s*$/, "").trim();
+				if (key) fields.push({ name: key, type: { kind: "unknown", raw: "any" }, pub: true });
 			}
 		}
 	}

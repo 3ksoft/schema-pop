@@ -57,9 +57,9 @@ export function walkCSharpFile(tree: Tree, sourcePath: string, opts: WalkCSharpO
 				pendingDoc = [];
 
 				if (child.type === "namespace_declaration" || child.type === "file_scoped_namespace_declaration") {
-					const nameNode = child.childForFieldName("name") || child.namedChildren.find(c => c.type === "identifier" || c.type === "qualified_name");
+					const nameNode = child.childForFieldName("name") || child.namedChildren.find(c => c && (c.type === "identifier" || c.type === "qualified_name"));
 					const ns = nameNode?.text ?? "";
-					const body = child.childForFieldName("body") || child.namedChildren.find(c => c.type === "declaration_list");
+					const body = child.childForFieldName("body") || child.namedChildren.find(c => c && c.type === "declaration_list");
 					
 					const oldNs = currentNamespace;
 					currentNamespace = oldNs ? `${oldNs}.${ns}` : ns;
@@ -94,7 +94,7 @@ export function walkCSharpFile(tree: Tree, sourcePath: string, opts: WalkCSharpO
 }
 
 function hasModifier(node: TSNode, mod: string): boolean {
-	const modifiers = node.childForFieldName("modifiers") || node.namedChildren.find(n => n.type === "modifier_list");
+	const modifiers = node.childForFieldName("modifiers") || node.namedChildren.find(n => n && n.type === "modifier_list");
 	if (modifiers) {
 		return modifiers.namedChildren.some(m => m?.text === mod);
 	}
@@ -102,7 +102,7 @@ function hasModifier(node: TSNode, mod: string): boolean {
 }
 
 function handleClass(node: TSNode, description: string | undefined, scopePrefix: string): IRItem | null {
-	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c.type === "identifier");
+	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c && c.type === "identifier");
 	const name = nameNode?.text;
 	if (!name) return null;
 	const qName = scopePrefix ? `${scopePrefix}.${name}` : name;
@@ -110,12 +110,12 @@ function handleClass(node: TSNode, description: string | undefined, scopePrefix:
 	const fields: IRField[] = [];
 	let fieldDoc: string[] = [];
 
-	const params = node.childForFieldName("parameters") || node.namedChildren.find(n => n.type === "parameter_list");
+	const params = node.childForFieldName("parameters") || node.namedChildren.find(n => n && n.type === "parameter_list");
 	if (params) {
 		for (const p of params.namedChildren) {
 			if (p?.type === "parameter") {
-				const pName = p.childForFieldName("name") || p.namedChildren.find(n => n.type === "identifier");
-				const pType = p.childForFieldName("type") || p.namedChildren.find(n => n.type !== "identifier" && n.type !== "modifier" && n.type !== "attribute_list");
+				const pName = p.childForFieldName("name") || p.namedChildren.find(n => n && n.type === "identifier");
+				const pType = p.childForFieldName("type") || p.namedChildren.find(n => n && n.type !== "identifier" && n.type !== "modifier" && n.type !== "attribute_list");
 				if (pName && pType) {
 					fields.push({
 						name: pName.text,
@@ -127,7 +127,7 @@ function handleClass(node: TSNode, description: string | undefined, scopePrefix:
 		}
 	}
 
-	const body = node.childForFieldName("body") || node.namedChildren.find(n => n.type === "declaration_list");
+	const body = node.childForFieldName("body") || node.namedChildren.find(n => n && n.type === "declaration_list");
 	if (body) {
 		for (const c of body.namedChildren) {
 			if (!c) continue;
@@ -137,8 +137,8 @@ function handleClass(node: TSNode, description: string | undefined, scopePrefix:
 			}
 			if (c.type === "property_declaration") {
 				if (!hasModifier(c, "public")) { fieldDoc = []; continue; }
-				const tNode = c.childForFieldName("type") || c.namedChildren.find(n => n.type !== "modifier" && n.type !== "identifier" && n.type !== "accessor_list");
-				const nNode = c.childForFieldName("name") || c.namedChildren.find(n => n.type === "identifier");
+				const tNode = c.childForFieldName("type") || c.namedChildren.find(n => n && n.type !== "modifier" && n.type !== "identifier" && n.type !== "accessor_list");
+				const nNode = c.childForFieldName("name") || c.namedChildren.find(n => n && n.type === "identifier");
 				if (tNode && nNode) {
 					fields.push({
 						name: nNode.text,
@@ -149,12 +149,13 @@ function handleClass(node: TSNode, description: string | undefined, scopePrefix:
 				}
 			} else if (c.type === "field_declaration") {
 				if (!hasModifier(c, "public")) { fieldDoc = []; continue; }
-				const decl = c.childForFieldName("declaration") || c.namedChildren.find(n => n.type === "variable_declaration");
+				const decl = c.childForFieldName("declaration") || c.namedChildren.find(n => n && n.type === "variable_declaration");
 				if (decl) {
-					const tNode = decl.childForFieldName("type") || decl.namedChildren.find(n => n.type !== "variable_declarator");
-					const vars = decl.namedChildren.filter(n => n.type === "variable_declarator");
+					const tNode = decl.childForFieldName("type") || decl.namedChildren.find(n => n && n.type !== "variable_declarator");
+					const vars = decl.namedChildren.filter(n => n && n.type === "variable_declarator");
 					for (const v of vars) {
-						const nNode = v.childForFieldName("name") || v.namedChildren.find(n => n.type === "identifier");
+						if (!v) continue;
+						const nNode = v.childForFieldName("name") || v.namedChildren.find(n => n && n.type === "identifier");
 						if (tNode && nNode) {
 							fields.push({
 								name: nNode.text,
@@ -174,12 +175,12 @@ function handleClass(node: TSNode, description: string | undefined, scopePrefix:
 }
 
 function handleEnum(node: TSNode, description: string | undefined, scopePrefix: string): IRItem | null {
-	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c.type === "identifier");
+	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c && c.type === "identifier");
 	const name = nameNode?.text;
 	if (!name) return null;
 	const qName = scopePrefix ? `${scopePrefix}.${name}` : name;
 
-	const body = node.childForFieldName("body") || node.namedChildren.find(n => n.type === "enum_member_declaration_list");
+	const body = node.childForFieldName("body") || node.namedChildren.find(n => n && n.type === "enum_member_declaration_list");
 	if (!body) return null;
 
 	const variants: IREnumVariant[] = [];
@@ -192,7 +193,7 @@ function handleEnum(node: TSNode, description: string | undefined, scopePrefix: 
 			continue;
 		}
 		if (c.type === "enum_member_declaration") {
-			const mName = c.childForFieldName("name") || c.namedChildren.find(n => n.type === "identifier");
+			const mName = c.childForFieldName("name") || c.namedChildren.find(n => n && n.type === "identifier");
 			if (mName) {
 				variants.push({
 					kind: "unit",
@@ -217,10 +218,10 @@ function parseCSharpType(node: TSNode): IRType {
 		return { kind: "array", item: inner ? parseCSharpType(inner) : { kind: "unknown", raw: "any" } };
 	}
 	if (node.type === "generic_name") {
-		const name = node.namedChildren.find(c => c.type === "identifier")?.text;
-		const args = node.childForFieldName("type_arguments") || node.namedChildren.find(c => c.type === "type_argument_list");
+		const name = node.namedChildren.find(c => c && c.type === "identifier")?.text;
+		const args = node.childForFieldName("type_arguments") || node.namedChildren.find(c => c && c.type === "type_argument_list");
 		if (args && (name === "List" || name === "IEnumerable" || name === "IReadOnlyList" || name === "IList")) {
-			const inner = args.namedChildren.find(c => c.type !== "comment" && c.type !== "punctuation");
+			const inner = args.namedChildren.find(c => c && c.type !== "comment" && c.type !== "punctuation");
 			if (inner) return { kind: "array", item: parseCSharpType(inner) };
 		}
 		return { kind: "unknown", raw: node.text };

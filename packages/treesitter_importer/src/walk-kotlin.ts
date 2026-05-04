@@ -32,7 +32,7 @@ export function walkKotlinFile(tree: Tree, sourcePath: string, opts: WalkKotlinO
 				if (!child) continue;
 
 				if (child.type === "package_header") {
-					const ident = child.childForFieldName("identifier") || child.namedChildren.find(c => c.type === "identifier");
+					const ident = child.childForFieldName("identifier") || child.namedChildren.find(c => c && c.type === "identifier");
 					if (ident) currentPackage = ident.text;
 					continue;
 				}
@@ -59,7 +59,7 @@ export function walkKotlinFile(tree: Tree, sourcePath: string, opts: WalkKotlinO
 				pendingAttrs = [];
 
 				if (child.type === "class_declaration" || child.type === "object_declaration") {
-					const isEnum = child.namedChildren.find(c => c.type === "modifiers")?.text.includes("enum");
+					const isEnum = child.namedChildren.some(c => c?.type === "enum_class_body");
 					
 					if (isEnum) {
 						const item = handleEnum(child, attrs, description, currentPackage);
@@ -86,14 +86,14 @@ function stripStarLines(block: string): string {
 }
 
 function isPublic(node: TSNode): boolean {
-	const mods = node.childForFieldName("modifiers") || node.namedChildren.find(n => n.type === "modifiers");
+	const mods = node.childForFieldName("modifiers") || node.namedChildren.find(n => n && n.type === "modifiers");
 	if (!mods) return true; // Public by default in Kotlin
 	const text = mods.text;
 	return !text.includes("private") && !text.includes("protected") && !text.includes("internal");
 }
 
 function handleClass(node: TSNode, _attrs: string[], description: string | undefined, pkg: string): IRItem | null {
-	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c.type === "simple_identifier" || c.type === "type_identifier");
+	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c && (c.type === "simple_identifier" || c.type === "type_identifier"));
 	const name = nameNode?.text;
 	if (!name) return null;
 	const qName = pkg ? `${pkg}.${name}` : name;
@@ -104,30 +104,22 @@ function handleClass(node: TSNode, _attrs: string[], description: string | undef
 	let fieldDoc: string[] = [];
 
 	// Extract from primary constructor
-	const primaryConstructor = node.childForFieldName("primary_constructor") || node.namedChildren.find(n => n.type === "primary_constructor");
+	const primaryConstructor = node.childForFieldName("primary_constructor") || node.namedChildren.find(n => n && n.type === "primary_constructor");
 	if (primaryConstructor) {
-		const params = primaryConstructor.childForFieldName("class_parameters") || primaryConstructor.namedChildren.find(n => n.type === "class_parameters");
-		if (params) {
-			for (const param of params.namedChildren) {
-				if (param.type === "class_parameter") {
-					if (param.text.startsWith("val ") || param.text.startsWith("var ")) {
-						const pName = param.childForFieldName("name") || param.namedChildren.find(n => n.type === "simple_identifier");
-						const pType = param.childForFieldName("type") || param.namedChildren.find(n => n.type === "type_identifier" || n.type === "user_type" || n.type === "nullable_type");
-						if (pName && pType) {
-							fields.push({
-								name: pName.text,
-								type: parseKotlinType(pType),
-								pub: true
-							});
-						}
-					}
-				}
+		for (const param of primaryConstructor.namedChildren) {
+			if (!param || param.type !== "class_parameter") continue;
+			const hasValVar = param.namedChildren.some(n => n?.type === "binding_pattern_kind");
+			if (!hasValVar) continue;
+			const pName = param.childForFieldName("name") ?? param.namedChildren.find(n => n?.type === "simple_identifier");
+			const pType = param.childForFieldName("type") ?? param.namedChildren.find(n => n && (n.type === "user_type" || n.type === "type_identifier" || n.type === "nullable_type"));
+			if (pName && pType) {
+				fields.push({ name: pName.text, type: parseKotlinType(pType), pub: true });
 			}
 		}
 	}
 
 	// Extract from class body
-	const body = node.childForFieldName("body") || node.namedChildren.find(n => n.type === "class_body");
+	const body = node.childForFieldName("body") || node.namedChildren.find(n => n && n.type === "class_body");
 	if (body) {
 		for (const c of body.namedChildren) {
 			if (!c) continue;
@@ -146,10 +138,10 @@ function handleClass(node: TSNode, _attrs: string[], description: string | undef
 					fieldDoc = [];
 					continue;
 				}
-				const varDecl = c.childForFieldName("variable_declaration") || c.namedChildren.find(n => n.type === "variable_declaration");
+				const varDecl = c.childForFieldName("variable_declaration") || c.namedChildren.find(n => n && n.type === "variable_declaration");
 				if (varDecl) {
-					const nNode = varDecl.childForFieldName("name") || varDecl.namedChildren.find(n => n.type === "simple_identifier");
-					const tNode = varDecl.childForFieldName("type") || varDecl.namedChildren.find(n => n.type === "type_identifier" || n.type === "user_type" || n.type === "nullable_type");
+					const nNode = varDecl.childForFieldName("name") || varDecl.namedChildren.find(n => n && n.type === "simple_identifier");
+					const tNode = varDecl.childForFieldName("type") || varDecl.namedChildren.find(n => n && (n.type === "type_identifier" || n.type === "user_type" || n.type === "nullable_type"));
 					if (nNode && tNode) {
 						fields.push({
 							name: nNode.text,
@@ -168,14 +160,18 @@ function handleClass(node: TSNode, _attrs: string[], description: string | undef
 }
 
 function handleEnum(node: TSNode, _attrs: string[], description: string | undefined, pkg: string): IRItem | null {
-	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c.type === "simple_identifier");
+	const nameNode =
+		node.childForFieldName("name") ??
+		node.namedChildren.find(c => c && (c.type === "simple_identifier" || c.type === "type_identifier"));
 	const name = nameNode?.text;
 	if (!name) return null;
 	const qName = pkg ? `${pkg}.${name}` : name;
 
 	if (!isPublic(node)) return null;
 
-	const body = node.childForFieldName("body") || node.namedChildren.find(n => n.type === "enum_class_body");
+	const body =
+		node.childForFieldName("body") ??
+		node.namedChildren.find(n => n && n.type === "enum_class_body");
 	if (!body) return null;
 
 	const variants: IREnumVariant[] = [];
@@ -194,7 +190,7 @@ function handleEnum(node: TSNode, _attrs: string[], description: string | undefi
 			continue;
 		}
 		if (c.type === "enum_entry") {
-			const mName = c.childForFieldName("name") || c.namedChildren.find(n => n.type === "simple_identifier");
+			const mName = c.childForFieldName("name") || c.namedChildren.find(n => n && n.type === "simple_identifier");
 			if (mName) {
 				variants.push({
 					kind: "unit",
@@ -215,13 +211,13 @@ function parseKotlinType(node: TSNode): IRType {
 		return { kind: "optional", inner: inner ? parseKotlinType(inner) : { kind: "unknown", raw: "Any" } };
 	}
 	if (node.type === "user_type" || node.type === "type_identifier" || node.type === "simple_identifier") {
-		const ident = node.childForFieldName("name") || node.namedChildren.find(c => c.type === "simple_identifier" || c.type === "type_identifier") || node;
+		const ident = node.childForFieldName("name") || node.namedChildren.find(c => c && (c.type === "simple_identifier" || c.type === "type_identifier")) || node;
 		const text = ident.text;
 		
 		// Handles Generics: List<String>
-		const args = node.childForFieldName("type_arguments") || node.namedChildren.find(c => c.type === "type_arguments");
+		const args = node.childForFieldName("type_arguments") || node.namedChildren.find(c => c && c.type === "type_arguments");
 		if (args && (text === "List" || text === "MutableList" || text === "Array" || text === "Collection")) {
-			const proj = args.namedChildren.find(c => c.type === "type_projection");
+			const proj = args.namedChildren.find(c => c && c.type === "type_projection");
 			const innerTypeNode = proj?.namedChildren[0];
 			if (innerTypeNode) {
 				return { kind: "array", item: parseKotlinType(innerTypeNode) };

@@ -1,5 +1,11 @@
-import type { Node as TSNode, Tree } from "web-tree-sitter";
-import type { IRField, IREnumVariant, IRItem, SchemaPopIR, IRType } from "schema-pop";
+import type {
+	IREnumVariant,
+	IRField,
+	IRItem,
+	IRType,
+	SchemaPopIR,
+} from "schema-pop";
+import type { Tree, Node as TSNode } from "web-tree-sitter";
 import { downgradeUnknownRefs } from "./known-names";
 
 export interface WalkObjcOptions {
@@ -15,16 +21,19 @@ const OBJC_PRIMITIVES: Record<string, IRType> = {
 	double: { kind: "primitive", name: "f64" },
 	BOOL: { kind: "primitive", name: "bool" },
 	char: { kind: "primitive", name: "i8" },
-	NSString: { kind: "string" }
+	NSString: { kind: "string" },
 };
 
-export function walkObjcFile(tree: Tree, sourcePath: string, opts: WalkObjcOptions = {}): SchemaPopIR {
+export function walkObjcFile(
+	tree: Tree,
+	sourcePath: string,
+	opts: WalkObjcOptions = {},
+): SchemaPopIR {
 	const items: IRItem[] = [];
 	const skipped: { name: string; reason: string }[] = [];
 
 	function traverse(node: TSNode) {
 		let pendingDoc: string[] = [];
-		let pendingAttrs: string[] = [];
 
 		function walk(n: TSNode) {
 			for (const child of n.namedChildren) {
@@ -41,7 +50,9 @@ export function walkObjcFile(tree: Tree, sourcePath: string, opts: WalkObjcOptio
 					continue;
 				}
 
-				const description = pendingDoc.length ? pendingDoc.join("\n") : undefined;
+				const description = pendingDoc.length
+					? pendingDoc.join("\n")
+					: undefined;
 				pendingDoc = [];
 
 				if (child.type === "class_interface") {
@@ -69,75 +80,117 @@ export function walkObjcFile(tree: Tree, sourcePath: string, opts: WalkObjcOptio
 }
 
 function stripStarLines(block: string): string {
-	return block.split("\n").map(l => l.replace(/^\s*\*\s?/, "")).join("\n").trim();
+	return block
+		.split("\n")
+		.map((l) => l.replace(/^\s*\*\s?/, ""))
+		.join("\n")
+		.trim();
 }
 
-function handleInterface(node: TSNode, description: string | undefined): IRItem | null {
-	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c.type === "identifier");
+function handleInterface(
+	node: TSNode,
+	description: string | undefined,
+): IRItem | null {
+	const nameNode =
+		node.childForFieldName("name") ||
+		node.namedChildren.find((c) => c && c.type === "identifier");
 	const name = nameNode?.text;
 	if (!name) return null;
 
 	const fields: IRField[] = [];
 	let fieldDoc: string[] = [];
 
-	const body = node.childForFieldName("body") || node.namedChildren.find(n => n.type === "interface_declaration_list");
-	if (body) {
-		for (const c of body.namedChildren) {
-			if (!c) continue;
-			if (c.type === "comment") {
-				const text = c.text.trim();
-				if (text.startsWith("/**")) {
-					const m = text.match(/^\/\*\*([\s\S]*?)\*\/$/);
-					if (m && m[1]) fieldDoc.push(stripStarLines(m[1]));
-				} else if (text.startsWith("///")) {
-					fieldDoc.push(text.replace(/^\/\/\/\s?/, ""));
-				}
-				continue;
+	// In tree-sitter-objc, properties are direct children of class_interface (no body wrapper)
+	const bodyChildren =
+		node.childForFieldName("body")?.namedChildren ??
+		node.namedChildren.find((n) => n?.type === "interface_declaration_list")
+			?.namedChildren ??
+		node.namedChildren;
+
+	for (const c of bodyChildren) {
+		if (!c) continue;
+		if (c.type === "comment") {
+			const text = c.text.trim();
+			if (text.startsWith("/**")) {
+				const m = text.match(/^\/\*\*([\s\S]*?)\*\/$/);
+				if (m && m[1]) fieldDoc.push(stripStarLines(m[1]));
+			} else if (text.startsWith("///")) {
+				fieldDoc.push(text.replace(/^\/\/\/\s?/, ""));
 			}
-
-			if (c.type === "property_declaration") {
-				const typeNode = c.childForFieldName("type") || c.namedChildren.find(n => n.type === "type_identifier" || n.type === "primitive_type");
-				const declNode = c.childForFieldName("declarator") || c.namedChildren.find(n => n.type === "identifier" || n.type === "pointer_declarator");
-
-				let propName = declNode?.text;
-				if (declNode && declNode.type === "pointer_declarator") {
-					const ident = declNode.childForFieldName("declarator") || declNode.namedChildren.find(n => n.type === "identifier");
-					if (ident) propName = ident.text;
-				}
-
-				if (typeNode && propName) {
-					fields.push({
-						name: propName,
-						type: parseObjcType(typeNode),
-						description: fieldDoc.length ? fieldDoc.join("\n") : undefined,
-						pub: true
-					});
-				}
-			}
-			fieldDoc = [];
+			continue;
 		}
+		if (c.type === "property_declaration") {
+			// ObjC AST: property_declaration → property_attributes_declaration? + struct_declaration
+			// struct_declaration → (type_identifier | primitive_type | typedefed_specifier) + struct_declarator
+			// struct_declarator → (pointer_declarator → identifier) | identifier directly
+			const structDecl = c.namedChildren.find(
+				(n) => n?.type === "struct_declaration",
+			);
+			const typeNode =
+				structDecl?.namedChildren.find(
+					(n) =>
+						n?.type === "type_identifier" ||
+						n?.type === "primitive_type" ||
+						n?.type === "typedefed_specifier",
+				) ??
+				c.namedChildren.find(
+					(n) =>
+						n?.type === "type_identifier" ||
+						n?.type === "primitive_type" ||
+						n?.type === "typedefed_specifier",
+				);
+			const structDeclr = structDecl?.namedChildren.find(
+				(n) => n?.type === "struct_declarator",
+			);
+			const ptrDeclr = structDeclr?.namedChildren.find(
+				(n) => n?.type === "pointer_declarator",
+			);
+			const propName =
+				ptrDeclr?.namedChildren.find((n) => n?.type === "identifier")?.text ??
+				structDeclr?.namedChildren.find((n) => n?.type === "identifier")
+					?.text ??
+				structDeclr?.text ??
+				c.namedChildren.find((n) => n?.type === "identifier")?.text;
+
+			if (typeNode && propName) {
+				fields.push({
+					name: propName,
+					type: parseObjcType(typeNode),
+					description: fieldDoc.length ? fieldDoc.join("\n") : undefined,
+					pub: true,
+				});
+			}
+		}
+		fieldDoc = [];
 	}
 
 	return { kind: "struct", name, fields, description, pub: true };
 }
 
-function handleStruct(node: TSNode, description: string | undefined): IRItem | null {
+function handleStruct(
+	node: TSNode,
+	description: string | undefined,
+): IRItem | null {
 	const nameNode = node.childForFieldName("name");
 	const name = nameNode?.text;
 	if (!name) return null;
 
 	const fields: IRField[] = [];
-	const body = node.childForFieldName("body") || node.namedChildren.find(n => n.type === "field_declaration_list");
+	const body =
+		node.childForFieldName("body") ||
+		node.namedChildren.find((n) => n && n.type === "field_declaration_list");
 	if (body) {
 		for (const c of body.namedChildren) {
 			if (c?.type === "field_declaration") {
 				const typeNode = c.childForFieldName("type");
-				const declNode = c.childForFieldName("declarator") || c.namedChildren.find(n => n.type === "identifier");
+				const declNode =
+					c.childForFieldName("declarator") ||
+					c.namedChildren.find((n) => n && n.type === "identifier");
 				if (typeNode && declNode) {
 					fields.push({
 						name: declNode.text,
 						type: parseObjcType(typeNode),
-						pub: true
+						pub: true,
 					});
 				}
 			}
@@ -147,22 +200,28 @@ function handleStruct(node: TSNode, description: string | undefined): IRItem | n
 	return { kind: "struct", name, fields, description, pub: true };
 }
 
-function handleEnum(node: TSNode, description: string | undefined): IRItem | null {
+function handleEnum(
+	node: TSNode,
+	description: string | undefined,
+): IRItem | null {
 	const nameNode = node.childForFieldName("name");
 	const name = nameNode?.text;
 	if (!name) return null;
 
-	const body = node.childForFieldName("body") || node.namedChildren.find(n => n.type === "enumerator_list");
+	const body =
+		node.childForFieldName("body") ||
+		node.namedChildren.find((n) => n && n.type === "enumerator_list");
 	if (!body) return null;
 
 	const variants: IREnumVariant[] = [];
 	for (const c of body.namedChildren) {
 		if (c?.type === "enumerator") {
-			const vname = c.childForFieldName("name")?.text || c.text.split("=")[0]?.trim();
+			const vname =
+				c.childForFieldName("name")?.text || c.text.split("=")[0]?.trim();
 			if (vname) {
 				variants.push({
 					kind: "unit",
-					name: vname
+					name: vname,
 				});
 			}
 		}
@@ -172,11 +231,16 @@ function handleEnum(node: TSNode, description: string | undefined): IRItem | nul
 }
 
 function parseObjcType(node: TSNode): IRType {
-	if (node.type === "type_identifier" || node.type === "primitive_type" || node.type === "identifier") {
+	if (
+		node.type === "type_identifier" ||
+		node.type === "primitive_type" ||
+		node.type === "identifier" ||
+		node.type === "typedefed_specifier"
+	) {
 		const text = node.text;
 		const prim = OBJC_PRIMITIVES[text];
 		if (prim) return prim;
-		
+
 		if (text === "NSArray" || text === "NSMutableArray") {
 			return { kind: "array", item: { kind: "unknown", raw: "id" } };
 		}

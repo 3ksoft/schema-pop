@@ -49,7 +49,9 @@ export function walkSwiftFile(tree: Tree, sourcePath: string, opts: WalkSwiftOpt
 				pendingDoc = [];
 
 				if (child.type === "class_declaration" || child.type === "struct_declaration") {
-					const item = handleStruct(child, description);
+					// Swift enums are class_declaration with enum_class_body
+					const isEnum = child.namedChildren.some(n => n?.type === "enum_class_body");
+					const item = isEnum ? handleEnum(child, description) : handleStruct(child, description);
 					if (item) items.push(item);
 				} else if (child.type === "enum_declaration") {
 					const item = handleEnum(child, description);
@@ -75,15 +77,15 @@ function stripStarLines(block: string): string {
 }
 
 function isPublic(node: TSNode): boolean {
-	const modifiers = node.namedChildren.filter(n => n.type === "modifiers" || n.type === "visibility_modifier");
+	const modifiers = node.namedChildren.filter(n => n && (n.type === "modifiers" || n.type === "visibility_modifier"));
 	for (const mod of modifiers) {
-		if (mod.text.includes("private") || mod.text.includes("fileprivate")) return false;
+		if (mod && (mod.text.includes("private") || mod.text.includes("fileprivate"))) return false;
 	}
 	return true;
 }
 
 function handleStruct(node: TSNode, description: string | undefined): IRItem | null {
-	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c.type === "type_identifier");
+	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c && c.type === "type_identifier");
 	const name = nameNode?.text;
 	if (!name) return null;
 
@@ -92,7 +94,7 @@ function handleStruct(node: TSNode, description: string | undefined): IRItem | n
 	const fields: IRField[] = [];
 	let fieldDoc: string[] = [];
 
-	const body = node.childForFieldName("body") || node.namedChildren.find(n => n.type === "class_body" || n.type === "struct_body");
+	const body = node.childForFieldName("body") || node.namedChildren.find(n => n && (n.type === "class_body" || n.type === "struct_body"));
 	if (body) {
 		for (const c of body.namedChildren) {
 			if (!c) continue;
@@ -108,18 +110,18 @@ function handleStruct(node: TSNode, description: string | undefined): IRItem | n
 					fieldDoc = [];
 					continue;
 				}
-				const patternBinding = c.namedChildren.find(n => n.type === "pattern_binding");
-				if (patternBinding) {
-					const pName = patternBinding.childForFieldName("pattern") || patternBinding.namedChildren.find(n => n.type === "identifier");
-					const pType = patternBinding.childForFieldName("type") || patternBinding.namedChildren.find(n => n.type === "type_annotation");
-					if (pName && pType) {
-						fields.push({
-							name: pName.text,
-							type: parseSwiftType(pType),
-							description: fieldDoc.length ? fieldDoc.join("\n") : undefined,
-							pub: true
-						});
-					}
+				// Swift AST: property_declaration → value_binding_pattern, pattern, type_annotation
+				const patternNode = c.namedChildren.find(n => n?.type === "pattern");
+				const typeAnnotation = c.namedChildren.find(n => n?.type === "type_annotation");
+				const pName = patternNode?.namedChildren.find(n => n?.type === "simple_identifier") ?? patternNode;
+				const pType = typeAnnotation?.namedChildren[0] ?? typeAnnotation;
+				if (pName && pType) {
+					fields.push({
+						name: pName.text,
+						type: parseSwiftType(pType),
+						description: fieldDoc.length ? fieldDoc.join("\n") : undefined,
+						pub: true,
+					});
 				}
 			}
 			fieldDoc = [];
@@ -129,13 +131,16 @@ function handleStruct(node: TSNode, description: string | undefined): IRItem | n
 }
 
 function handleEnum(node: TSNode, description: string | undefined): IRItem | null {
-	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c.type === "type_identifier");
+	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c && c.type === "type_identifier");
 	const name = nameNode?.text;
 	if (!name) return null;
 
 	if (!isPublic(node)) return null;
 
-	const body = node.childForFieldName("body") || node.namedChildren.find(n => n.type === "enum_body");
+	// Swift: enum body is enum_class_body; entries are enum_entry nodes directly
+	const body =
+		node.childForFieldName("body") ??
+		node.namedChildren.find(n => n && (n.type === "enum_class_body" || n.type === "enum_body"));
 	if (!body) return null;
 
 	const variants: IREnumVariant[] = [];
@@ -145,20 +150,16 @@ function handleEnum(node: TSNode, description: string | undefined): IRItem | nul
 		if (!c) continue;
 		if (c.type === "comment") {
 			const text = c.text.trim();
-			if (text.startsWith("///")) {
-				variantDoc.push(text.replace(/^\/\/\/\s?/, ""));
-			}
+			if (text.startsWith("///")) variantDoc.push(text.replace(/^\/\/\/\s?/, ""));
 			continue;
 		}
-		if (c.type === "enum_case") {
-			const entry = c.namedChildren.find(n => n.type === "enum_entry" || n.type === "identifier");
-			if (entry) {
-				variants.push({
-					kind: "unit",
-					name: entry.text,
-					description: variantDoc.length ? variantDoc.join("\n") : undefined
-				});
-			}
+		if (c.type === "enum_entry") {
+			const ident = c.namedChildren.find(n => n?.type === "simple_identifier") ?? c;
+			variants.push({
+				kind: "unit",
+				name: ident.text,
+				description: variantDoc.length ? variantDoc.join("\n") : undefined,
+			});
 		}
 		variantDoc = [];
 	}
@@ -167,11 +168,11 @@ function handleEnum(node: TSNode, description: string | undefined): IRItem | nul
 }
 
 function handleAlias(node: TSNode, description: string | undefined): IRItem | null {
-	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c.type === "type_identifier");
+	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c && c.type === "type_identifier");
 	const name = nameNode?.text;
 	if (!name) return null;
 
-	const typeNode = node.childForFieldName("type") || node.namedChildren.find(c => c.type !== "type_identifier" && c.type !== "comment" && c.type !== "typealias");
+	const typeNode = node.childForFieldName("type") || node.namedChildren.find(c => c && c.type !== "type_identifier" && c.type !== "comment" && c.type !== "typealias");
 	if (!typeNode) return null;
 
 	return {
@@ -184,7 +185,34 @@ function handleAlias(node: TSNode, description: string | undefined): IRItem | nu
 }
 
 function parseSwiftType(node: TSNode): IRType {
+	// Handle structural AST nodes first
+	if (node.type === "optional_type") {
+		const inner = node.namedChildren[0];
+		return { kind: "optional", inner: inner ? parseSwiftType(inner) : { kind: "unknown", raw: "Any" } };
+	}
+	if (node.type === "array_type") {
+		const item = node.namedChildren[0];
+		return { kind: "array", item: item ? parseSwiftType(item) : { kind: "unknown", raw: "Any" } };
+	}
+	if (node.type === "user_type") {
+		const ident = node.namedChildren.find(n => n?.type === "type_identifier");
+		const text = ident?.text ?? node.text;
+		const args = node.namedChildren.find(n => n?.type === "type_arguments");
+		if (args) {
+			const inner = args.namedChildren.find(n => n?.type === "user_type" || n?.type === "type_identifier");
+			if ((text === "Optional") && inner) return { kind: "optional", inner: parseSwiftType(inner) };
+			if ((text === "Array") && inner) return { kind: "array", item: parseSwiftType(inner) };
+		}
+		if (SWIFT_PRIMITIVES[text]) return SWIFT_PRIMITIVES[text];
+		return { kind: "ref", name: text };
+	}
+	if (node.type === "type_identifier") {
+		if (SWIFT_PRIMITIVES[node.text]) return SWIFT_PRIMITIVES[node.text];
+		return { kind: "ref", name: node.text };
+	}
+	// Fallback: text-based parsing for alias targets etc.
 	const text = node.text.replace(/^:\s*/, "");
+	if (SWIFT_PRIMITIVES[text]) return SWIFT_PRIMITIVES[text];
 	if (text.endsWith("?")) {
 		const inner = text.slice(0, -1);
 		return { kind: "optional", inner: parseSwiftType({ text: inner, type: "type_identifier" } as TSNode) };
@@ -193,20 +221,5 @@ function parseSwiftType(node: TSNode): IRType {
 		const inner = text.slice(1, -1);
 		return { kind: "array", item: parseSwiftType({ text: inner, type: "type_identifier" } as TSNode) };
 	}
-	if (SWIFT_PRIMITIVES[text]) return SWIFT_PRIMITIVES[text];
-	
-	// Handling standard Generics e.g., Array<String>
-	const genericMatch = text.match(/^([A-Za-z0-9_]+)<(.+)>$/);
-	if (genericMatch) {
-		const base = genericMatch[1];
-		const inner = genericMatch[2];
-		if (base === "Array" && inner) {
-			return { kind: "array", item: parseSwiftType({ text: inner, type: "type_identifier" } as TSNode) };
-		}
-		if (base === "Optional" && inner) {
-			return { kind: "optional", inner: parseSwiftType({ text: inner, type: "type_identifier" } as TSNode) };
-		}
-	}
-	
 	return { kind: "ref", name: text };
 }

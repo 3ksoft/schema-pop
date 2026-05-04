@@ -50,16 +50,16 @@ export function walkGoFile(tree: Tree, sourcePath: string, opts: WalkGoOptions =
 
 				if (child.type === "type_declaration") {
 					for (const spec of child.namedChildren) {
-						if (spec.type === "type_spec" || spec.type === "alias_declaration") {
+						if (spec && (spec.type === "type_spec" || spec.type === "alias_declaration")) {
 							const nameNode = spec.childForFieldName("name");
-							const typeNode = spec.childForFieldName("type") || spec.namedChildren.find(c => c.type !== "type_identifier" && c.type !== "comment");
+							const typeNode = spec.childForFieldName("type") || spec.namedChildren.find(c => c && c.type !== "type_identifier" && c.type !== "comment");
 							if (!nameNode || !typeNode) continue;
 							
 							const name = nameNode.text;
 							if (!isExported(name)) continue;
 
 							if (typeNode.type === "struct_type") {
-								const list = typeNode.namedChildren.find(c => c.type === "field_declaration_list") || typeNode;
+								const list = typeNode.namedChildren.find(c => c && c.type === "field_declaration_list") || typeNode;
 								const fields: IRField[] = [];
 								let fieldDoc: string[] = [];
 
@@ -70,8 +70,8 @@ export function walkGoFile(tree: Tree, sourcePath: string, opts: WalkGoOptions =
 										continue;
 									}
 									if (c.type === "field_declaration") {
-										const tNode = c.childForFieldName("type") || c.namedChildren.find(x => x.type !== "field_identifier" && x.type !== "comment" && x.type !== "raw_string_literal" && x.type !== "interpreted_string_literal");
-										const names = c.namedChildren.filter(x => x.type === "field_identifier");
+										const tNode = c.childForFieldName("type") || c.namedChildren.find(x => x && x.type !== "field_identifier" && x.type !== "comment" && x.type !== "raw_string_literal" && x.type !== "interpreted_string_literal");
+										const names = c.namedChildren.filter(x => x && x.type === "field_identifier");
 										if (!tNode) { fieldDoc = []; continue; }
 
 										const t = parseGoType(tNode);
@@ -84,7 +84,7 @@ export function walkGoFile(tree: Tree, sourcePath: string, opts: WalkGoOptions =
 											}
 										} else {
 											for (const nNode of names) {
-												if (isExported(nNode.text)) {
+												if (nNode && isExported(nNode.text)) {
 													fields.push({ name: nNode.text, type: t, description: fDoc, pub: true });
 												}
 											}
@@ -127,7 +127,7 @@ function parseGoType(node: TSNode): IRType {
 	if (node.type === "array_type") {
 		const lenNode = node.childForFieldName("length");
 		const elNode = node.childForFieldName("element");
-		const item = elNode ? parseGoType(elNode) : { kind: "unknown", raw: "any" };
+		const item = (elNode ? parseGoType(elNode) : { kind: "unknown", raw: "any" }) as IRType;
 		const len = lenNode ? parseInt(lenNode.text, 10) : NaN;
 		if (!isNaN(len)) {
 			return { kind: "array", item, exactLength: len };

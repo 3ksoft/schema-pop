@@ -99,9 +99,11 @@ function stripStarLines(block: string): string {
 }
 
 function hasModifier(node: TSNode, mod: string): boolean {
-	const mods = node.childForFieldName("modifiers");
+	const mods =
+		node.childForFieldName("modifiers") ??
+		node.namedChildren.find((c) => c?.type === "modifiers");
 	if (!mods) return false;
-	return mods.namedChildren.some((c) => c?.text === mod);
+	return mods.text.includes(mod);
 }
 
 function handleClass(
@@ -117,11 +119,20 @@ function handleClass(
 	let fieldDoc: string[] = [];
 
 	if (node.type === "record_declaration") {
-		const params = node.childForFieldName("parameters");
+		const params =
+			node.childForFieldName("parameters") ??
+			node.namedChildren.find(n => n?.type === "formal_parameters");
 		if (params) {
 			for (const param of params.namedChildren) {
 				if (!param) continue;
-				if (param.type === "record_declaration_parameter") {
+				if (param.type === "formal_parameter") {
+					// formal_parameter: type node + identifier (name)
+					const pType = param.namedChildren.find(n => n?.type !== "identifier");
+					const pName = param.namedChildren.find(n => n?.type === "identifier")?.text;
+					if (pName && pType) {
+						fields.push({ name: pName, type: parseJavaType(pType), pub: true });
+					}
+				} else if (param.type === "record_declaration_parameter") {
 					const pName = param.childForFieldName("name")?.text;
 					const pType = param.childForFieldName("type");
 					if (pName && pType) {
@@ -252,23 +263,24 @@ function parseJavaType(node: TSNode): IRType {
 		return { kind: "ref", name: text };
 	}
 	if (node.type === "generic_type") {
-		const name = node.childForFieldName("name")?.text;
-		const args = node.childForFieldName("type_arguments");
+		// In tree-sitter-java, generic_type children are accessed via namedChildren, not fields
+		const name =
+			node.childForFieldName("name")?.text ??
+			node.namedChildren.find(c => c?.type === "type_identifier")?.text;
+		const args =
+			node.childForFieldName("type_arguments") ??
+			node.namedChildren.find(c => c?.type === "type_arguments");
 		if ((name === "List" || name === "ArrayList") && args) {
 			const inner = args.namedChildren.find(
 				(c) => c && (c.type === "type_identifier" || c.type === "generic_type"),
 			);
-			if (inner) {
-				return { kind: "array", item: parseJavaType(inner) };
-			}
+			if (inner) return { kind: "array", item: parseJavaType(inner) };
 		}
 		if (name === "Optional" && args) {
 			const inner = args.namedChildren.find(
 				(c) => c && (c.type === "type_identifier" || c.type === "generic_type"),
 			);
-			if (inner) {
-				return { kind: "optional", inner: parseJavaType(inner) };
-			}
+			if (inner) return { kind: "optional", inner: parseJavaType(inner) };
 		}
 		return { kind: "unknown", raw: node.text };
 	}

@@ -1,5 +1,5 @@
 import type { Node as TSNode, Tree } from "web-tree-sitter";
-import type { IRField, IREnumVariant, IRItem, SchemaPopIR, IRType } from "schema-pop";
+import type { IRField, IRItem, SchemaPopIR, IRType } from "schema-pop";
 import { downgradeUnknownRefs } from "./known-names";
 
 export interface WalkScalaOptions {
@@ -69,19 +69,19 @@ function isPublic(node: TSNode): boolean {
 }
 
 function handleClass(node: TSNode, description: string | undefined): IRItem | null {
-	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c.type === "identifier");
+	const nameNode = node.childForFieldName("name") || node.namedChildren.find(c => c && c.type === "identifier");
 	const name = nameNode?.text;
 	if (!name || !isPublic(node)) return null;
 
 	const fields: IRField[] = [];
 	
-	const params = node.childForFieldName("class_parameters") || node.namedChildren.find(n => n.type === "class_parameters");
+	const params = node.childForFieldName("class_parameters") || node.namedChildren.find(n => n && n.type === "class_parameters");
 	if (params) {
 		for (const p of params.namedChildren) {
-			if (p.type === "class_parameter") {
+			if (p && p.type === "class_parameter") {
 				if (!isPublic(p)) continue;
-				const pName = p.childForFieldName("name") || p.namedChildren.find(n => n.type === "identifier");
-				const pType = p.childForFieldName("type") || p.namedChildren.find(n => n.type === "type_identifier" || n.type === "generic_type");
+				const pName = p.childForFieldName("name") || p.namedChildren.find(n => n && n.type === "identifier");
+				const pType = p.childForFieldName("type") || p.namedChildren.find(n => n && (n.type === "type_identifier" || n.type === "generic_type"));
 				if (pName && pType) {
 					fields.push({
 						name: pName.text,
@@ -93,7 +93,7 @@ function handleClass(node: TSNode, description: string | undefined): IRItem | nu
 		}
 	}
 
-	const body = node.childForFieldName("body") || node.namedChildren.find(n => n.type === "template_body");
+	const body = node.childForFieldName("body") || node.namedChildren.find(n => n && n.type === "template_body");
 	if (body) {
 		let fieldDoc: string[] = [];
 		for (const c of body.namedChildren) {
@@ -108,13 +108,18 @@ function handleClass(node: TSNode, description: string | undefined): IRItem | nu
 				}
 				continue;
 			}
-			if (c.type === "val_declaration" || c.type === "var_declaration") {
+			if (c.type === "val_declaration" || c.type === "var_declaration" ||
+				c.type === "val_definition" || c.type === "var_definition") {
 				if (!isPublic(c)) {
 					fieldDoc = [];
 					continue;
 				}
-				const pName = c.childForFieldName("name") || c.namedChildren.find(n => n.type === "identifier");
-				const pType = c.childForFieldName("type") || c.namedChildren.find(n => n.type === "type_identifier" || n.type === "generic_type");
+				const pName =
+					c.childForFieldName("name") ??
+					c.namedChildren.find(n => n?.type === "identifier");
+				const pType =
+					c.childForFieldName("type") ??
+					c.namedChildren.find(n => n && (n.type === "type_identifier" || n.type === "generic_type"));
 				if (pName && pType) {
 					fields.push({
 						name: pName.text,
