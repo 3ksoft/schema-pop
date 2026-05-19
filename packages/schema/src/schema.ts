@@ -151,6 +151,10 @@ export const $ = scope({
 		args: "PopType[]",
 		returns: "PopType",
 		"abi?": "string",
+		"description?": "string",
+		"symbol?": "string",
+		"obsolete?": "boolean",
+		"obsoleteReason?": "string",
 	},
 
 	LayoutType:
@@ -190,6 +194,7 @@ export const {
 	Any,
 	Link,
 	Union,
+	PopFunction,
 	PopSchemaSettings,
 	PopSchema,
 	PopType,
@@ -207,6 +212,7 @@ export type Object = typeof Object.infer;
 export type Any = typeof Any.infer;
 export type Link = typeof Link.infer;
 export type Union = typeof Union.infer;
+export type PopFunction = typeof PopFunction.infer;
 export type PopSchemaSettings = typeof PopSchemaSettings.inferIn;
 export type PopSchema = typeof PopSchema.infer;
 export type PopType = typeof PopType.infer;

@@ -1,9 +1,10 @@
 import { type } from "arktype";
-import { PopType, BINARY_METADATA } from "@schema-pop/schema";
+import { PopType, PopFunction, BINARY_METADATA } from "@schema-pop/schema";
 
+const WalkItem = PopType.or(PopFunction);
 export const WalkResult = type({
 	source: "string",
-	items: type.Record("string", PopType),
+	items: type.Record("string", WalkItem),
 	skipped: [{ name: "string", reason: "string" }, "[]"],
 	errors: "string[]",
 	warnings: "string[]",
@@ -52,7 +53,7 @@ export type ImporterMetadata = typeof ImporterMetadata.infer;
 
 export abstract class BaseImporter {
 	protected sourcePath: string;
-	protected items: Record<string, PopType> = {};
+	protected items: Record<string, PopType | PopFunction> = {};
 	protected skipped: { name: string; reason: string }[] = [];
 	protected errors: string[] = [];
 	protected warnings: string[] = [];
@@ -129,13 +130,25 @@ export abstract class BaseImporter {
 		}
 	}
 
-	protected assertType(field: unknown, fallbackLabel: string): PopType {
+	protected assertType(
+		field: unknown,
+		fallbackLabel: string,
+	): PopType | PopFunction {
 		this.ensureLabels(field, fallbackLabel);
-		if (field && typeof field === "object" && !(field as any)["popKind"]) {
+		const isFunction =
+			field &&
+			typeof field === "object" &&
+			(field as any).type === "function";
+		if (
+			!isFunction &&
+			field &&
+			typeof field === "object" &&
+			!(field as any)["popKind"]
+		) {
 			(field as any)["popKind"] = "rich";
 		}
 
-		const valid = PopType(field);
+		const valid = WalkItem(field);
 		if (valid instanceof type.errors) {
 			for (const e of Object.values(valid.entries)) {
 				this.error(`Invalid type for '${fallbackLabel}': ${e.message}`);
@@ -147,7 +160,7 @@ export abstract class BaseImporter {
 				popKind: "rich",
 			} as PopType;
 		}
-		return valid;
+		return valid as PopType | PopFunction;
 	}
 
 	protected addItem(
@@ -239,12 +252,12 @@ export abstract class BaseImporter {
 			...this.extraKnownNames,
 		]);
 
-		const processedItems: Record<string, PopType> = {};
+		const processedItems: Record<string, PopType | PopFunction> = {};
 		const visited = new Map<any, any>();
 
 		for (const [k, item] of Object.entries(this.items)) {
 			const processed = this.processPopType(item, definedKeys, visited);
-			const valid = PopType(processed);
+			const valid = WalkItem(processed);
 			if (valid instanceof type.errors) {
 				this.error(
 					`Invalid type for '${k}' after finalization: ${valid.summary}`,
@@ -255,7 +268,7 @@ export abstract class BaseImporter {
 					label: k,
 				} as PopType;
 			} else {
-				processedItems[k] = valid as PopType;
+				processedItems[k] = valid as PopType | PopFunction;
 			}
 		}
 

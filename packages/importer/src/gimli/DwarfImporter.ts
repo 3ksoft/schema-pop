@@ -65,7 +65,7 @@ export class DwarfImporter extends BaseImporter {
 			return this.assertType(
 				{ type: "link", target, popKind: "binary" },
 				target,
-			);
+			) as PopType;
 		}
 
 		if (this.typeCache.has(id)) {
@@ -82,7 +82,7 @@ export class DwarfImporter extends BaseImporter {
 			return this.assertType(
 				{ type: "any", originalType: `Unknown_${id}`, popKind: "binary" },
 				label,
-			);
+			) as PopType;
 		}
 
 		let result: any;
@@ -180,7 +180,7 @@ export class DwarfImporter extends BaseImporter {
 		}
 
 		this.processedSet.delete(id);
-		const validResult = this.assertType(result, label);
+		const validResult = this.assertType(result, label) as PopType;
 		this.typeCache.set(id, validResult);
 		return validResult;
 	}

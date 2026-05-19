@@ -145,10 +145,8 @@ export class RustImporter extends BaseImporter {
 					pNameNode && pNameNode.type === "identifier"
 						? pNameNode.text
 						: undefined;
-				args.push({
-					...(argName ? { name: argName } : {}),
-					type: this.parseRustType(typeNode),
-				});
+				const argType = this.parseRustType(typeNode);
+				args.push(argName ? { ...argType, label: argName } : argType);
 			}
 		}
 

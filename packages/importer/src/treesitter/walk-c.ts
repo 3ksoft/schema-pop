@@ -159,6 +159,18 @@ export class CImporter extends BaseImporter {
 				if (name && typeNode) {
 					this.addItem(name, this.parseCType(typeNode), description);
 				}
+			} else if (this.allowClass && child.type === "template_declaration") {
+				const inner = child.namedChildren.find(
+					(c) =>
+						c?.type === "struct_specifier" ||
+						c?.type === "class_specifier" ||
+						c?.type === "function_definition",
+				);
+				const name =
+					inner?.childForFieldName("name")?.text ??
+					inner?.childForFieldName("declarator")?.text ??
+					"<anon>";
+				this.skip(name, "template type");
 			}
 		}
 	}
@@ -308,15 +320,13 @@ export class CImporter extends BaseImporter {
 					const inner = pdecl.childForFieldName("declarator");
 					if (inner?.type === "identifier") argName = inner.text;
 				}
-				args.push({
-					...(argName ? { name: argName } : {}),
-					type:
-						ptype.text === "void" ? { type: "unit" } : this.parseCType(ptype),
-				});
+				const argType =
+					ptype.text === "void" ? { type: "unit" } : this.parseCType(ptype);
+				args.push(argName ? { ...argType, label: argName } : argType);
 			}
 		}
 
-		if (args.length === 1 && args[0]!.type.type === "unit" && !args[0]!.name) {
+		if (args.length === 1 && (args[0] as any).type === "unit") {
 			args.length = 0;
 		}
 
@@ -475,8 +485,7 @@ export class CImporter extends BaseImporter {
 				type: {
 					type: "array",
 					item: baseType,
-					minLength: len,
-					maxLength: len,
+					exactLength: len,
 				} as PopType,
 			};
 		}
@@ -489,8 +498,7 @@ export class CImporter extends BaseImporter {
 				type: {
 					type: "array",
 					item: sub.type,
-					minLength: len,
-					maxLength: len,
+					exactLength: len,
 				} as PopType,
 			};
 		}
