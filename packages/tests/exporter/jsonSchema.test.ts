@@ -76,7 +76,7 @@ describe("jsonSchema exporter", () => {
 		}).generate(plan) as string;
 		expect(out.includes("\n\t")).toBe(false);
 		const parsed = JSON.parse(out);
-		expect(parsed.$id).toBe("https://example.com/schemas/v1.json");
+		expect(parsed.$id).toBe("https://example.com/schemas/1.0.0.json");
 	});
 
 	test("includeExtensions: true forwards schema-pop meta as x-* keys", () => {

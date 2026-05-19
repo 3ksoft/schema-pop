@@ -9,6 +9,7 @@ import type {
 	UnionPlan,
 } from "@schema-pop/schema";
 import { ExporterTools } from "../exporterTools";
+import { goHarness } from "./goHarness";
 
 /**
  * Go exporter — emits ABI-compatible `struct` declarations matching the
@@ -159,11 +160,12 @@ export function go(config: GoConfig = {}): ExporterPlugin<GoConfig> {
 	 */
 	function versionTag(plan: LayoutPlan): string {
 		const safe = toSafeVersionIdentifier(plan.version);
-		// `safe` looks like `<schema>_<digits>` or just `<digits>`.
-		// Pull the trailing digit-and-underscore tail; fall back to `safe`.
-		const m = safe.match(/(\d+(_\d+)*)$/);
-		const tail = m ? m[1] : safe;
-		return `V${tail}`;
+		// `safe` looks like `v1_0_0` or `<schema>_1_0_0`. Use just the
+		// leading major component (`1` → `V1`) so prefixes stay readable
+		// across minor/patch bumps. Falls back to full safe slug if no
+		// digit run is present.
+		const m = safe.match(/(\d+)/);
+		return `V${m ? m[1] : safe}`;
 	}
 
 	function makeNamer(plan: LayoutPlan): (n: string) => string {
@@ -387,5 +389,11 @@ export function go(config: GoConfig = {}): ExporterPlugin<GoConfig> {
 			}
 			return header + body;
 		},
+		...(cfg.harness
+			? {
+					getHarness: (plans: LayoutPlan[]) =>
+						goHarness(plans, "harness", cfg.versionNamespace ?? false),
+				}
+			: {}),
 	};
 }

@@ -30,7 +30,7 @@ export function goHarness(
 
 	function versionTag(plan: LayoutPlan): string {
 		const safe = toSafeVersionIdentifier(plan.version);
-		const m = safe.match(/(\d+(_\d+)*)$/);
+		const m = safe.match(/(\d+)/);
 		return `V${m ? m[1] : safe}`;
 	}
 

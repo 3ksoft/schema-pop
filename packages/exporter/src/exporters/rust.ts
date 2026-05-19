@@ -14,6 +14,13 @@ export interface RustConfig
 	namespace?: string;
 	traits?: string[];
 	harness?: boolean;
+	/**
+	 * Wrap each version's types in a `pub mod <slug>` namespace.
+	 * `true` (default): slugify version (e.g. "1.0" → "v1_0").
+	 * `false`: emit types at the top level (no wrapping).
+	 * string: use the given identifier verbatim.
+	 */
+	versionNamespace?: boolean | string;
 }
 
 const RUST_PRIMITIVES: Record<string, string> = {
@@ -144,13 +151,17 @@ impl<T: Default + Copy, const N: usize> From<&[T]> for SharedVec<T, N> {
 		res
 	}
 }
+#[cfg(feature = "alloc")]
 extern crate alloc;
+#[cfg(feature = "alloc")]
 impl<const N: usize> From<alloc::string::String> for SharedString<N> {
 	fn from(s: alloc::string::String) -> Self { Self::from_str(s.as_str()) }
 }
+#[cfg(feature = "alloc")]
 impl<const N: usize> From<&alloc::string::String> for SharedString<N> {
 	fn from(s: &alloc::string::String) -> Self { Self::from_str(s.as_str()) }
 }
+#[cfg(feature = "alloc")]
 impl<T: Default + Copy, const N: usize> From<alloc::vec::Vec<T>> for SharedVec<T, N> {
 	fn from(v: alloc::vec::Vec<T>) -> Self {
 		let mut res = Self::new();
@@ -158,6 +169,7 @@ impl<T: Default + Copy, const N: usize> From<alloc::vec::Vec<T>> for SharedVec<T
 		res
 	}
 }
+#[cfg(feature = "alloc")]
 pub trait PopAlloc: Sized {
     /// Heap-allocate a zeroed instance. Safe for large zero-copy structs.
     fn boxed_zeroed() -> alloc::boxed::Box<Self> {
@@ -256,12 +268,28 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 		return true;
 	}
 
+	function versionSlug(version: string): string {
+		const slug = version.replace(/[.-]/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
+		return /^[0-9]/.test(slug) ? `v${slug}` : slug;
+	}
+
 	return {
 		name: "rust",
 		extension: "rs",
 		config: cfg,
 		getFileHeader: () =>
 			`#![allow(dead_code, unused_imports, non_camel_case_types, non_snake_case)]\n${RUST_RUNTIME_PRELUDE}\n`,
+		wrapVersion: (version: string | undefined, code: string) => {
+			const vn = cfg.versionNamespace ?? true;
+			if (vn === false) return code;
+			const name =
+				typeof vn === "string" ? vn : versionSlug(version ?? "v");
+			const indented = code
+				.split("\n")
+				.map((l) => (l.length > 0 ? `\t${l}` : l))
+				.join("\n");
+			return `pub mod ${name} {\n\tuse super::*;\n\n${indented}}\n`;
+		},
 		generate: (plan: LayoutPlan) => {
 			let code = "";
 

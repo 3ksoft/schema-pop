@@ -2,10 +2,20 @@ import type {
 	BaseConfig,
 	ExporterPlugin,
 	Field,
-	// FunctionPlan,
 	LayoutPlan,
 	TypePlan,
 } from "@schema-pop/schema";
+
+type FunctionPlan = {
+	name: string;
+	symbol?: string;
+	abi?: string;
+	description?: string;
+	obsolete?: boolean;
+	obsoleteReason?: string;
+	returnType: Field | { kind: "unit" };
+	args: { name?: string; type: Field }[];
+};
 import { ExporterTools } from "../exporterTools";
 
 export interface MdConfig extends Omit<BaseConfig, "commentStyle"> {
@@ -121,39 +131,36 @@ export function md(config: MdConfig = {}): ExporterPlugin<MdConfig> {
 		return lines.join("\n");
 	}
 
-	// function renderFunction(fn: FunctionPlan): string {
-	// 	const lines: string[] = [];
-	// 	const abiSuffix = fn.abi ? ` _\`extern "${fn.abi}"\`_` : "";
-	// 	const obsoleteTag = fn.obsolete
-	// 		? ` _[deprecated${fn.obsoleteReason ? `: ${fn.obsoleteReason}` : ""}]_`
-	// 		: "";
-	// 	lines.push(`### \`${fn.name}\`${abiSuffix}${obsoleteTag}`);
-	// 	lines.push("");
-	// 	if (fn.description) {
-	// 		lines.push(`> ${fn.description.replace(/\n/g, "\n> ")}`);
-	// 		lines.push("");
-	// 	}
-	// 	const sigArgs = fn.args
-	// 		.map((a) => `${a.name ? `${a.name}: ` : ""}${fieldText(a.type)}`)
-	// 		.join(", ");
-	// 	const ret =
-	// 		fn.returnType.kind === "unit" ? "`void`" : fieldText(fn.returnType);
-	// 	lines.push(`\`\`\``);
-	// 	lines.push(
-	// 		`${fn.name}(${fn.args
-	// 			.map((a) => `${a.name ?? "_"}: ${plainFieldText(a.type)}`)
-	// 			.join(", ")}) -> ${plainFieldText(fn.returnType)}`,
-	// 	);
-	// 	lines.push(`\`\`\``);
-	// 	lines.push("");
-	// 	lines.push(`Signature: ${fn.name}(${sigArgs}) → ${ret}`);
-	// 	if (fn.symbol && fn.symbol !== fn.name) {
-	// 		lines.push("");
-	// 		lines.push(`Symbol: \`${fn.symbol}\``);
-	// 	}
-	// 	lines.push("");
-	// 	return lines.join("\n");
-	// }
+	function renderFunction(fn: FunctionPlan): string {
+		const lines: string[] = [];
+		const abiSuffix = fn.abi ? ` _\`extern "${fn.abi}"\`_` : "";
+		const obsoleteTag = fn.obsolete
+			? ` _[deprecated${fn.obsoleteReason ? `: ${fn.obsoleteReason}` : ""}]_`
+			: "";
+		lines.push(`### \`${fn.name}\`${abiSuffix}${obsoleteTag}`);
+		lines.push("");
+		if (fn.description) {
+			lines.push(`> ${fn.description.replace(/\n/g, "\n> ")}`);
+			lines.push("");
+		}
+		lines.push("```");
+		lines.push(
+			`${fn.name}(${fn.args
+				.map((a) => `${a.name ?? "_"}: ${plainFieldText(a.type as Field)}`)
+				.join(", ")}) -> ${
+				fn.returnType.kind === "unit"
+					? "void"
+					: plainFieldText(fn.returnType as Field)
+			}`,
+		);
+		lines.push("```");
+		lines.push("");
+		if (fn.symbol && fn.symbol !== fn.name) {
+			lines.push(`Symbol: \`${fn.symbol}\``);
+			lines.push("");
+		}
+		return lines.join("\n");
+	}
 
 	function plainFieldText(f: Field): string {
 		switch (f.kind) {
@@ -193,11 +200,12 @@ export function md(config: MdConfig = {}): ExporterPlugin<MdConfig> {
 				parts.push("");
 				for (const t of plan.types) parts.push(renderType(t));
 			}
-			// if (plan.functions && plan.functions.length > 0) {
-			// 	parts.push("## functions");
-			// 	parts.push("");
-			// 	for (const fn of plan.functions) parts.push(renderFunction(fn));
-			// }
+			const fns = (plan as any).functions as FunctionPlan[] | undefined;
+			if (fns && fns.length > 0) {
+				parts.push("## functions");
+				parts.push("");
+				for (const fn of fns) parts.push(renderFunction(fn));
+			}
 			return parts.join("\n");
 		},
 	};
