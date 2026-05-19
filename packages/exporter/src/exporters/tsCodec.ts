@@ -1,0 +1,405 @@
+import type {
+	BaseConfig,
+	ExporterPlugin,
+	Field,
+	LayoutPlan,
+} from "@schema-pop/schema";
+import { ExporterTools } from "../exporterTools";
+
+export interface TsCodecConfig extends Omit<BaseConfig, "commentStyle"> {
+	importPath?: string;
+	/**
+	 * Inline reference reads/writes for non-recursive structs/aliases up to this
+	 * many bytes. Small aliases (e.g. `Vec3 = f32[] == 3`) benefit greatly,
+	 * but inlining whole structs into their callers can produce functions
+	 * large enough that the JS engine refuses to JIT-optimize them — leading
+	 * to *slower* code. Default 16 bytes, which catches Vec3-like aliases but
+	 * keeps struct refs as function calls.
+	 */
+	inlineRefBytes?: number;
+}
+
+export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
+	const cfg = { fieldNaming: "original", typeNaming: "original", ...config };
+	const { typeName, fieldName } = ExporterTools(cfg as any);
+
+	return {
+		name: "ts-codec",
+		config: cfg as any,
+		getFileHeader: () =>
+			`const __textDecoder = typeof TextDecoder !== "undefined" ? new TextDecoder() : null;\n` +
+			`const __textEncoder = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;\n\n`,
+
+		generate: (plan: LayoutPlan) => {
+			let code = "";
+			const isLE = plan.endian === "le" ? "true" : "false";
+			const inlineBudget = config.inlineRefBytes ?? 16;
+
+			// Single-option synthesized enums (the per-variant `kind` discriminator
+			// literals) don't exist on the original arktype Module. Inline their
+			// read/write at the reference sites and skip emitting their ser/de.
+			const singletonEnumByName = new Map<string, string>();
+			for (const t of plan.types) {
+				if (t.kind === "enum" && (t as any).variants?.length === 1) {
+					singletonEnumByName.set(t.name, (t as any).variants[0].name);
+				}
+			}
+
+			const typeByName = new Map(plan.types.map((t) => [t.name, t]));
+			const sizeOf = (t: any): number => t.paddedSize ?? t.size ?? 0;
+			const inlineable = (name: string): boolean => {
+				const t: any = typeByName.get(name);
+				if (!t) return false;
+				if (t.kind !== "struct" && t.kind !== "alias") return false;
+				return sizeOf(t) <= inlineBudget;
+			};
+
+			const getPrim = (name: string) => {
+				switch (name.toLowerCase()) {
+					case "u8":
+					case "uint8":
+					case "bool":
+						return {
+							r: "getUint8",
+							w: "setUint8",
+							b: 1,
+							isBool: name === "bool",
+						};
+					case "i8":
+					case "int8":
+						return { r: "getInt8", w: "setInt8", b: 1 };
+					case "u16":
+					case "uint16":
+						return { r: "getUint16", w: "setUint16", b: 2 };
+					case "i16":
+					case "int16":
+						return { r: "getInt16", w: "setInt16", b: 2 };
+					case "u32":
+					case "uint32":
+						return { r: "getUint32", w: "setUint32", b: 4 };
+					case "i32":
+					case "int32":
+						return { r: "getInt32", w: "setInt32", b: 4 };
+					case "f32":
+					case "float":
+						return { r: "getFloat32", w: "setFloat32", b: 4 };
+					case "f64":
+					case "double":
+						return { r: "getFloat64", w: "setFloat64", b: 8 };
+					case "u64":
+					case "uint64":
+						return { r: "getBigUint64", w: "setBigUint64", b: 8 };
+					case "i64":
+					case "int64":
+						return { r: "getBigInt64", w: "setBigInt64", b: 8 };
+					case "usize":
+						return plan.wordSize === "64"
+							? { r: "getBigUint64", w: "setBigUint64", b: 8 }
+							: { r: "getUint32", w: "setUint32", b: 4 };
+					default:
+						return { r: "getUint8", w: "setUint8", b: 1 };
+				}
+			};
+
+			const getAccessors = (f: Field) => {
+				if (f.kind !== "primitive")
+					throw Error("Cannot extract accessor type from non-primitive");
+				const tt = f.isFloat ? "Float" : f.unsigned ? "Uint" : "Int";
+				var result = {
+					r: `get${tt}${f.bitSize}`,
+					w: `set${tt}${f.bitSize}`,
+					b: 1,
+					isBool: f.name === "boolean",
+				};
+
+				return result;
+			};
+
+			const getItemStep = (item: Field): number => {
+				if ((item as any).paddedSize !== undefined)
+					return (item as any).paddedSize;
+				if ((item as any).size !== undefined) return (item as any).size;
+				if (item.kind === "reference") {
+					const ref = plan.types.find((t) => t.name === (item as any).name);
+					if (ref) return (ref as any).paddedSize ?? (ref as any).size ?? 0;
+				}
+				return 0;
+			};
+
+			const genRead = (
+				f: Field,
+				off: string,
+				visited: Set<string> = new Set(),
+			): string => {
+				switch (f.kind) {
+					case "primitive": {
+						const p = getPrim(f.name);
+						const call =
+							p.b === 1
+								? `view.${p.r}(${off})`
+								: `view.${p.r}(${off}, ${isLE})`;
+						if (p.isBool) return `(${call} !== 0)`;
+						// 64-bit ints come back as bigint from DataView; arktype's u64/i64
+						// are typed as `number`, so cast back.
+						if (p.b === 8 && (f.name === "u64" || f.name === "i64"))
+							return `Number(${call})`;
+						return call;
+					}
+					case "reference": {
+						const lit = singletonEnumByName.get(f.name);
+						if (lit !== undefined) return `"${lit}"`;
+						if (!visited.has(f.name) && inlineable(f.name)) {
+							const t: any = typeByName.get(f.name)!;
+							const sub = new Set(visited);
+							sub.add(f.name);
+							if (t.kind === "alias") return genRead(t.type, off, sub);
+							// struct → emit object literal inline
+							return `({ ${t.fields
+								.map(
+									(sf: any) =>
+										`${fieldName(sf.name)}: ${genRead(sf.type, `${off} + ${sf.offset}`, sub)}`,
+								)
+								.join(", ")} })`;
+						}
+						return `deserialize${typeName(f.name)}(view, ${off})`;
+					}
+					case "string":
+						return `((o) => { const l = view.getUint32(o, ${isLE}); return __textDecoder!.decode(new Uint8Array(view.buffer, view.byteOffset + o + 4, l)); })(${off})`;
+					case "array": {
+						const isU8 = f.item.kind === "primitive" && f.item.name === "u8";
+						if (isU8) {
+							if (f.exactLength !== undefined)
+								return `new Uint8Array(view.buffer, view.byteOffset + ${off}, ${f.exactLength})`;
+							return `((o) => { const l = view.getUint32(o, ${isLE}); return new Uint8Array(view.buffer, view.byteOffset + o + 4, l); })(${off})`;
+						}
+						const step = getItemStep(f.item);
+						// For tiny fixed arrays of primitives, the array literal form
+						// `[a, b, c]` JITs best. For larger arrays, or arrays of
+						// non-primitive items (struct refs, inline structs), prefer the
+						// loop form — V8/JSC handles a single hot loop better than a
+						// long literal full of repeated function calls / object inits.
+						const itemIsTiny = f.item.kind === "primitive";
+						if (
+							f.exactLength !== undefined &&
+							f.exactLength <= 16 &&
+							itemIsTiny
+						) {
+							const items = Array.from({ length: f.exactLength }, (_, i) =>
+								genRead(f.item, `${off} + (${i} * ${step})`, visited),
+							);
+							return `[${items.join(", ")}]`;
+						}
+						const readItem = genRead(f.item, `o + (i * ${step})`, visited);
+						// Build with .push to keep the array packed; `new Array(N)`
+						// produces a holey array that V8 deoptimizes.
+						if (f.exactLength !== undefined)
+							return `((o) => { const a: any[] = []; for(let i=0; i<${f.exactLength}; i++) a.push(${readItem}); return a; })(${off})`;
+						return `((o) => { const l = view.getUint32(o, ${isLE}); const a: any[] = []; const start = o + 4; for(let i=0; i<l; i++) { const o = start; a.push(${readItem}); } return a; })(${off})`;
+					}
+					case "optional":
+						return `(view.getUint8(${off}) === 1 ? ${genRead(f.inner, `${off} + 1`, visited)} : undefined)`;
+					case "inlineStruct":
+						return `({ ${f.fields.map((sf) => `${fieldName(sf.name)}: ${genRead(sf.type, `${off} + ${sf.offset}`, visited)}`).join(", ")} })`;
+					case "unit": {
+						const sz = (f as any).size ?? 0;
+						return sz > 0
+							? `new Uint8Array(view.buffer, view.byteOffset + ${off}, ${sz})`
+							: `undefined`;
+					}
+					default:
+						return "undefined";
+				}
+			};
+
+			const genWrite = (
+				f: Field,
+				val: string,
+				off: string,
+				visited: Set<string> = new Set(),
+			): string => {
+				switch (f.kind) {
+					case "primitive": {
+						const p = getPrim(f.name);
+						let v: string;
+						if (p.isBool) v = `(${val} ? 1 : 0)`;
+						else if (p.b === 8 && (f.name === "u64" || f.name === "i64"))
+							v = `BigInt(${val})`;
+						else v = val;
+						return p.b === 1
+							? `view.${p.w}(${off}, ${v});`
+							: `view.${p.w}(${off}, ${v}, ${isLE});`;
+					}
+					case "reference": {
+						if (singletonEnumByName.has(f.name))
+							return `view.setUint8(${off}, 0);`;
+						if (!visited.has(f.name) && inlineable(f.name)) {
+							const t: any = typeByName.get(f.name)!;
+							const sub = new Set(visited);
+							sub.add(f.name);
+							if (t.kind === "alias") return genWrite(t.type, val, off, sub);
+							return `{ ${t.fields
+								.map((sf: any) =>
+									genWrite(
+										sf.type,
+										`${val}.${fieldName(sf.name)}`,
+										`${off} + ${sf.offset}`,
+										sub,
+									),
+								)
+								.join(" ")} }`;
+						}
+						return `serialize${typeName(f.name)}(${val}, view, ${off});`;
+					}
+					case "string": {
+						const maxLen = f.maxLength ?? 255;
+						return `{ const bytes = __textEncoder!.encode(${val}); const len = Math.min(bytes.length, ${maxLen}); view.setUint32(${off}, len, ${isLE}); new Uint8Array(view.buffer, view.byteOffset + ${off} + 4, ${maxLen}).fill(0); new Uint8Array(view.buffer, view.byteOffset + ${off} + 4, len).set(bytes.subarray(0, len)); }`;
+					}
+					case "array": {
+						const isU8 = f.item.kind === "primitive" && f.item.name === "u8";
+						if (isU8) {
+							// arktype types `u8[]` as `number[]`; runtime may be either.
+							// Coerce to Uint8Array so .subarray/.set work either way.
+							if (f.exactLength !== undefined)
+								return `{ const __src = ${val} instanceof Uint8Array ? ${val} : new Uint8Array(${val} as any); new Uint8Array(view.buffer, view.byteOffset + ${off}, ${f.exactLength}).fill(0); new Uint8Array(view.buffer, view.byteOffset + ${off}, ${f.exactLength}).set(__src.subarray(0, ${f.exactLength})); }`;
+							return `{ const __src = ${val} instanceof Uint8Array ? ${val} : new Uint8Array(${val} as any); view.setUint32(${off}, __src.length, ${isLE}); new Uint8Array(view.buffer, view.byteOffset + ${off} + 4, __src.length).set(__src); }`;
+						}
+						const step = getItemStep(f.item);
+						const itemIsTiny = f.item.kind === "primitive";
+						if (
+							f.exactLength !== undefined &&
+							f.exactLength <= 16 &&
+							itemIsTiny
+						) {
+							const writes = Array.from({ length: f.exactLength }, (_, i) =>
+								genWrite(
+									f.item,
+									`${val}[${i}]!`,
+									`${off} + (${i} * ${step})`,
+									visited,
+								),
+							);
+							return `{ ${writes.join(" ")} }`;
+						}
+						const writeItem = genWrite(
+							f.item,
+							`${val}[i]!`,
+							`o + (i * ${step})`,
+							visited,
+						);
+						if (f.exactLength !== undefined)
+							return `{ const o = ${off}; for(let i=0; i<${f.exactLength}; i++) { ${writeItem} } }`;
+						return `{ view.setUint32(${off}, ${val}.length, ${isLE}); let o = ${off} + 4; for(let i=0; i<${val}.length; i++) { ${writeItem} } }`;
+					}
+					case "optional":
+						return `if (${val} !== undefined) { view.setUint8(${off}, 1); ${genWrite(f.inner, val, `${off} + 1`, visited)} } else { view.setUint8(${off}, 0); }`;
+					case "inlineStruct":
+						return f.fields
+							.map((sf) =>
+								genWrite(
+									sf.type,
+									`${val}.${fieldName(sf.name)}`,
+									`${off} + ${sf.offset}`,
+									visited,
+								),
+							)
+							.join(" ");
+					case "unit": {
+						const sz = (f as any).size ?? 0;
+						return sz > 0
+							? `{ new Uint8Array(view.buffer, view.byteOffset + ${off}, ${sz}).fill(0); new Uint8Array(view.buffer, view.byteOffset + ${off}, ${sz}).set(${val}.subarray(0, ${sz})); }`
+							: "";
+					}
+					default:
+						return "";
+				}
+			};
+
+			for (const t of plan.types) {
+				if (t.kind === "enum") continue;
+				const sz = (t as any).paddedSize ?? (t as any).size ?? 0;
+				if (sz > 0)
+					code += `export const SIZEOF_${typeName(t.name)} = ${sz};\n`;
+			}
+			code += "\n";
+
+			for (const t of plan.types) {
+				const tName = typeName(t.name);
+				if (t.kind === "enum" && singletonEnumByName.has(t.name)) continue;
+				if (t.kind === "alias") {
+					code += `export function deserialize${tName}(view: DataView, offset: number): ${tName} {\n`;
+					code += `\treturn ${genRead(t.type, "offset")} as any;\n}\n\n`;
+					code += `export function serialize${tName}(val: ${tName}, view: DataView, offset: number): void {\n`;
+					code += `\t${genWrite(t.type, "val", "offset")}\n}\n\n`;
+				}
+				if (t.kind === "enum") {
+					const p = getPrim(t.underlyingType);
+					code += `export function deserialize${tName}(view: DataView, offset: number): ${tName} {\n`;
+					code += `\tconst v = view.${p.r}(offset${p.b > 1 ? `, ${isLE}` : ""});\n\tswitch(v) {\n`;
+					t.variants.forEach(
+						(v) => (code += `\t\tcase ${v.value}: return "${v.name}";\n`),
+					);
+					code += `\t\tdefault: throw new Error("Unknown Enum value for ${tName}: " + v);\n\t}\n}\n\n`;
+					code += `export function serialize${tName}(val: ${tName}, view: DataView, offset: number): void {\n`;
+					t.variants.forEach(
+						(v) =>
+							(code += `\tif(val === "${v.name}") { view.${p.w}(offset, ${v.value}${p.b > 1 ? `, ${isLE}` : ""}); return; }\n`),
+					);
+					code += `}\n\n`;
+				}
+				if (t.kind === "struct") {
+					code += `export function deserialize${tName}(view: DataView, offset: number, outObj?: any): ${tName} {\n`;
+					code += `\tif (!outObj) {\n\t\treturn {\n`;
+					t.fields.forEach(
+						(f) =>
+							(code += `\t\t\t${fieldName(f.name)}: ${genRead(f.type, `offset + ${f.offset}`)},\n`),
+					);
+					code += `\t\t} as any;\n\t}\n`;
+					t.fields.forEach(
+						(f) =>
+							(code += `\toutObj.${fieldName(f.name)} = ${genRead(f.type, `offset + ${f.offset}`)};\n`),
+					);
+					code += `\treturn outObj;\n}\n\n`;
+					code += `export function serialize${tName}(val: ${tName}, view: DataView, offset: number): void {\n`;
+					t.fields.forEach(
+						(f) =>
+							(code += `\t${genWrite(f.type, `val.${fieldName(f.name)}`, `offset + ${f.offset}`)}\n`),
+					);
+					code += `}\n\n`;
+				}
+				if (t.kind === "union") {
+					const p = getPrim(t.tagType);
+					const align = t.align || 1;
+					const payloadOffset =
+						Math.ceil((t.tagOffset + t.tagSize) / align) * align;
+
+					code += `export function deserialize${tName}(view: DataView, offset: number): ${tName} {\n`;
+					code += `\tconst tag = view.${p.r}(offset + ${t.tagOffset}${p.b > 1 ? `, ${isLE}` : ""});\n\tswitch(tag) {\n`;
+					t.variants.forEach((v, i) => {
+						const r = genRead(v.type, `offset + ${payloadOffset}`);
+						const isObj =
+							v.type.kind === "inlineStruct" || v.type.kind === "reference";
+						// Zero-allocation approach for references, but enforces 'kind' property addition for TS discrimination.
+						if (isObj) {
+							code += `\t\tcase ${i}: { const obj = ${r}; (obj as any).kind = "${v.name}"; return obj as any; }\n`;
+						} else {
+							code += `\t\tcase ${i}: return { kind: "${v.name}", value: ${r} } as any;\n`;
+						}
+					});
+					code += `\t\tdefault: throw new Error("Unknown Union tag for ${tName}: " + tag);\n\t}\n}\n\n`;
+
+					code += `export function serialize${tName}(val: ${tName}, view: DataView, offset: number): void {\n`;
+					code += `\tswitch(val.kind) {\n`;
+					t.variants.forEach((v, i) => {
+						code += `\t\tcase "${v.name}": {\n\t\t\tview.${p.w}(offset + ${t.tagOffset}, ${i}${p.b > 1 ? `, ${isLE}` : ""});\n`;
+						const isObj =
+							v.type.kind === "inlineStruct" || v.type.kind === "reference";
+						code += `\t\t\t${genWrite(v.type, isObj ? "val" : "val.value", `offset + ${payloadOffset}`)}\n\t\t\tbreak;\n\t\t}\n`;
+					});
+					code += `\t}\n}\n\n`;
+				}
+			}
+			return code;
+		},
+		wrapVersion: (_version, code) => code,
+	};
+}

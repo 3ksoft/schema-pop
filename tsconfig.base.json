@@ -1,0 +1,27 @@
+{
+	"compilerOptions": {
+		"module": "esnext",
+		"target": "es2023",
+		"lib": [
+			"ES2022"
+		],
+		"types": [
+			"node"
+		],
+		"incremental": true,
+		"skipLibCheck": true,
+		"moduleResolution": "bundler",
+		"verbatimModuleSyntax": true,
+		"moduleDetection": "auto",
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"erasableSyntaxOnly": false,
+		"noFallthroughCasesInSwitch": true,
+		"strict": true,
+		"declaration": true,
+		"declarationMap": true,
+		"composite": true,
+		"sourceMap": true,
+		"noEmit": false
+	}
+}

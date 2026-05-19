@@ -1,0 +1,21 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"outDir": "./dist",
+		"rootDir": "./src",
+		"tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo" // Ważne przy composite
+	},
+	"include": ["src/**/*"],
+	"exclude": ["node_modules", "dist"],
+	"references": [
+		{
+			"path": "../exporter"
+		},
+		{
+			"path": "../importer"
+		},
+		{
+			"path": "../core"
+		}
+	]
+}

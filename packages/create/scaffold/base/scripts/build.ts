@@ -1,6 +1,6 @@
-import { $ } from "bun";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { $ } from "bun";
 
 const isWatch = process.argv.includes("--watch");
 const root = join(import.meta.dir, "..");

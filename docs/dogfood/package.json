@@ -2,9 +2,9 @@
 	"name": "schema-pop-dogfood",
 	"private": true,
 	"type": "module",
-	"devDependencies": {
-		"schema-pop": "workspace:*",
-		"@schema-pop/core-exporters": "workspace:*",
-		"@schema-pop/extra-exporters": "workspace:*"
+	"scripts": {
+		"generate:ts": "bun ../../packages/cli/dist/cli.js .pop.ts -t ts",
+		"generate:js": "bun ../../packages/cli/dist/cli.js .pop.ts -t js",
+		"generate:wgsl": "bun ../../packages/cli/dist/cli.js .pop.ts -t wgsl"
 	}
 }

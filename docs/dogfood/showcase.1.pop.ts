@@ -14,17 +14,17 @@
 // Every line is intentionally small enough to render as a single block
 // in the HTML viewer.
 
-import { migrations, schemaPop, scope } from "schema-pop";
-import { html } from "@schema-pop/extra-exporters";
+import { schemaPop, popExtensions,binary, scope } from "schema-pop";
+import { html } from "@schema-pop/exporter";
 
 export const $ = schemaPop(
 	{
 		// Showcase HTML doubles as the dogfood landing page.
 		targets: [html({ dest: "./index.html" })],
 	},
-	scope({
-	...schemaPop,
-	...migrations.import(),
+	type.module({
+	...binary.import(),
+	...popExtensions.export(),
 
 	// 1. PRIMITIVES — full coverage of fixed-width integer + float.
 	AllScalars: {

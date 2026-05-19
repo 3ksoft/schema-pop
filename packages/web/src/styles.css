@@ -1,0 +1,28 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+@theme {
+  --color-brand-paper: #fffae3;
+  --color-brand-ink: #00241b;
+  --color-brand-accent: #f7567c;
+  --color-brand-dusk: #404e7c;
+  --color-brand-good: #1f8a5a;
+  --color-brand-warn: #c47a08;
+  --color-brand-bad: #c0392b;
+}
+
+body {
+	@apply bg-brand-paper text-brand-ink dark:bg-[#0a0a0a] dark:text-brand-paper antialiased;
+	font-family: "Inter", sans-serif;
+}
+
+/* Dodatkowe ustawienia CodeMirror, żeby zajmował całą wysokość flexa */
+.cm-editor {
+	height: 100%;
+	outline: none !important;
+}
+.cm-scroller {
+	overflow: auto;
+	font-family: "JetBrains Mono", monospace;
+	font-size: 13px;
+}

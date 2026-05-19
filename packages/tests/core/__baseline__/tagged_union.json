@@ -1,0 +1,119 @@
+{
+	"version": "v1",
+	"endian": "le",
+	"autoLayout": false,
+	"wordSize": 64,
+	"types": [
+		{
+			"kind": "enum",
+			"name": "UTag",
+			"size": 1,
+			"align": 1,
+			"paddedSize": 1,
+			"variants": [
+				{
+					"name": "A",
+					"value": 0,
+					"description": ""
+				},
+				{
+					"name": "B",
+					"value": 1,
+					"description": ""
+				}
+			],
+			"underlyingType": "u8"
+		},
+		{
+			"kind": "struct",
+			"name": "A",
+			"size": 1,
+			"align": 1,
+			"paddedSize": 1,
+			"fields": [
+				{
+					"name": "x",
+					"type": {
+						"kind": "primitive",
+						"name": "u8",
+						"size": 1,
+						"align": 1,
+						"paddedSize": 1,
+						"bitSize": 8,
+						"unsigned": false,
+						"isFloat": false,
+						"popKind": "binary"
+					},
+					"offset": 0,
+					"bitOffset": 0,
+					"bitSize": 8,
+					"size": 1,
+					"paddingAfter": 0,
+					"description": "unsigned 8-bit integer"
+				}
+			],
+			"description": ""
+		},
+		{
+			"kind": "struct",
+			"name": "B",
+			"size": 2,
+			"align": 2,
+			"paddedSize": 2,
+			"fields": [
+				{
+					"name": "y",
+					"type": {
+						"kind": "primitive",
+						"name": "u16",
+						"size": 2,
+						"align": 2,
+						"paddedSize": 2,
+						"bitSize": 16,
+						"unsigned": false,
+						"isFloat": false,
+						"popKind": "binary"
+					},
+					"offset": 0,
+					"bitOffset": 0,
+					"bitSize": 16,
+					"size": 2,
+					"paddingAfter": 0,
+					"description": "unsigned 16-bit integer"
+				}
+			],
+			"description": ""
+		},
+		{
+			"kind": "union",
+			"name": "U",
+			"size": 4,
+			"align": 2,
+			"paddedSize": 4,
+			"tagOffset": 0,
+			"tagSize": 1,
+			"tagType": "u8",
+			"variants": [
+				{
+					"name": "A",
+					"type": {
+						"kind": "reference",
+						"name": "A",
+						"indirection": "inline",
+						"isForward": false
+					}
+				},
+				{
+					"name": "B",
+					"type": {
+						"kind": "reference",
+						"name": "B",
+						"indirection": "inline",
+						"isForward": false
+					}
+				}
+			],
+			"description": ""
+		}
+	]
+}

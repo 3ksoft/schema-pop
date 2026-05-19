@@ -37,7 +37,7 @@ cd packages/extra-exporters && bun publish --access public && cd ../..
 cd packages/create          && bun publish --access public && cd ../..
 
 # 5. Verify on npm.
-for p in schema-pop @schema-pop/core-exporters @schema-pop/extra-exporters create-schema-pop; do
+for p in schema-pop @schema-pop/exporter @schema-pop/exporter create-schema-pop; do
   printf "%-35s " "$p"
   npm view "$p" version
 done

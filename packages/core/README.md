@@ -14,18 +14,20 @@
 import { scope, binary } from "schema-pop";
 
 export const $ = scope({
-    ...binary.import(),
+  ...binary.import(),
 
-    DeviceStatus: "'Idle' | 'Active' | 'Error' | 'LowBattery'",
-    BatteryInfo: {
-        voltage: "u32",
-        current: "i32",
-        legacy_temp: "Obsolete<i16, 'use ThermalSensor in v2'>",
-    },
-    SensorFrame: {
-        ts: "u32",
-        ax: "i16", ay: "i16", az: "i16",
-    },
+  DeviceStatus: "'Idle' | 'Active' | 'Error' | 'LowBattery'",
+  BatteryInfo: {
+    voltage: "u32",
+    current: "i32",
+    legacy_temp: "Obsolete<i16, 'use ThermalSensor in v2'>",
+  },
+  SensorFrame: {
+    ts: "u32",
+    ax: "i16",
+    ay: "i16",
+    az: "i16",
+  },
 });
 ```
 

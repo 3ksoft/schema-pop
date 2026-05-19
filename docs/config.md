@@ -39,7 +39,7 @@ schema-pop emit fields.pop.ts -o dist/fields.rs    # type inferred from .rs
 cat fields.pop.ts | schema-pop emit -t html -n widgets > widgets.html
 ```
 
-Reads stdin when input is `-` or omitted on a pipe. `-t` accepts `rust | c | cpp | ts | zig | md | html | wgsl | glsl | svg | openapi | nuxt-ui | mermaid` (inferred from `-o` extension when missing). The exporter package (`@schema-pop/core-exporters` or `@schema-pop/extra-exporters`) must be installed in the project.
+Reads stdin when input is `-` or omitted on a pipe. `-t` accepts `rust | c | cpp | ts | zig | md | html | wgsl | glsl | svg | openapi | nuxt-ui | mermaid` (inferred from `-o` extension when missing). The exporter package (`@schema-pop/exporter` or `@schema-pop/exporter`) must be installed in the project.
 
 ## 2. Schema filenames
 
@@ -80,7 +80,7 @@ Targets and per-schema flags live inside the schema file. The wrap can be export
 
 ```ts
 import { schemaPop, scope } from "schema-pop";
-import { rust, c, html } from "@schema-pop/core-exporters";
+import { rust, c, html } from "@schema-pop/exporter";
 
 export default schemaPop(
 	{

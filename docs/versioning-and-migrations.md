@@ -16,7 +16,7 @@ Schemas evolve. `schema-pop` lets you ship multiple versions of one schema side 
    ```ts
    // test-schema.2.pop.ts
    import { schemaPop, scope } from "schema-pop";
-   import { rust, html } from "@schema-pop/core-exporters";
+   import { rust, html } from "@schema-pop/exporter";
 
    export const $ = schemaPop(
        { targets: [rust({}), html({})] },

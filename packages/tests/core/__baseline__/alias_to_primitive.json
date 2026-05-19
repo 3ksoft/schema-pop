@@ -1,0 +1,27 @@
+{
+	"version": "v1",
+	"endian": "le",
+	"autoLayout": false,
+	"wordSize": 64,
+	"types": [
+		{
+			"kind": "alias",
+			"name": "Counter",
+			"size": 4,
+			"align": 4,
+			"paddedSize": 4,
+			"type": {
+				"kind": "primitive",
+				"name": "u32",
+				"size": 4,
+				"align": 4,
+				"paddedSize": 4,
+				"bitSize": 32,
+				"unsigned": false,
+				"isFloat": false,
+				"popKind": "binary"
+			},
+			"description": "unsigned 32-bit integer"
+		}
+	]
+}

@@ -1,4 +1,4 @@
-import { scope, binary } from "schema-pop";
+import { binary, scope } from "schema-pop";
 export const $testScope = scope({
 	...binary.import(),
 	BasePin: {

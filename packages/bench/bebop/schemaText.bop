@@ -1,0 +1,11 @@
+struct Message {
+    string sender;
+    string body;
+    uint32 timestamp;
+    byte flags;
+}
+
+struct ChatBatch {
+    uint32 batchId;
+    Message[] messages;
+}

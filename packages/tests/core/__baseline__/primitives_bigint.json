@@ -1,0 +1,98 @@
+{
+	"version": "v1",
+	"endian": "le",
+	"autoLayout": false,
+	"wordSize": 64,
+	"types": [
+		{
+			"kind": "struct",
+			"name": "Big",
+			"size": 48,
+			"align": 8,
+			"paddedSize": 48,
+			"fields": [
+				{
+					"name": "a",
+					"type": {
+						"kind": "primitive",
+						"name": "u128",
+						"size": 16,
+						"align": 8,
+						"paddedSize": 16,
+						"bitSize": 128,
+						"unsigned": false,
+						"isFloat": false,
+						"popKind": "binary"
+					},
+					"offset": 0,
+					"bitOffset": 0,
+					"bitSize": 128,
+					"size": 16,
+					"paddingAfter": 0,
+					"description": "unsigned 128-bit integer"
+				},
+				{
+					"name": "b",
+					"type": {
+						"kind": "primitive",
+						"name": "i128",
+						"size": 16,
+						"align": 8,
+						"paddedSize": 16,
+						"bitSize": 128,
+						"unsigned": false,
+						"isFloat": false,
+						"popKind": "binary"
+					},
+					"offset": 16,
+					"bitOffset": 0,
+					"bitSize": 128,
+					"size": 16,
+					"paddingAfter": 0,
+					"description": "signed 128-bit integer"
+				},
+				{
+					"name": "c",
+					"type": {
+						"kind": "primitive",
+						"name": "u64",
+						"size": 8,
+						"align": 8,
+						"paddedSize": 8,
+						"bitSize": 64,
+						"unsigned": false,
+						"isFloat": false,
+						"popKind": "binary"
+					},
+					"offset": 32,
+					"bitOffset": 0,
+					"bitSize": 64,
+					"size": 8,
+					"paddingAfter": 0,
+					"description": "unsigned 64-bit integer"
+				},
+				{
+					"name": "d",
+					"type": {
+						"kind": "primitive",
+						"name": "f64",
+						"size": 8,
+						"align": 8,
+						"paddedSize": 8,
+						"bitSize": 64,
+						"unsigned": false,
+						"isFloat": false,
+						"popKind": "binary"
+					},
+					"offset": 40,
+					"bitOffset": 0,
+					"bitSize": 64,
+					"size": 8,
+					"paddingAfter": 0,
+					"description": "64-bit float"
+				}
+			],
+			"description": ""
+		}
+	]
+}

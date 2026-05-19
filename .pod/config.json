@@ -1,24 +1,34 @@
 {
   "profiles": [
     {
+      "name": "task",
+      "label": "task",
+      "query": "+packages/exporter/src/exporters/rust.ts\n+packages/exporter/src/exporters/tsCodec.md\n+packages/exporter/src/exporterTools.ts"
+    },
+    {
+      "name": "gimli",
+      "label": "gimli",
+      "query": "+ packages/importer/gimli/**/*.{rs,cargo,json,toml}"
+    },
+    {
       "name": "core",
       "label": "core",
       "query": "+ packages/core/**/*.{ts,hpp,cpp,rs,toml,json,md}\n- packages/core/dist/**"
     },
     {
-      "name": "create",
-      "label": "create",
-      "query": "+ packages/create/**/*.{ts,hpp,cpp,rs,toml,json,md}"
+      "name": "tests",
+      "label": "tests",
+      "query": "+ packages/tests/**/*.{ts,hpp,cpp,rs,toml,json,md}"
     },
     {
-      "name": "core-exporters",
-      "label": "core-exporters",
-      "query": "+ packages/core-exporters/**/*.{ts,hpp,cpp,rs,toml,json,md}"
+      "name": "schema",
+      "label": "schema",
+      "query": "+ packages/schema/src/**/*.{ts,hpp,cpp,rs,toml,json,md}"
     },
     {
-      "name": "extra-exporters",
-      "label": "extr a-exporters",
-      "query": "+ packages/extra-exporters/**/*.{ts,hpp,cpp,rs,toml,json,md}"
+      "name": "exporters",
+      "label": "exporters",
+      "query": "+ packages/exporter/**/*.{ts,hpp,cpp,rs,toml,json,md}"
     },
     {
       "name": "treesitter_importer",
@@ -28,7 +38,7 @@
     {
       "name": "web",
       "label": "web",
-      "query": "+ web/**/*.{ts,hpp,cpp,rs,toml,json,md,html}"
+      "query": "+ packages/web/**/*.{ts,hpp,cpp,rs,toml,json,md,html,vue}"
     },
     {
       "name": "docs",
@@ -43,7 +53,7 @@
     {
       "name": "config",
       "label": "config",
-      "query": "+ package.json\n+ */package.json\n+ */tsconfig.json"
+      "query": "+ package.json\n+ packages/*/package.json\n+ tsconfig.json\n+ packages/*/tsconfig.json"
     },
     {
       "name": "manual_test",
@@ -64,5 +74,5 @@
   },
   "forceRoot": false,
   "syncVersion": false,
-  "version": "0.0.156"
+  "version": "0.0.199"
 }

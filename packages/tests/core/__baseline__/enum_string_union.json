@@ -1,0 +1,34 @@
+{
+	"version": "v1",
+	"endian": "le",
+	"autoLayout": false,
+	"wordSize": 64,
+	"types": [
+		{
+			"kind": "enum",
+			"name": "Mode",
+			"size": 1,
+			"align": 1,
+			"paddedSize": 1,
+			"variants": [
+				{
+					"name": "active",
+					"value": 0,
+					"description": ""
+				},
+				{
+					"name": "error",
+					"value": 1,
+					"description": ""
+				},
+				{
+					"name": "idle",
+					"value": 2,
+					"description": ""
+				}
+			],
+			"underlyingType": "u8",
+			"description": ""
+		}
+	]
+}

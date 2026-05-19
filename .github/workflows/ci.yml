@@ -29,9 +29,8 @@ jobs:
       - name: Typecheck (all packages)
         run: bun run typecheck
 
-      - name: Build (core → core-exporters → extra-exporters)
+      - name: Build (schema → core → exporter → importer → cli)
         run: bun run build
 
-      - name: Unit tests (core)
-        run: bun test
-        working-directory: packages/core
+      - name: Unit tests
+        run: bun run test

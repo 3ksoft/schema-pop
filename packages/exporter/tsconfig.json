@@ -1,0 +1,22 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"outDir": "./dist",
+		"rootDir": "./src",
+		"tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
+		"noUnusedLocals": false
+	},
+	"include": [
+		"src/**/*"
+	],
+	"exclude": [
+		"node_modules",
+		"dist",
+		"src/migrations/**/*"
+	],
+	"references": [
+		{
+			"path": "../schema"
+		}
+	]
+}

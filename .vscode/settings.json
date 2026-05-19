@@ -1,19 +1,58 @@
 {
-  "explorer.fileNesting.enabled": true,
-  "explorer.fileNesting.patterns": {
-    "tsconfig.json": "tsconfig.*.json, env.d.ts, typed-router.d.ts",
-    "vite.config.*": "jsconfig*, vitest.config.*, cypress.config.*, playwright.config.*",
-    "package.json": "package-lock.json, pnpm*, .yarnrc*, yarn*, .eslint*, eslint*, .oxlint*, oxlint*, .oxfmt*, .prettier*, prettier*, .editorconfig",
-    ".gitignore": ".gitignore, auto-imports.d.ts, components.d.ts"
-  },
-  "editor.formatOnSave": true,
-  "editor.defaultFormatter": "oxc.oxc-vscode",
-  "[jsonc]": {
-    "editor.defaultFormatter": "oxc.oxc-vscode"
-  },
-  "cmake.sourceDirectory": "/home/kr/Documents/schema-pop/packages/cpp",
-  "folder-color.pathColors": [],
-  "[typescript]": {
-    "editor.defaultFormatter": "biomejs.biome"
-  }
+	"explorer.fileNesting.enabled": true,
+	"explorer.fileNesting.patterns": {
+		"tsconfig.json": "tsconfig.*.json, env.d.ts, typed-router.d.ts",
+		"vite.config.*": "jsconfig*, vitest.config.*, cypress.config.*, playwright.config.*",
+		"package.json": "package-lock.json, pnpm*, .yarnrc*, yarn*, .eslint*, eslint*, .oxlint*, oxlint*, .oxfmt*, .prettier*, prettier*, .editorconfig",
+		".gitignore": ".gitignore, auto-imports.d.ts, components.d.ts"
+	},
+	"editor.formatOnSave": true,
+	"[jsonc]": {
+		"editor.defaultFormatter": "vscode.json-language-features"
+	},
+	"cmake.sourceDirectory": "/home/kr/Documents/schema-pop/packages/cpp",
+	"folder-color.pathColors": [
+		{
+			"folderPath": "schema-pop/packages/schema/",
+			"color": "foldercolorizer.color_5fafaf",
+			"badge": "SC"
+		},
+		{
+			"folderPath": "schema-pop/packages/importer/",
+			"color": "foldercolorizer.color_ffd787",
+			"badge": "IM"
+		},
+		{
+			"folderPath": "schema-pop/packages/core/",
+			"color": "foldercolorizer.color_ffd7d7",
+			"badge": "CO"
+		},
+		{
+			"folderPath": "schema-pop/packages/create/",
+			"color": "foldercolorizer.color_808080",
+			"badge": "CR"
+		},
+		{
+			"extension": "test.ts",
+			"color": "foldercolorizer.color_ffd7ff"
+		},
+		{
+			"folderPath": "schema-pop/packages/tests/",
+			"color": "foldercolorizer.color_0087af"
+		},
+		{
+			"folderPath": "schema-pop/packages/exporter/",
+			"color": "foldercolorizer.color_5faf87"
+		},
+		{
+			"folderPath": "schema-pop/packages/bench/",
+			"color": "foldercolorizer.color_d75faf"
+		}
+	],
+	"[typescript]": {
+		"editor.defaultFormatter": "biomejs.biome"
+	},
+	"[json]": {
+		"editor.defaultFormatter": "biomejs.biome"
+	}
 }

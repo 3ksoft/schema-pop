@@ -18,7 +18,7 @@ Per-target, set inside the schema file's `schemaPop({ targets: [...] }, scope)` 
 ```ts
 // telemetry.1.pop.ts
 import { schemaPop, scope } from "schema-pop";
-import { ts, rust } from "@schema-pop/core-exporters";
+import { ts, rust } from "@schema-pop/exporter";
 
 export const $ = schemaPop(
     {

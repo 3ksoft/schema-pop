@@ -1,0 +1,34 @@
+{
+	"name": "@schema-pop/gimli-importer",
+	"version": "0.1.0",
+	"description": "Import binary types from dwarf binaries.",
+	"type": "module",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"bun:main": "./src/index.ts",
+	"types": "./dist/index.d.ts",
+	"bin": {
+		"schema-pop-import-dwarf": "./src/cli.ts"
+	},
+	"files": [
+		"dist",
+		"pkg",
+		"src",
+		"wasm"
+	],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"scripts": {
+		"build:wasm": "cd wasm && wasm-pack build --target web --out-dir ../pkg",
+		"build": "bun run build:wasm && rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --packages external && tsc --declaration --emitDeclarationOnly --outDir dist --noEmit false",
+		"typecheck": "tsc --noEmit",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"schema-pop": "workspace:*"
+	}
+}

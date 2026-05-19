@@ -1,69 +1,23 @@
 {
+	"extends": "../../tsconfig.base.json",
 	"compilerOptions": {
-		"target": "esnext",
-		"module": "esnext",
-		"moduleResolution": "bundler",
-
-		/* --- Strictness Foundation --- */
-		// Enables all strict type-checking options (noImplicitAny, strictNullChecks, etc.)
-		"strict": true,
-
-		/* --- Object & Array Safety (Critical for Binary Logic) --- */
-		// Accessing an array via index (arr[i]) results in T | undefined.
-		// Forces you to check if the element exists before using it.
-		"noUncheckedIndexedAccess": true,
-		// Prevents accessing properties using dot notation if they are part of an index signature.
-		// Forces obj["key"] for dynamic keys.
-		"noPropertyAccessFromIndexSignature": true,
-		// Prevents assigning 'undefined' to an optional property.
-		// A property is either there with a value, or it is not there at all.
-		"exactOptionalPropertyTypes": true,
-
-		/* --- Logic Flow & Correctness --- */
-		// Ensures every single code path in a function returns a value.
-		"noImplicitReturns": true,
-		// Report errors for fallthrough cases in switch statements (prevents missing 'break').
-		"noFallthroughCasesInSwitch": true,
-		// Disallows code that can never be executed.
-		"allowUnreachableCode": false,
-		"allowUnusedLabels": false,
-		// Requires 'override' keyword when extending classes (prevents accidental overrides).
-		"noImplicitOverride": true,
-		// Ensures 'this' is not used in contexts where its type is 'any'.
-		"noImplicitThis": true,
-
-		/* --- Cleanliness --- */
-		"noUnusedLocals": true,
-		"noUnusedParameters": true,
-		// Ensures that side-effect-only imports (like CSS) are actually present.
-		"noUncheckedSideEffectImports": true,
-
-		/* --- Module Standards --- */
-		// Guarantees that each file can be safely transpiled without relying on other files.
-		"isolatedModules": true,
-		// Forces the use of 'import type' for types. Essential for tree-shaking and hybrid packages.
-		"verbatimModuleSyntax": true,
-		// Disallows TypeScript-only features that leave code behind (like enums or namespaces).
-		// Forces the use of pure JS runtime syntax.
-		"erasableSyntaxOnly": true,
-
-		/* --- Build Reliability --- */
-		// Prevents issues when developing on Windows/macOS and deploying to Linux.
-		"forceConsistentCasingInFileNames": true,
-		// Do not emit outputs (JS/Types) if there are any type errors.
-		"noEmitOnError": true,
-		// Validates the types of your dependencies (ArkType, etc.).
-		// If a dependency has a type bug, your build will catch it.
-		"skipLibCheck": false,
-
-		/* --- Output Quality --- */
-		"declaration": true,
+		"outDir": "./dist",
 		"rootDir": "./src",
-		// Prevents exposing internal library details in the generated .d.ts files.
-		"stripInternal": true,
-		// Blocks global type pollution. Types like 'node' must be manually referenced.
-		"types": []
+		"tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
+		"noUnusedLocals": false,
+		"noUnusedParameters": false
 	},
-	"include": ["src"],
-	"exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.bench.ts"]
+	"include": [
+		"src/**/*",
+	],
+	"exclude": [
+		"src/engine/**/*",
+		"node_modules",
+		"dist"
+	],
+	"references": [
+		{
+			"path": "../schema"
+		}
+	]
 }

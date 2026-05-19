@@ -6,5 +6,5 @@ import { defineConfig } from "schema-pop";
 // the discovery glob; each schema picks its own targets.
 export default defineConfig({
 	endian: "le",
-	wordSize: 64,
+	wordSize: '64',
 });

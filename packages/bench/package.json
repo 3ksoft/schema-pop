@@ -1,0 +1,25 @@
+{
+	"name": "@schema-pop/bench",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"gen": "bun src/gen.ts",
+		"gen:bebop": "bebopc -i bebop/schema.bop build --generator ts:./bebop/generated.ts && bebopc -i bebop/schemaText.bop build --generator ts:./bebop/generatedText.ts",
+		"bench": "bun src/run.ts",
+		"bench:text": "bun src/runText.ts",
+		"all": "bun src/gen.ts && bun src/run.ts && bun src/runText.ts"
+	},
+	"dependencies": {
+		"@schema-pop/core": "workspace:*",
+		"@schema-pop/exporter": "workspace:*",
+		"@schema-pop/schema": "workspace:*",
+		"bebop": "^3.2.3",
+		"bebop-tools": "^3.2.3",
+		"mitata": "^1.0.34",
+		"msgpackr": "^1.11.2"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.13"
+	}
+}

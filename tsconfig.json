@@ -1,0 +1,21 @@
+// ./tsconfig.json
+{
+	"files": [],
+	"references": [
+		{
+			"path": "./packages/schema"
+		},
+		{
+			"path": "./packages/core"
+		},
+		{
+			"path": "./packages/exporter"
+		},
+		{
+			"path": "./packages/importer"
+		},
+		{
+			"path": "./packages/cli"
+		}
+	]
+}

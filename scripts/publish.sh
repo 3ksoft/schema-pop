@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Publish all four packages to npm under a single coordinated version.
+# Publish all schema-pop packages to npm under a single coordinated version.
 #
-#   scripts/publish.sh 0.1.5
-#   scripts/publish.sh 0.1.5 --dry-run
+#   scripts/publish.sh 0.2.0
+#   scripts/publish.sh 0.2.0 --dry-run
 #
 # Does NOT touch git (no commit, no tag, no push). Run a normal release
 # commit after this if/when you want one.
@@ -23,7 +23,15 @@ fi
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-PACKAGES=(packages/core packages/core-exporters packages/extra-exporters packages/treesitter_importer packages/clang_importer packages/importer packages/import-cli packages/create)
+# Publish order matters: dependencies first.
+PACKAGES=(
+	packages/schema
+	packages/core
+	packages/exporter
+	packages/importer
+	packages/cli
+	packages/create
+)
 
 if [ -z "$DRY_RUN" ]; then
 	echo "==> Bumping all packages to $VERSION (and pinning workspace deps)"
@@ -54,24 +62,14 @@ fi
 echo "==> Typecheck"
 bun run typecheck
 
-echo "==> Build"
+echo "==> Build (schema, core, exporter, importer, cli)"
 bun run build
 
-echo "==> Build importer packages"
-for pkg in packages/treesitter_importer packages/clang_importer packages/importer; do
-	echo "    -> $pkg"
-	(cd "$pkg" && bun run build)
-done
-
 echo "==> Unit tests"
-(cd packages/core && bun test)
-for pkg in packages/treesitter_importer packages/clang_importer; do
-	echo "    -> $pkg"
-	(cd "$pkg" && bun test)
-done
+bun run test
 
-echo "==> Syncing README into core / core-exporters / extra-exporters"
-for pkg in packages/core packages/core-exporters packages/extra-exporters; do
+echo "==> Syncing root README into library packages"
+for pkg in packages/schema packages/core packages/exporter packages/importer; do
 	cp README.md "$pkg/README.md"
 done
 
@@ -83,9 +81,9 @@ done
 
 if [ -z "$DRY_RUN" ]; then
 	echo "==> Verifying versions on npm"
-	for p in schema-pop @schema-pop/core-exporters @schema-pop/extra-exporters @schema-pop/treesitter-importer @schema-pop/clang-importer @schema-pop/importer schema-pop-import create-schema-pop; do
-		printf "    %-35s " "$p"
-		npm view "$p" version 2>/dev/null
+	for p in @schema-pop/schema @schema-pop/core @schema-pop/exporter @schema-pop/importer schema-pop create-schema-pop; do
+		printf "    %-30s " "$p"
+		npm view "$p" version 2>/dev/null || echo "(not found)"
 	done
 fi
 

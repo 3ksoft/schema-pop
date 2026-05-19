@@ -1,0 +1,45 @@
+{
+	"name": "schema-pop",
+	"version": "0.2.0",
+	"type": "module",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/3ksoft/schema-pop.git"
+	},
+	"bugs": {
+		"url": "https://github.com/3ksoft/schema-pop/issues"
+	},
+	"homepage": "https://github.com/3ksoft/schema-pop#readme",
+	"keywords": [
+		"schema",
+		"serialization",
+		"binary",
+		"layout",
+		"compiler",
+		"codegen",
+		"cli"
+	],
+	"bin": {
+		"schema-pop": "./dist/cli.js"
+	},
+	"scripts": {
+		"build": "rm -rf dist && bun build ./src/cli.ts --outdir ./dist --target node --packages external",
+		"typecheck": "tsc --noEmit",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"@ark/schema": "0.56.0",
+		"@schema-pop/schema": "workspace:*",
+		"@schema-pop/core": "workspace:*",
+		"cac": "^7.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "^25.6.2",
+		"typescript": "6.0.3"
+	},
+	"files": [
+		"dist",
+		"src"
+	]
+}

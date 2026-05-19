@@ -2,13 +2,13 @@
 // covering every field kind that maps to a UI control: enum reference
 // (USelectMenu), nested struct reference (child *Form.vue), array with
 // add/remove, optional with set/unset toggle, bounded string, signed
-// + unsigned integers (UInputNumber with bounds from binary.import()),
+// + unsigned integers (UInputNumber with bounds from binary),
 // bool checkbox, and a deprecation marker.
 //
 // Generated files land in ./forms/ — open them to see the output.
 
 import { schemaPop, scope, binary } from "schema-pop";
-import { nuxtUi } from "@schema-pop/extra-exporters";
+import { nuxtUi } from "@schema-pop/exporter";
 
 export const $ = schemaPop(
 	{

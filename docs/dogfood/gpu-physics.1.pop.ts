@@ -10,14 +10,15 @@
 // fields — we mirror that here.
 
 import { schemaPop, scope } from "schema-pop";
-import { html, wgsl } from "@schema-pop/extra-exporters";
+import { cpp } from "@schema-pop/exporter";
+import { html, wgsl } from "@schema-pop/exporter";
 
 export const $ = schemaPop(
 	{
 		layout: "std430",
 		autoLayout: false,
 		targets: [
-			wgsl({ dest: "./gpu-physics.wgsl" }),
+			cpp({ dest: "./gpu-physics.wgsl" }),
 			html({ dest: "./gpu-physics.html" }),
 		],
 	},

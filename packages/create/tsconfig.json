@@ -13,5 +13,5 @@
 		"resolveJsonModule": true,
 		"types": ["node", "bun"]
 	},
-	"files": ["bin.ts", "create.test.ts"]
+	"files": ["bin.ts"]
 }

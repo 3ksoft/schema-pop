@@ -3,7 +3,7 @@
 Code exporters compile a TypeScript migration function (erasable syntax) into a target-language
 function that operates on raw byte buffers, using field offsets from `fromPlan` / `toPlan`.
 
-| Package | `@schema-pop/core-exporters` |
+| Package | `@schema-pop/exporter` |
 |---|---|
 | Entry points | `compileCMigration`, `compileRustMigration` |
 

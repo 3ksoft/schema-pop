@@ -7,7 +7,7 @@ schema-pop intermediate representation that all exporters consume.
 
 ## 1. Tree-sitter
 
-Package: `@schema-pop/treesitter-importer`
+Package: `@schema-pop/importer`
 
 Parses source files using [tree-sitter](https://tree-sitter.github.io/) WebAssembly grammars.
 Each language has a dedicated walker that extracts struct/class/type definitions and maps

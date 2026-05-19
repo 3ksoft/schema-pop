@@ -6,9 +6,9 @@
 |---|---|
 | `schema-pop` | Core types, analyzer, migrations, codec. Browser-safe. |
 | `schema-pop/node` | Core + Node/Bun-only APIs: `readLayoutPlan`, `writeLayoutPlan`, `buildSchema`. |
-| `@schema-pop/treesitter-importer` | Source-file → IR importer for 15 languages. |
-| `@schema-pop/core-exporters` | Schema exporters (C, C++, Rust, Go, Zig, TS) + code migration compilers. |
-| `@schema-pop/extra-exporters` | HTML viewer, WGSL, Nuxt UI, and other higher-level exporters. |
+| `@schema-pop/importer` | Source-file → IR importer for 15 languages. |
+| `@schema-pop/exporter` | Schema exporters (C, C++, Rust, Go, Zig, TS) + code migration compilers. |
+| `@schema-pop/exporter` | HTML viewer, WGSL, Nuxt UI, and other higher-level exporters. |
 
 ---
 
@@ -19,7 +19,7 @@ There are four distinct formats in schema-pop, each at a different abstraction l
 ```
 Source file (.rs / .go / .py / …)        pop.ts (ArkType scope)
         │                                         │
-        ▼  @schema-pop/treesitter-importer        │ schema-pop/node  [needs jiti]
+        ▼  @schema-pop/importer        │ schema-pop/node  [needs jiti]
    SchemaPopIR  ──── emitArktypeScope ──► pop.ts  │ bindFile / buildSchema
         │                                         │
         └──────────────────┬──────────────────────┘
@@ -71,7 +71,7 @@ Graph of files, nodes, symbols, and types for documentation or analysis (Gimli i
 ### From a source file (tree-sitter)
 
 ```ts
-import { importFile, fileToArktypeScope } from "@schema-pop/treesitter-importer";
+import { importFile, fileToArktypeScope } from "@schema-pop/importer";
 
 // → SchemaPopIR (in-memory)
 const ir = await importFile("src/types.rs");
@@ -164,8 +164,8 @@ interface ExporterPlugin<TConfig> {
 ### Schema exporters
 
 ```ts
-import { c, cpp, rust, go, zig, ts } from "@schema-pop/core-exporters";
-import { html, wgsl } from "@schema-pop/extra-exporters";
+import { c, cpp, rust, go, zig, ts } from "@schema-pop/exporter";
+import { html, wgsl } from "@schema-pop/exporter";
 
 const plugin = rust();
 const code = plugin.generate(plan);
@@ -175,7 +175,7 @@ const diff = plugin.generateMigration!(v1, v2);
 ### Code migration compilers
 
 ```ts
-import { compileCMigration, compileRustMigration } from "@schema-pop/core-exporters";
+import { compileCMigration, compileRustMigration } from "@schema-pop/exporter";
 
 // Compiles a TS erasable-syntax migration function → C / Rust raw-buffer function.
 const cCode    = await compileCMigration(tsSource, fromPlan, toPlan);
@@ -187,7 +187,7 @@ See [code-exporters.md](../exporters/code-exporters.md) for full expression cove
 ### HTML diff viewer
 
 ```ts
-import { html } from "@schema-pop/extra-exporters";
+import { html } from "@schema-pop/exporter";
 import { readLayoutPlan } from "schema-pop/node";
 
 const plugin = html();

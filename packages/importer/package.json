@@ -1,37 +1,34 @@
 {
 	"name": "@schema-pop/importer",
-	"version": "0.1.42",
-	"description": "Unified CLI dispatcher: schema-pop-import <file> picks tree-sitter (Rust) or system clang (C / C++) and writes an arktype scope.",
+	"version": "0.2.0",
+	"description": "Import into schema-pop",
 	"type": "module",
 	"main": "./dist/index.js",
 	"module": "./dist/index.js",
 	"bun:main": "./src/index.ts",
 	"types": "./dist/index.d.ts",
-	"bin": {
-		"schema-pop-import": "./src/cli.ts"
-	},
 	"files": [
 		"dist",
 		"src",
-		"scripts"
+		"wasm"
 	],
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
 			"default": "./dist/index.js"
-		},
-		"./cli": "./src/cli.ts"
+		}
 	},
 	"scripts": {
 		"build": "rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --packages external && tsc --declaration --emitDeclarationOnly --outDir dist --noEmit false",
-		"compile": "bash ./scripts/compile.sh",
+		"build:wasm": "bash ./scripts/build-wasm.sh",
+		"build:gimli": "bash ./scripts/build-gimli.sh",
 		"typecheck": "tsc --noEmit",
 		"test": "bun test"
 	},
 	"dependencies": {
-		"@schema-pop/clang-importer": "0.1.42",
-		"@schema-pop/treesitter-importer": "0.1.42",
-		"jiti": "^2.0.0",
-		"schema-pop": "0.1.42"
+		"@schema-pop/schema": "workspace:*",
+		"@types/xml2js": "^0.4.14",
+		"web-tree-sitter": "^0.26.8",
+		"xml2js": "^0.6.2"
 	}
 }

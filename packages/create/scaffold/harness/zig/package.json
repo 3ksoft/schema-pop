@@ -1,6 +1,6 @@
 {
 	"name": "zig",
 	"scripts": {
-		"build": "zig build-exe src/main.zig -O ReleaseSafe --name harness"
+		"build": "zig build-exe src/main.zig -OReleaseFast --name harness && mv harness ./harness"
 	}
 }
