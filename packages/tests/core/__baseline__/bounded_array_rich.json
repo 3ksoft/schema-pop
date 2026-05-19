@@ -1,41 +1,41 @@
 {
-	"version": "v1",
-	"endian": "le",
-	"autoLayout": false,
-	"wordSize": 64,
-	"types": [
-		{
-			"kind": "struct",
-			"name": "Tags",
-			"size": 44,
-			"align": 4,
-			"paddedSize": 44,
-			"fields": [
-				{
-					"name": "items",
-					"type": {
-						"kind": "array",
-						"item": {
-							"kind": "primitive",
-							"name": "u32",
-							"size": 4,
-							"align": 4,
-							"paddedSize": 4,
-							"bitSize": 32,
-							"unsigned": false,
-							"isFloat": false,
-							"popKind": "binary"
-						},
-						"maxLength": 10
-					},
-					"offset": 0,
-					"bitOffset": 0,
-					"bitSize": 352,
-					"size": 44,
-					"paddingAfter": 0
-				}
-			],
-			"description": ""
-		}
-	]
+  "wordSize": "64",
+  "autoLayout": false,
+  "layout": "aligned",
+  "mode": "rich",
+  "version": "1.0.0",
+  "endian": "le",
+  "types": [
+    {
+      "kind": "struct",
+      "name": "Tags",
+      "size": 44,
+      "align": 4,
+      "paddedSize": 44,
+      "fields": [
+        {
+          "name": "items",
+          "type": {
+            "kind": "array",
+            "item": {
+              "kind": "primitive",
+              "name": "u32",
+              "size": 4,
+              "align": 4,
+              "paddedSize": 4,
+              "bitSize": 32,
+              "popKind": "binary"
+            },
+            "maxLength": 10
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 352,
+          "size": 44,
+          "paddingAfter": 0
+        }
+      ],
+      "description": ""
+    }
+  ]
 }

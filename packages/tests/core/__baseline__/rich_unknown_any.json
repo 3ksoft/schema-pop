@@ -1,29 +1,32 @@
 {
-	"version": "v1",
-	"endian": "le",
-	"autoLayout": false,
-	"wordSize": 64,
-	"types": [
-		{
-			"kind": "struct",
-			"name": "Any",
-			"size": 0,
-			"align": 1,
-			"paddedSize": 0,
-			"fields": [
-				{
-					"name": "payload",
-					"type": {
-						"kind": "any"
-					},
-					"offset": 0,
-					"bitOffset": 0,
-					"bitSize": 0,
-					"size": 0,
-					"paddingAfter": 0
-				}
-			],
-			"description": ""
-		}
-	]
+  "wordSize": "64",
+  "autoLayout": false,
+  "layout": "aligned",
+  "mode": "rich",
+  "version": "1.0.0",
+  "endian": "le",
+  "types": [
+    {
+      "kind": "struct",
+      "name": "Any",
+      "size": 0,
+      "align": 1,
+      "paddedSize": 0,
+      "fields": [
+        {
+          "name": "payload",
+          "type": {
+            "kind": "any"
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 0,
+          "size": 0,
+          "paddingAfter": 0,
+          "description": "Could not resolve type"
+        }
+      ],
+      "description": ""
+    }
+  ]
 }

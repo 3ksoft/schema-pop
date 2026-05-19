@@ -1,82 +1,80 @@
 {
-	"version": "v1",
-	"endian": "le",
-	"autoLayout": false,
-	"wordSize": 64,
-	"types": [
-		{
-			"kind": "struct",
-			"name": "Inner",
-			"size": 1,
-			"align": 1,
-			"paddedSize": 1,
-			"fields": [
-				{
-					"name": "x",
-					"type": {
-						"kind": "primitive",
-						"name": "u8",
-						"size": 1,
-						"align": 1,
-						"paddedSize": 1,
-						"bitSize": 8,
-						"unsigned": false,
-						"isFloat": false,
-						"popKind": "binary"
-					},
-					"offset": 0,
-					"bitOffset": 0,
-					"bitSize": 8,
-					"size": 1,
-					"paddingAfter": 0,
-					"description": "unsigned 8-bit integer"
-				}
-			],
-			"description": ""
-		},
-		{
-			"kind": "struct",
-			"name": "Outer",
-			"size": 2,
-			"align": 1,
-			"paddedSize": 2,
-			"fields": [
-				{
-					"name": "flag",
-					"type": {
-						"kind": "primitive",
-						"name": "bool",
-						"size": 1,
-						"align": 1,
-						"paddedSize": 1,
-						"bitSize": 8,
-						"unsigned": false,
-						"isFloat": false,
-						"popKind": "binary"
-					},
-					"offset": 0,
-					"bitOffset": 0,
-					"bitSize": 8,
-					"size": 1,
-					"paddingAfter": 0,
-					"description": "boolean"
-				},
-				{
-					"name": "inner",
-					"type": {
-						"kind": "reference",
-						"name": "Inner",
-						"indirection": "inline",
-						"isForward": false
-					},
-					"offset": 1,
-					"bitOffset": 0,
-					"bitSize": 8,
-					"size": 1,
-					"paddingAfter": 0
-				}
-			],
-			"description": ""
-		}
-	]
+  "wordSize": "64",
+  "autoLayout": false,
+  "layout": "aligned",
+  "mode": "binary",
+  "version": "1.0.0",
+  "endian": "le",
+  "types": [
+    {
+      "kind": "struct",
+      "name": "Inner",
+      "size": 1,
+      "align": 1,
+      "paddedSize": 1,
+      "fields": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "primitive",
+            "name": "u8",
+            "size": 1,
+            "align": 1,
+            "paddedSize": 1,
+            "bitSize": 8,
+            "popKind": "binary"
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 8,
+          "size": 1,
+          "paddingAfter": 0,
+          "description": "unsigned 8-bit integer"
+        }
+      ],
+      "description": ""
+    },
+    {
+      "kind": "struct",
+      "name": "Outer",
+      "size": 2,
+      "align": 1,
+      "paddedSize": 2,
+      "fields": [
+        {
+          "name": "flag",
+          "type": {
+            "kind": "primitive",
+            "name": "bool",
+            "size": 1,
+            "align": 1,
+            "paddedSize": 1,
+            "bitSize": 8,
+            "popKind": "binary"
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 8,
+          "size": 1,
+          "paddingAfter": 0,
+          "description": "boolean"
+        },
+        {
+          "name": "inner",
+          "type": {
+            "kind": "reference",
+            "name": "Inner",
+            "indirection": "inline",
+            "isForward": false
+          },
+          "offset": 1,
+          "bitOffset": 0,
+          "bitSize": 8,
+          "size": 1,
+          "paddingAfter": 0
+        }
+      ],
+      "description": ""
+    }
+  ]
 }

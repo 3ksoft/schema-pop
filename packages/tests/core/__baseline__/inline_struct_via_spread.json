@@ -1,88 +1,84 @@
 {
-	"version": "v1",
-	"endian": "le",
-	"autoLayout": false,
-	"wordSize": 64,
-	"types": [
-		{
-			"kind": "struct",
-			"name": "Base",
-			"size": 4,
-			"align": 4,
-			"paddedSize": 4,
-			"fields": [
-				{
-					"name": "id",
-					"type": {
-						"kind": "primitive",
-						"name": "u32",
-						"size": 4,
-						"align": 4,
-						"paddedSize": 4,
-						"bitSize": 32,
-						"unsigned": false,
-						"isFloat": false,
-						"popKind": "binary"
-					},
-					"offset": 0,
-					"bitOffset": 0,
-					"bitSize": 32,
-					"size": 4,
-					"paddingAfter": 0,
-					"description": "unsigned 32-bit integer"
-				}
-			],
-			"description": ""
-		},
-		{
-			"kind": "struct",
-			"name": "Derived",
-			"size": 8,
-			"align": 4,
-			"paddedSize": 8,
-			"fields": [
-				{
-					"name": "extra",
-					"type": {
-						"kind": "primitive",
-						"name": "u8",
-						"size": 1,
-						"align": 1,
-						"paddedSize": 1,
-						"bitSize": 8,
-						"unsigned": false,
-						"isFloat": false,
-						"popKind": "binary"
-					},
-					"offset": 0,
-					"bitOffset": 0,
-					"bitSize": 8,
-					"size": 1,
-					"paddingAfter": 3,
-					"description": "unsigned 8-bit integer"
-				},
-				{
-					"name": "id",
-					"type": {
-						"kind": "primitive",
-						"name": "u32",
-						"size": 4,
-						"align": 4,
-						"paddedSize": 4,
-						"bitSize": 32,
-						"unsigned": false,
-						"isFloat": false,
-						"popKind": "binary"
-					},
-					"offset": 4,
-					"bitOffset": 0,
-					"bitSize": 32,
-					"size": 4,
-					"paddingAfter": 0,
-					"description": "unsigned 32-bit integer"
-				}
-			],
-			"description": ""
-		}
-	]
+  "wordSize": "64",
+  "autoLayout": false,
+  "layout": "aligned",
+  "mode": "binary",
+  "version": "1.0.0",
+  "endian": "le",
+  "types": [
+    {
+      "kind": "struct",
+      "name": "Base",
+      "size": 4,
+      "align": 4,
+      "paddedSize": 4,
+      "fields": [
+        {
+          "name": "id",
+          "type": {
+            "kind": "primitive",
+            "name": "u32",
+            "size": 4,
+            "align": 4,
+            "paddedSize": 4,
+            "bitSize": 32,
+            "popKind": "binary"
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 32,
+          "size": 4,
+          "paddingAfter": 0,
+          "description": "unsigned 32-bit integer"
+        }
+      ],
+      "description": ""
+    },
+    {
+      "kind": "struct",
+      "name": "Derived",
+      "size": 8,
+      "align": 4,
+      "paddedSize": 8,
+      "fields": [
+        {
+          "name": "extra",
+          "type": {
+            "kind": "primitive",
+            "name": "u8",
+            "size": 1,
+            "align": 1,
+            "paddedSize": 1,
+            "bitSize": 8,
+            "popKind": "binary"
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 8,
+          "size": 1,
+          "paddingAfter": 3,
+          "description": "unsigned 8-bit integer"
+        },
+        {
+          "name": "id",
+          "type": {
+            "kind": "primitive",
+            "name": "u32",
+            "size": 4,
+            "align": 4,
+            "paddedSize": 4,
+            "bitSize": 32,
+            "popKind": "binary"
+          },
+          "offset": 4,
+          "bitOffset": 0,
+          "bitSize": 32,
+          "size": 4,
+          "paddingAfter": 0,
+          "description": "unsigned 32-bit integer"
+        }
+      ],
+      "description": ""
+    }
+  ]
 }

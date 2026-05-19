@@ -1,29 +1,31 @@
 {
-	"version": "v1",
-	"endian": "le",
-	"autoLayout": false,
-	"wordSize": 64,
-	"types": [
-		{
-			"kind": "struct",
-			"name": "Lookup",
-			"size": 0,
-			"align": 1,
-			"paddedSize": 0,
-			"fields": [
-				{
-					"name": "table",
-					"type": {
-						"kind": "unit"
-					},
-					"offset": 0,
-					"bitOffset": 0,
-					"bitSize": 0,
-					"size": 0,
-					"paddingAfter": 0
-				}
-			],
-			"description": ""
-		}
-	]
+  "wordSize": "64",
+  "autoLayout": false,
+  "layout": "aligned",
+  "mode": "rich",
+  "version": "1.0.0",
+  "endian": "le",
+  "types": [
+    {
+      "kind": "struct",
+      "name": "Lookup",
+      "size": 0,
+      "align": 1,
+      "paddedSize": 0,
+      "fields": [
+        {
+          "name": "table",
+          "type": {
+            "kind": "unit"
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 0,
+          "size": 0,
+          "paddingAfter": 0
+        }
+      ],
+      "description": ""
+    }
+  ]
 }

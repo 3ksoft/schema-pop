@@ -1,62 +1,60 @@
 {
-	"version": "v1",
-	"endian": "le",
-	"autoLayout": false,
-	"wordSize": 64,
-	"types": [
-		{
-			"kind": "struct",
-			"name": "Trap",
-			"size": 32,
-			"align": 16,
-			"paddedSize": 32,
-			"fields": [
-				{
-					"name": "a",
-					"type": {
-						"kind": "primitive",
-						"name": "f32",
-						"size": 4,
-						"align": 4,
-						"paddedSize": 4,
-						"bitSize": 32,
-						"unsigned": false,
-						"isFloat": false,
-						"popKind": "binary"
-					},
-					"offset": 0,
-					"bitOffset": 0,
-					"bitSize": 32,
-					"size": 4,
-					"paddingAfter": 12,
-					"description": "32-bit float"
-				},
-				{
-					"name": "b",
-					"type": {
-						"kind": "array",
-						"item": {
-							"kind": "primitive",
-							"name": "f32",
-							"size": 4,
-							"align": 4,
-							"paddedSize": 4,
-							"bitSize": 32,
-							"unsigned": false,
-							"isFloat": false,
-							"popKind": "binary"
-						},
-						"exactLength": 3,
-						"maxLength": 3
-					},
-					"offset": 16,
-					"bitOffset": 0,
-					"bitSize": 96,
-					"size": 12,
-					"paddingAfter": 4
-				}
-			],
-			"description": ""
-		}
-	]
+  "wordSize": "64",
+  "autoLayout": false,
+  "layout": "aligned",
+  "mode": "binary",
+  "version": "1.0.0",
+  "endian": "le",
+  "layoutType": "std140",
+  "types": [
+    {
+      "kind": "struct",
+      "name": "Trap",
+      "size": 16,
+      "align": 4,
+      "paddedSize": 16,
+      "fields": [
+        {
+          "name": "a",
+          "type": {
+            "kind": "primitive",
+            "name": "f32",
+            "size": 4,
+            "align": 4,
+            "paddedSize": 4,
+            "bitSize": 32,
+            "popKind": "binary"
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 32,
+          "size": 4,
+          "paddingAfter": 0,
+          "description": "32-bit float"
+        },
+        {
+          "name": "b",
+          "type": {
+            "kind": "array",
+            "item": {
+              "kind": "primitive",
+              "name": "f32",
+              "size": 4,
+              "align": 4,
+              "paddedSize": 4,
+              "bitSize": 32,
+              "popKind": "binary"
+            },
+            "exactLength": 3
+          },
+          "offset": 4,
+          "bitOffset": 0,
+          "bitSize": 96,
+          "size": 12,
+          "paddingAfter": 0
+        }
+      ],
+      "description": ""
+    }
+  ]
 }

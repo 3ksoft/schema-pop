@@ -1,42 +1,42 @@
 {
-	"version": "v1",
-	"endian": "le",
-	"autoLayout": false,
-	"wordSize": 64,
-	"types": [
-		{
-			"kind": "struct",
-			"name": "Data",
-			"size": 40,
-			"align": 4,
-			"paddedSize": 40,
-			"fields": [
-				{
-					"name": "values",
-					"type": {
-						"kind": "array",
-						"item": {
-							"kind": "primitive",
-							"name": "f32",
-							"size": 4,
-							"align": 4,
-							"paddedSize": 4,
-							"bitSize": 32,
-							"unsigned": false,
-							"isFloat": false,
-							"popKind": "binary"
-						},
-						"exactLength": 10,
-						"maxLength": 10
-					},
-					"offset": 0,
-					"bitOffset": 0,
-					"bitSize": 320,
-					"size": 40,
-					"paddingAfter": 0
-				}
-			],
-			"description": ""
-		}
-	]
+  "wordSize": "64",
+  "autoLayout": false,
+  "layout": "aligned",
+  "mode": "binary",
+  "version": "1.0.0",
+  "endian": "le",
+  "layoutType": "std430",
+  "types": [
+    {
+      "kind": "struct",
+      "name": "Data",
+      "size": 40,
+      "align": 4,
+      "paddedSize": 40,
+      "fields": [
+        {
+          "name": "values",
+          "type": {
+            "kind": "array",
+            "item": {
+              "kind": "primitive",
+              "name": "f32",
+              "size": 4,
+              "align": 4,
+              "paddedSize": 4,
+              "bitSize": 32,
+              "popKind": "binary"
+            },
+            "exactLength": 10
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 320,
+          "size": 40,
+          "paddingAfter": 0
+        }
+      ],
+      "description": ""
+    }
+  ]
 }

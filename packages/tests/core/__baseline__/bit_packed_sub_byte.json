@@ -1,78 +1,74 @@
 {
-	"version": "v1",
-	"endian": "le",
-	"autoLayout": false,
-	"wordSize": 64,
-	"types": [
-		{
-			"kind": "struct",
-			"name": "Flags",
-			"size": 1,
-			"align": 1,
-			"paddedSize": 1,
-			"fields": [
-				{
-					"name": "a",
-					"type": {
-						"kind": "primitive",
-						"name": "u1",
-						"size": 1,
-						"align": 1,
-						"paddedSize": 1,
-						"bitSize": 1,
-						"unsigned": false,
-						"isFloat": false,
-						"popKind": "bitwise"
-					},
-					"offset": 0,
-					"bitOffset": 0,
-					"bitSize": 1,
-					"size": 1,
-					"paddingAfter": 0,
-					"description": "u1 (boolean)"
-				},
-				{
-					"name": "b",
-					"type": {
-						"kind": "primitive",
-						"name": "u3",
-						"size": 1,
-						"align": 1,
-						"paddedSize": 1,
-						"bitSize": 3,
-						"unsigned": false,
-						"isFloat": false,
-						"popKind": "bitwise"
-					},
-					"offset": 0,
-					"bitOffset": 1,
-					"bitSize": 3,
-					"size": 1,
-					"paddingAfter": 0,
-					"description": "unsigned 3-bit integer"
-				},
-				{
-					"name": "c",
-					"type": {
-						"kind": "primitive",
-						"name": "u4",
-						"size": 1,
-						"align": 1,
-						"paddedSize": 1,
-						"bitSize": 4,
-						"unsigned": false,
-						"isFloat": false,
-						"popKind": "bitwise"
-					},
-					"offset": 0,
-					"bitOffset": 4,
-					"bitSize": 4,
-					"size": 1,
-					"paddingAfter": 0,
-					"description": "unsigned 4-bit integer"
-				}
-			],
-			"description": ""
-		}
-	]
+  "wordSize": "64",
+  "autoLayout": false,
+  "layout": "aligned",
+  "mode": "binary",
+  "version": "1.0.0",
+  "endian": "le",
+  "types": [
+    {
+      "kind": "struct",
+      "name": "Flags",
+      "size": 1,
+      "align": 1,
+      "paddedSize": 1,
+      "fields": [
+        {
+          "name": "a",
+          "type": {
+            "kind": "primitive",
+            "name": "u1",
+            "size": 1,
+            "align": 1,
+            "paddedSize": 1,
+            "bitSize": 1,
+            "popKind": "bitwise"
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 1,
+          "size": 1,
+          "paddingAfter": 0,
+          "description": "u1 (boolean)"
+        },
+        {
+          "name": "b",
+          "type": {
+            "kind": "primitive",
+            "name": "u3",
+            "size": 1,
+            "align": 1,
+            "paddedSize": 1,
+            "bitSize": 3,
+            "popKind": "bitwise"
+          },
+          "offset": 0,
+          "bitOffset": 1,
+          "bitSize": 3,
+          "size": 1,
+          "paddingAfter": 0,
+          "description": "unsigned 3-bit integer"
+        },
+        {
+          "name": "c",
+          "type": {
+            "kind": "primitive",
+            "name": "u4",
+            "size": 1,
+            "align": 1,
+            "paddedSize": 1,
+            "bitSize": 4,
+            "popKind": "bitwise"
+          },
+          "offset": 0,
+          "bitOffset": 4,
+          "bitSize": 4,
+          "size": 1,
+          "paddingAfter": 0,
+          "description": "unsigned 4-bit integer"
+        }
+      ],
+      "description": ""
+    }
+  ]
 }

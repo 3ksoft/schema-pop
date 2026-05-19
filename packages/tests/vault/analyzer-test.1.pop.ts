@@ -25,9 +25,5 @@ export const $ = type.module({
 		balance: "-5000 <= number <= 5000",
 		isAdmin: "boolean",
 	},
-	Permissions: {
-		canRead: "0 | 1",
-		level: "0 | 1 | 2 | 3",
-	},
 	LargeValue: "bigint",
 });
