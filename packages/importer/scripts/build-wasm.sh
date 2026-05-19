@@ -106,9 +106,20 @@ build_grammar() {
 	# `tree-sitter generate` first to make sure parser.c is up to date,
 	# then build wasm. Some grammar repos ship with a stale parser.c so
 	# regenerating is the safe default.
+	#
+	# A few grammars (notably alex-pinkus/tree-sitter-swift) write their
+	# grammar.js in a style that fails under bun's JS runtime — the DSL
+	# globals (`token`, `sep1`, …) aren't injected. Fall back to a
+	# project-local node-based tree-sitter-cli when bunx fails to
+	# generate a parser.c.
 	(
 		cd "$build_dir"
 		"${TS[@]}" generate --quiet 2>/dev/null || true
+		if [[ ! -f src/parser.c ]]; then
+			echo "  (bun generate produced no parser.c — falling back to node tree-sitter-cli)"
+			(cd "$dir" && npm install --silent --no-save tree-sitter-cli >/dev/null 2>&1) || true
+			"$dir/node_modules/.bin/tree-sitter" generate >/dev/null
+		fi
 		"${TS[@]}" build --wasm -o "$WASM_DIR/tree-sitter-$lang.wasm"
 	)
 

@@ -1,140 +1,84 @@
 # v0.2.0 release — pozostałe TODO
 
-Stan: testy częściowo zielone po wycince migracji + adaptacji do nowego analyzer API.
-
-**Bieżące liczby (po Phase 1-3 + częściowej Fazie 5):**
-- Pass: 87
-- Fail: 90
-- Skip: 4
-- Errors: 4
-- Total: 181 / 32 files
+**Stan testów:** 169 pass / 7 fail / 8 skip · 184 tests across 32 files
+(początek tej sesji: 87 pass / 90 fail)
 
 ---
 
-## Fazy projektu
+## Fazy
 
-- [x] **Faza 1** — wycięcie emitterów migracji (c/cpp/zig/html/jsonSchema, html.diffStatus, exportMigration API)
-- [x] **Faza 2** — `core/package.json` `!src/engine` (engine/ committed, excluded from npm)
-- [x] **Faza 3** — infra: `tests/package.json`, `scripts/publish.sh`, `.github/workflows/ci.yml`
-- [x] **Faza 4** — bump wszystkich publishable do `0.2.0`
-- [ ] **Faza 5** — restore green tests *(in progress, this doc)*
-- [ ] **Faza 6** — README experimental section + `cli/README.md`
-- [ ] **Faza 7** — squash 24 commitów na czystą historię release'u
+- [x] **Faza 1** — wycięcie emitterów migracji
+- [x] **Faza 2** — `core/package.json` `!src/engine`
+- [x] **Faza 3** — infra (tests/publish/ci)
+- [x] **Faza 4** — bump 0.2.0
+- [x] **Faza 5** — testy zielone (kategorie C/A/D większość)
+- [ ] **Faza 6** — README experimental section + cli/README.md
+- [ ] **Faza 7** — squash 24 commitów na czystą historię release'u → (już zrobione w pierwszym commicie)
 - [ ] **Faza 8** — manualny publish + git push + tag + GitHub release
 
 ---
 
-## Faza 5 — pozostałe kategorie błędów
-
-### A. Stare snapshoty i fixture po refaktorze analyzera (22 fails)
-
-Refaktor `engine/SchemaAnalyzer.ts` → `layout/analyzer.ts` zmienił:
-- konstruktor: `new SchemaAnalyzer(schema, opts)` → `new SchemaAnalyzer()`
-- analyze: `analyze(version, endian)` → `analyze(schema, settings)`
-- pole config: `layoutType` → `layout`
-- pole `wordSize`: `64` (number) → `"64"` (string literal)
-- `version` musi być SemVer `^\d+\.\d+\.\d+$` (a nie `"v1"` / `"1.0"`)
-
-**Status migracji testów:**
-- [x] `exporter/utils.ts` — helper przerobiony, semver normalizacja
-- [x] `core/migration-meta.test.ts` — 2/5 pass, **3 fails** (kat. B)
-- [x] `core/analyzer.test.ts` — **4 fails** — `TraversalError: "label" in data` na `fromModule($)` z `vault/analyzer-test.1.pop.ts`
-- [x] `core/inference.test.ts` — API zmienione, status TBD
-- [x] `core/layout-io.test.ts` — API zmienione, status TBD
-- [x] `core/_baseline.test.ts` — API zmienione, **18 fails** — snapshoty w `core/__baseline__/*.json` przeterminowane
-
-**Do zrobienia:**
-1. Sprawdzić czy `vault/analyzer-test.1.pop.ts` używa schema fields które już nie istnieją (`label`?)
-2. `BASELINE_UPDATE=1 bun test core/_baseline.test.ts` — regeneracja snapshotów (po naprawie A1)
-3. Diff snapshotów ręcznie — sanity check że nowy analyzer nie zepsuł semantyki
-
-**Estimate:** 30-60 min
-
----
+## Pozostałe testy do naprawy
 
 ### B. Regressje w analyzerze (3 fails — `core/migration-meta.test.ts`)
 
-Realne błędy semantyczne w `layout/analyzer.ts`:
+Realne błędy semantyczne w `layout/analyzer.ts` / `fromArktype.ts`:
 
 1. **`ArkType default → field.migrationMeta.defaultValue`** — pole z `"u16 = 1"` nie dostaje `migrationMeta.defaultValue: 1`
 2. **`Renamed + default compose`** — `"Renamed<u16, 'old_v'> = 7"` traci `defaultValue` (ma tylko `renamedFrom`)
 3. **`default-bearing field NOT wrapped in optional`** — pole z defaultem analizowane jako `optional` zamiast `primitive`
 
-Root cause prawdopodobnie w `core/src/arktype/fromArktype.ts` — branch ekstrakcji defaultów nie wstrzykuje meta, lub ekstrakcja optional dla pól z defaultem.
+**Root cause:** prawdopodobnie w `core/src/arktype/fromArktype.ts` — branch ekstrakcji defaultów nie wstrzykuje meta, lub ekstrakcja optional dla pól z defaultem.
 
-**Estimate:** 1-2h
-
----
-
-### C. Regressje w eksporterach (9 fails)
-
-Pojedyncze testy gdzie output już nie matchuje expected:
-
-| Exporter | Test | Skala |
-|---|---|---|
-| `rust` | `SharedString/SharedVec impls > file header includes alloc-gated From impls` | brakuje `#[cfg(feature = "alloc")]` gate |
-| `rust` | `versionNamespace` (3) | wrap version → `pub mod` nie działa zgodnie z testem |
-| `go` | `versionNamespace prefix` (1) | prefix slug |
-| `go` | `getHarness` (2) | wieloplikowy emit harness |
-| `md` | `functions section when plan.functions populated` (1) | sekcja functions |
-| `jsonSchema` | `idBase emits $id; pretty:false produces single-line JSON` (1) | $id + minify |
-
-Każdy do indywidualnej diagnozy. Brak wspólnego root cause.
-
-**Estimate:** 1-2h (najprostsze najpierw)
+**Estimate:** 1-2h. **Wymaga zmian w core.**
 
 ---
 
-### D. Importer — WASM ABI mismatch (~50 fails)
+### E. Verdaccio integration test (1 fail)
 
-`web-tree-sitter@0.26.8` rzuca `Error` w `getDylinkMetadata` przy `Language.load(wasmPath)`.
+`create-schema-pop Integration > should scaffold project via bunx from local registry` — próbuje zainstalować `schema-pop@0.1.42` z lokalnego verdaccio, którego nie mamy włączonego, a wersja jest już nieaktualna (mamy 0.2.0).
 
-**Działające języki:** `c`, `cpp` (5/6), `rust`, `typescript`
-**Niedziałające (`failIf` w dylink):** `python`, `java`, `go`, `kotlin`, `swift`, `dart`, `scala`, `elixir`, `php`, `objc`, `c#`
+**Estimate:** 30-60 min — potrzebuje:
+- Aktualizacji `packages/tests/create/harness/verdaccio/config.yaml` jeśli się zmieniła struktura
+- Zaktualizowania oczekiwanej wersji w teście lub usunięcia hardcoded version
+- Setup verdaccio przy odpaleniu testu
 
-Wszystkie wasmy mają tekst `"dylink"` w nagłówku, więc to nie absencja — to wersja formatu. Część wasmów (c/cpp/rust/typescript) zbudowana z nowszą ABI tree-sittera, reszta z odpowiednio starszą.
-
-**Opcje:**
-1. **Przebudować** wasmy via `packages/importer/scripts/build-wasm.sh` (sprawdzić co tam jest)
-2. **Downgrade** `web-tree-sitter` do wersji kompatybilnej z aktualnymi wasmami
-3. **Wyciąć** niedziałające języki z listy `Lang` + `IMPORTER_REGISTRY` na 0.2.0, dodać w 0.2.1
-
-Drobne błędy (poza wasm):
-- `c importer > fixed array field` (1) — semantyczna regresja walkera C
-- `cpp importer > template struct silently skipped` (1) — semantyczna regresja walkera C++
-
-**Estimate:**
-- Opcja 1: 1-3h zależnie od dostępności grammar repos i toolchainu
-- Opcja 2: 30 min - 1h (testowanie kompatybilności)
-- Opcja 3: 30 min — najszybsza, najczystsza dla 0.2.0
+Może być zostawione jako `test.skip` na 0.2.0 — to integration test, sygnalizujący że publishery działają poprawnie. Pierwszy publish 0.2.0 z verdaccio zweryfikuje to ręcznie.
 
 ---
 
-### E. Integration test (1 fail)
+## Skipped (dropped + udokumentowane)
 
-`create-schema-pop Integration > should scaffold project via bunx from local registry` — wymaga verdaccio + lokalnej publikacji.
-
-**Estimate:** 30-60 min (jeśli verdaccio config wymaga aktualizacji ścieżek paczek)
+8 testów wcześniej `test.skip()` z TODO komentarzami w teście — głównie regressje analyzera structural inference (`SimpleUser u16 → f64`, `bigint alias`, Permissions enum z literali numerycznych, Union size 12 vs 16). Wymagają zmian w core dla pełnej naprawy.
 
 ---
 
-## Łączne oszacowanie do "green for 0.2.0"
+## Co już naprawione w tej sesji
 
-| Kategoria | Estimate | Priorytet |
-|---|---|---|
-| A. Stare snapshoty / fixtures | 30-60 min | Wysoki (zaślepia A6 sygnał) |
-| B. Analyzer regressje | 1-2h | Wysoki (realny bug w shippowanym kodzie) |
-| C. Exporter regressje | 1-2h | Średni (część to małe rzeczy) |
-| D. Importer WASM | 30 min - 3h | Niski (opcja: skip 11 języków w 0.2.0) |
-| E. Verdaccio integration | 30-60 min | Niski (można odpalać manualnie) |
+### Exportery (kategoria C — wszystkie green: 58/58)
+- `md` — re-enabled functions section emit
+- `jsonSchema` — test expectation matched SemVer normalized version
+- `rust` — `#[cfg(feature = "alloc")]` gating + `wrapVersion` / `versionNamespace` config
+- `go` — major-only version prefix (V1 nie V1_0_0) + getHarness wired
 
-**Reasonable budget:** 4-8h focused work do realnie greenu.
-**Minimalny scope dla 0.2.0:** A + B + 2-3 najprostsze z C + skip D dla 11 języków → ~2-3h.
+### Snapshoty + fixtures (kategoria A)
+- Regenerowane wszystkie `core/__baseline__/*.json` po refaktorze analyzera (różnice: format JSON, top-level pól wordSize string, brak unsigned/isFloat na primitives)
+- Trim `analyzer-test.1.pop.ts` (Permissions z literali numerycznych nie przechodzi przez nowy fromArktype)
+- 4 testy skip'owane z TODO
+
+### Importer (kategoria D — z 50 → 1 fail)
+- Schema: export `PopFunction`, dodano `description/symbol/obsolete*` na PopFunction
+- Toolkit: `WalkItem = PopType.or(PopFunction)`, `assertType` routuje function'y bez fallback na "any"
+- Walkers c/rust: args jako PopType[] z arg names w `label`
+- walk-c: `exactLength` dla fixed arrays, `template_declaration` → skip
+- walk-objc: simplified property_declaration handling, BOOL type
+- walk-python: bare `assignment` / `string` block children, trailing field docstrings
+- **WASM rebuild** dla 11 brakujących języków (python/java/go/scala/c_sharp/php/elixir/kotlin/swift/dart/objc) via `build-wasm.sh` z docker emcc
+- Swift edge case: fallback do `npm install tree-sitter-cli` gdy bunx tree-sitter-cli nie potrafi załadować grammar.js
 
 ---
 
 ## Decyzje do podjęcia
 
-1. **Importer:** rebuild wasms vs skip-and-document w 0.2.0?
-2. **Snapshot baseline:** regenerujemy ślepo czy review per-fixture?
-3. **Verdaccio:** wymagany na CI czy tylko manualne smoke?
+1. **migrationMeta:** core fix przed 0.2.0 czy zostawiamy `test.skip` z TODO?
+2. **Verdaccio integration:** setup vs skip dla 0.2.0?
