@@ -73,34 +73,31 @@ export class ObjcImporter extends BaseImporter {
 				continue;
 			}
 			if (c.type === "property_declaration") {
-				const structDecl = c.namedChildren.find(
-					(n) => n?.type === "struct_declaration",
-				);
-				const typeNode =
-					structDecl?.namedChildren.find(
-						(n) =>
-							n?.type === "type_identifier" ||
-							n?.type === "primitive_type" ||
-							n?.type === "typedefed_specifier",
-					) ??
-					c.namedChildren.find(
-						(n) =>
-							n?.type === "type_identifier" ||
-							n?.type === "primitive_type" ||
-							n?.type === "typedefed_specifier",
-					);
-				const structDeclr = structDecl?.namedChildren.find(
-					(n) => n?.type === "struct_declarator",
-				);
-				const ptrDeclr = structDeclr?.namedChildren.find(
-					(n) => n?.type === "pointer_declarator",
-				);
-				const propName =
-					ptrDeclr?.namedChildren.find((n) => n?.type === "identifier")?.text ??
-					structDeclr?.namedChildren.find((n) => n?.type === "identifier")
-						?.text ??
-					structDeclr?.text ??
-					c.namedChildren.find((n) => n?.type === "identifier")?.text;
+				const isTypeNode = (n: TSNode | null | undefined) =>
+					!!n &&
+					(n.type === "type_identifier" ||
+						n.type === "primitive_type" ||
+						n.type === "typedefed_specifier" ||
+						n.type === "BOOL" ||
+						n.type === "sized_type_specifier");
+				const typeNode = c.namedChildren.find(isTypeNode);
+				let propName: string | undefined;
+				for (const n of c.namedChildren) {
+					if (!n) continue;
+					if (n.type === "identifier") {
+						propName = n.text;
+						break;
+					}
+					if (n.type === "pointer_declarator") {
+						const inner = n.namedChildren.find(
+							(x) => x?.type === "identifier",
+						);
+						if (inner) {
+							propName = inner.text;
+							break;
+						}
+					}
+				}
 
 				if (typeNode && propName) {
 					const fDoc = this.docs.consume();
@@ -178,11 +175,15 @@ export class ObjcImporter extends BaseImporter {
 	}
 
 	private parseObjcType(node: TSNode): PopType {
+		if (node.type === "BOOL") {
+			return { type: "boolean", binaryType: "bool" } as PopType;
+		}
 		if (
 			node.type === "type_identifier" ||
 			node.type === "primitive_type" ||
 			node.type === "identifier" ||
-			node.type === "typedefed_specifier"
+			node.type === "typedefed_specifier" ||
+			node.type === "sized_type_specifier"
 		) {
 			const text = node.text;
 			if (text === "NSString") return { type: "string" } as PopType;

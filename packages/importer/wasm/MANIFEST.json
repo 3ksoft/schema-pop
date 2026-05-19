@@ -1,23 +1,4 @@
 {
-	"_built_at": "2026-05-08T06:27:36Z",
-	"zig": {
-		"rev": "6479aa13f32f701c383083d8b28360ebd682fb7d",
-		"describe": "v1.1.2-8-g6479aa1"
-	},
-	"rust": {
-		"rev": "77a3747266f4d621d0757825e6b11edcbf991ca5",
-		"describe": "v0.24.2"
-	},
-	"c": {
-		"rev": "b780e47fc780ddc8da13afa35a3f4ed5c157823d",
-		"describe": "v0.24.2"
-	},
-	"cpp": {
-		"rev": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
-		"describe": "v0.23.4-40-g8b5b49e"
-	},
-	"typescript": {
-		"rev": "75b3874edb2dc714fb1fd77a32013d0f8699989f",
-		"describe": "v0.23.2-5-g75b3874"
-	}
+  "_built_at": "2026-05-19T19:15:58Z",
+  "zig": { "rev": "6479aa13f32f701c383083d8b28360ebd682fb7d", "describe": "v1.1.2-8-g6479aa1" },  "rust": { "rev": "77a3747266f4d621d0757825e6b11edcbf991ca5", "describe": "v0.24.2" },  "c": { "rev": "b780e47fc780ddc8da13afa35a3f4ed5c157823d", "describe": "v0.24.2" },  "cpp": { "rev": "8b5b49eb196bec7040441bee33b2c9a4838d6967", "describe": "v0.23.4-40-g8b5b49e" },  "typescript": { "rev": "75b3874edb2dc714fb1fd77a32013d0f8699989f", "describe": "v0.23.2-5-g75b3874" },  "python": { "rev": "26855eabccb19c6abf499fbc5b8dc7cc9ab8bc64", "describe": "v0.25.0-1-g26855ea" },  "java": { "rev": "e10607b45ff745f5f876bfa3e94fbcc6b44bdc11", "describe": "v0.23.5-6-ge10607b" },  "go": { "rev": "2346a3ab1bb3857b48b29d779a1ef9799a248cd7", "describe": "v0.25.0-2-g2346a3a" },  "scala": { "rev": "4d081d98670ff6e98ca42c085294fc75eec15e1d", "describe": "v0.26.0-42-g4d081d9" },  "c_sharp": { "rev": "cac6d5fb595f5811a076336682d5d595ac1c9e85", "describe": "v0.23.5" },  "php": { "rev": "3f2465c217d0a966d41e584b42d75522f2a3149e", "describe": "v0.24.2-14-g3f2465c" },  "elixir": { "rev": "7937d3b4d65fa574163cfa59394515d3c1cf16f4", "describe": "v0.3.5-2-g7937d3b" },  "kotlin": { "rev": "f66d2908542e93c0204c6c241f794afe4e9cd5d1", "describe": "0.3.8-124-gf66d290" },  "swift": { "rev": "7c2f26b5dce12e82ef2bd932a883ef514ae566b8", "describe": "0.7.1" },  "dart": { "rev": "507c5546dc73667c03d36803ee9bd4df0bbe4b0b", "describe": "507c554" },  "objc": { "rev": "afec0de5a32d5894070b67932d6ff09e4f7c5879", "describe": "afec0de" }
 }

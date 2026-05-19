@@ -74,8 +74,22 @@ export class PythonImporter extends BaseImporter {
 
 		if (isEnum) {
 			const options: string[] = [];
+			const handleEnumAssignment = (assign: TSNode): void => {
+				const left =
+					assign.childForFieldName("left") || assign.namedChildren[0];
+				if (left) options.push(left.text);
+				this.docs.clear();
+			};
 			for (const c of body.namedChildren) {
 				if (!c) continue;
+				if (c.type === "comment") {
+					this.docs.addCommentNode(c.text);
+					continue;
+				}
+				if (c.type === "assignment") {
+					handleEnumAssignment(c);
+					continue;
+				}
 				if (c.type === "expression_statement") {
 					const stringNode = c.namedChildren[0];
 					if (c.namedChildren.length === 1 && stringNode?.type === "string") {
@@ -87,16 +101,8 @@ export class PythonImporter extends BaseImporter {
 					}
 
 					const assign = c.namedChildren.find((n) => n?.type === "assignment");
-					if (assign) {
-						const left =
-							assign.childForFieldName("left") || assign.namedChildren[0];
-						if (left) {
-							options.push(left.text);
-						}
-					}
-					this.docs.clear();
-				} else if (c.type === "comment") {
-					this.docs.addCommentNode(c.text);
+					if (assign) handleEnumAssignment(assign);
+					else this.docs.clear();
 				}
 			}
 
@@ -109,53 +115,77 @@ export class PythonImporter extends BaseImporter {
 			const fields: Record<string, PopType> = {};
 			let classDescription = description;
 
+			const handleAssignment = (assign: TSNode): void => {
+				const nameNode =
+					assign.childForFieldName("left") ??
+					assign.namedChildren[0] ??
+					null;
+				const typeNode =
+					assign.childForFieldName("type") ??
+					assign.namedChildren.find((n) => n?.type === "type") ??
+					null;
+				if (nameNode && typeNode) {
+					const fDoc = this.docs.consume();
+					const fType = this.parsePythonType(typeNode);
+					if (fDoc) fType.description = fDoc;
+					fields[nameNode.text] = fType;
+				}
+				this.docs.clear();
+			};
+
+			const handleStringNode = (stringNode: TSNode): void => {
+				const text = stringNode.text
+					.replace(/^["']{3}|["']{3}$/g, "")
+					.replace(/^["']|["']$/g, "")
+					.trim();
+				if (!text) return;
+				if (Object.keys(fields).length === 0 && !classDescription) {
+					classDescription = text;
+				} else if (Object.keys(fields).length > 0) {
+					// trailing docstring — attach to the last-added field.
+					const lastFieldKey = Object.keys(fields).at(-1);
+					if (lastFieldKey && !fields[lastFieldKey]!.description) {
+						fields[lastFieldKey]!.description = text;
+					}
+				}
+			};
+
 			for (const c of body.namedChildren) {
 				if (!c) continue;
+				if (c.type === "comment") {
+					this.docs.addCommentNode(c.text);
+					continue;
+				}
+				if (c.type === "string") {
+					handleStringNode(c);
+					continue;
+				}
+				if (c.type === "assignment") {
+					handleAssignment(c);
+					continue;
+				}
 				if (c.type === "expression_statement") {
 					const stringNode = c.namedChildren[0];
 					if (c.namedChildren.length === 1 && stringNode?.type === "string") {
-						const text = stringNode.text
-							.replace(/^["']{3}|["']{3}$/g, "")
-							.trim();
-						if (!text) continue;
-
-						if (Object.keys(fields).length === 0 && !classDescription) {
-							classDescription = text;
-						} else if (Object.keys(fields).length > 0 && !this.docs.consume()) {
-							// skip trailing comments
-						} else {
-							this.docs.addCommentNode(`/// ${text}`);
-						}
+						handleStringNode(stringNode);
 						continue;
 					}
 
-					let nameNode: TSNode | null = null;
-					let typeNode: TSNode | null = null;
-
 					const assign = c.namedChildren.find((n) => n?.type === "assignment");
 					if (assign) {
-						nameNode =
-							assign.childForFieldName("left") ??
-							assign.namedChildren[0] ??
-							null;
-						typeNode =
-							assign.childForFieldName("type") ??
-							assign.namedChildren.find((n) => n?.type === "type") ??
-							null;
+						handleAssignment(assign);
 					} else {
-						typeNode = c.namedChildren.find((n) => n?.type === "type") ?? null;
-						if (typeNode) nameNode = c.namedChildren[0] ?? null;
+						const typeNode =
+							c.namedChildren.find((n) => n?.type === "type") ?? null;
+						const nameNode = typeNode ? c.namedChildren[0] : null;
+						if (nameNode && typeNode) {
+							const fDoc = this.docs.consume();
+							const fType = this.parsePythonType(typeNode);
+							if (fDoc) fType.description = fDoc;
+							fields[nameNode.text] = fType;
+						}
+						this.docs.clear();
 					}
-
-					if (nameNode && typeNode) {
-						const fDoc = this.docs.consume();
-						const fType = this.parsePythonType(typeNode);
-						if (fDoc) fType.description = fDoc;
-						fields[nameNode.text] = fType;
-					}
-					this.docs.clear();
-				} else if (c.type === "comment") {
-					this.docs.addCommentNode(c.text);
 				}
 			}
 

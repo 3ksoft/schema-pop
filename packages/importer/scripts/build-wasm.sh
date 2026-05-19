@@ -45,6 +45,17 @@ GRAMMARS=(
 	"c|https://github.com/tree-sitter/tree-sitter-c|C_REV|"
 	"cpp|https://github.com/tree-sitter/tree-sitter-cpp|CPP_REV|"
 	"typescript|https://github.com/tree-sitter/tree-sitter-typescript|TYPESCRIPT_REV|typescript"
+	"python|https://github.com/tree-sitter/tree-sitter-python|PYTHON_REV|"
+	"java|https://github.com/tree-sitter/tree-sitter-java|JAVA_REV|"
+	"go|https://github.com/tree-sitter/tree-sitter-go|GO_REV|"
+	"scala|https://github.com/tree-sitter/tree-sitter-scala|SCALA_REV|"
+	"c_sharp|https://github.com/tree-sitter/tree-sitter-c-sharp|CSHARP_REV|"
+	"php|https://github.com/tree-sitter/tree-sitter-php|PHP_REV|php"
+	"elixir|https://github.com/elixir-lang/tree-sitter-elixir|ELIXIR_REV|"
+	"kotlin|https://github.com/fwcd/tree-sitter-kotlin|KOTLIN_REV|"
+	"swift|https://github.com/alex-pinkus/tree-sitter-swift|SWIFT_REV|"
+	"dart|https://github.com/UserNobody14/tree-sitter-dart|DART_REV|"
+	"objc|https://github.com/jiyee/tree-sitter-objc|OBJC_REV|"
 )
 
 check_prereqs() {
@@ -136,14 +147,35 @@ write_manifest() {
 check_prereqs
 mkdir -p "$WASM_DIR" "$BUILD_DIR"
 
+# Optional positional args restrict the build to specific langs:
+#   ./scripts/build-wasm.sh python java   # only build python + java
+WANTED=("$@")
+
+failed=()
 for entry in "${GRAMMARS[@]}"; do
 	IFS='|' read -r lang url rev_var subdir <<<"$entry"
-	build_grammar "$lang" "$url" "$rev_var" "$subdir"
+	if [[ ${#WANTED[@]} -gt 0 ]]; then
+		# Skip if not in the wanted list.
+		skip=1
+		for w in "${WANTED[@]}"; do
+			[[ "$w" == "$lang" ]] && skip=0 && break
+		done
+		[[ "$skip" -eq 1 ]] && continue
+	fi
+	if ! build_grammar "$lang" "$url" "$rev_var" "$subdir"; then
+		echo "  ✗ tree-sitter-$lang FAILED (continuing)"
+		failed+=("$lang")
+	fi
 done
 
 write_manifest
 
 echo
+if [[ ${#failed[@]} -gt 0 ]]; then
+	echo "✗ done with failures: ${failed[*]}"
+	echo "  output in $WASM_DIR"
+	exit 1
+fi
 echo "✓ done — output in $WASM_DIR"
 echo
 echo "Verify with:  bun test"
