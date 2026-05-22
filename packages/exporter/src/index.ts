@@ -26,6 +26,12 @@ import { rustHarness } from "./exporters/rustHarness";
 import { zigHarness } from "./exporters/zigHarness";
 import { brainfuckHarness } from "./exporters/bfHarness";
 import { rustSerde, type RustSerdeConfig } from "./exporters";
+import {
+	gpuBindingsTs,
+	gpuBindingsWgsl,
+	type GpuBindingsTsConfig,
+	type GpuBindingsWgslConfig,
+} from "./exporters/gpuBindings";
 
 export { c, type CConfig };
 export { cpp, type CppConfig };
@@ -48,6 +54,12 @@ export { nuxtUi, type NuxtUiConfig };
 export { openapi, type OpenApiConfig };
 export { svg, type SvgConfig };
 export { wgsl, type WgslConfig };
+export {
+	gpuBindingsTs,
+	gpuBindingsWgsl,
+	type GpuBindingsTsConfig,
+	type GpuBindingsWgslConfig,
+};
 
 // ── Harness wrappers ──────────────────────────────────────────────────────────
 // Harness exporters take `LayoutPlan[]` (cross-version) and emit a multi-file

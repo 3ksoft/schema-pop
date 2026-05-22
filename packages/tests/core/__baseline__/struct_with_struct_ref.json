@@ -42,6 +42,20 @@
       "paddedSize": 2,
       "fields": [
         {
+          "name": "inner",
+          "type": {
+            "kind": "reference",
+            "name": "Inner",
+            "indirection": "inline",
+            "isForward": false
+          },
+          "offset": 0,
+          "bitOffset": 0,
+          "bitSize": 8,
+          "size": 1,
+          "paddingAfter": 0
+        },
+        {
           "name": "flag",
           "type": {
             "kind": "primitive",
@@ -52,29 +66,16 @@
             "bitSize": 8,
             "popKind": "binary"
           },
-          "offset": 0,
+          "offset": 1,
           "bitOffset": 0,
           "bitSize": 8,
           "size": 1,
           "paddingAfter": 0,
           "description": "boolean"
-        },
-        {
-          "name": "inner",
-          "type": {
-            "kind": "reference",
-            "name": "Inner",
-            "indirection": "inline",
-            "isForward": false
-          },
-          "offset": 1,
-          "bitOffset": 0,
-          "bitSize": 8,
-          "size": 1,
-          "paddingAfter": 0
         }
       ],
       "description": ""
     }
-  ]
+  ],
+  "autoSort": false
 }

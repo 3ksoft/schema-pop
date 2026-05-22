@@ -4,6 +4,7 @@ export * from "./c";
 export * from "./cpp";
 export * from "./glsl";
 export * from "./go";
+export * from "./gpuBindings";
 export * from "./html";
 export * from "./jsonSchema";
 export * from "./md";

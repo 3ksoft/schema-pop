@@ -1,6 +1,7 @@
 import { regex } from "arkregex";
 import type { Module, Type } from "arktype";
 import { scope, type } from "arktype";
+import type { ArkMeta } from "./core";
 
 export type PopModule = Module<Record<string, Type<unknown>>>;
 
@@ -26,28 +27,7 @@ export const $ = scope({
 	}),
 	Base: {
 		// Field kind
-		"popKind?": "'rich' | 'bitwise' | 'binary' | 'reserved'",
-
-		// Rich
-		"label?": "string",
-		"typeString?": "string",
-		"default?": "unknown.any",
-		"description?": "string",
-		"required?": "boolean",
-		"weight?": "number",
-		"example?": "unknown.any",
-
-		// Binary Metadata
-		"size?": "number",
-		"align?": "number",
-		"binaryType?": "string",
-		"scale?": "number",
-		"addr?": "number",
-		"isBinary?": "boolean",
-		"obsolete?": "boolean",
-		"obsoleteReason?": "string",
-		"renamedFrom?": "string",
-		"originalType?": "string",
+		"popKind?": "'rich' | 'bitwise' | 'binary' | 'reserved' | 'gpu-binding'",
 	},
 
 	String: {
@@ -165,6 +145,11 @@ export const $ = scope({
 		endian: "'le' | 'be' = 'le'",
 		wordSize: "'32' | '64' = '64'",
 		autoLayout: "boolean = true",
+		// When true, reorder struct fields by descending align (greedy pack)
+		// before assigning offsets. Default false: keep declaration order
+		// from the source schema so std140/std430 layouts are predictable
+		// and offsets remain stable across schema edits.
+		autoSort: "boolean = false",
 		layout: "LayoutType = 'aligned'",
 		mode: "'binary' | 'rich' = 'binary'",
 		"version?": SemVer,
@@ -215,4 +200,4 @@ export type Union = typeof Union.infer;
 export type PopFunction = typeof PopFunction.infer;
 export type PopSchemaSettings = typeof PopSchemaSettings.inferIn;
 export type PopSchema = typeof PopSchema.infer;
-export type PopType = typeof PopType.infer;
+export type PopType = typeof PopType.infer & ArkMeta;

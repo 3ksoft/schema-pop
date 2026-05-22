@@ -51,6 +51,14 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 				const t: any = typeByName.get(name);
 				if (!t) return false;
 				if (t.kind !== "struct" && t.kind !== "alias") return false;
+				// Bitfield structs must go through their generated ser/de — the inline
+				// object-literal path emits one whole-byte read/write per field with no
+				// bit shifting, silently corrupting packed fields.
+				if (
+					t.kind === "struct" &&
+					t.fields?.some((f: any) => f.type?.popKind === "bitwise")
+				)
+					return false;
 				return sizeOf(t) <= inlineBudget;
 			};
 
@@ -347,23 +355,39 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 					code += `}\n\n`;
 				}
 				if (t.kind === "struct") {
+					const readField = (f: any): string => {
+						if ((f.type as any).popKind === "bitwise" && f.bitOffset !== undefined) {
+							const mask = (1 << f.bitSize) - 1;
+							return `(view.getUint8(offset + ${f.offset}) >> ${f.bitOffset}) & ${mask}`;
+						}
+						return genRead(f.type, `offset + ${f.offset}`);
+					};
 					code += `export function deserialize${tName}(view: DataView, offset: number, outObj?: any): ${tName} {\n`;
 					code += `\tif (!outObj) {\n\t\treturn {\n`;
-					t.fields.forEach(
-						(f) =>
-							(code += `\t\t\t${fieldName(f.name)}: ${genRead(f.type, `offset + ${f.offset}`)},\n`),
-					);
+					t.fields.forEach((f) => (code += `\t\t\t${fieldName(f.name)}: ${readField(f)},\n`));
 					code += `\t\t} as any;\n\t}\n`;
-					t.fields.forEach(
-						(f) =>
-							(code += `\toutObj.${fieldName(f.name)} = ${genRead(f.type, `offset + ${f.offset}`)};\n`),
-					);
+					t.fields.forEach((f) => (code += `\toutObj.${fieldName(f.name)} = ${readField(f)};\n`));
 					code += `\treturn outObj;\n}\n\n`;
 					code += `export function serialize${tName}(val: ${tName}, view: DataView, offset: number): void {\n`;
-					t.fields.forEach(
-						(f) =>
-							(code += `\t${genWrite(f.type, `val.${fieldName(f.name)}`, `offset + ${f.offset}`)}\n`),
-					);
+					const handledBitBytes = new Set<number>();
+					for (const f of t.fields) {
+						if ((f.type as any).popKind === "bitwise" && (f as any).bitOffset !== undefined) {
+							if (handledBitBytes.has(f.offset)) continue;
+							handledBitBytes.add(f.offset);
+							const sameBytes = t.fields.filter(
+								(sf) => (sf.type as any).popKind === "bitwise" && sf.offset === f.offset,
+							);
+							let stmt = `let _b${f.offset} = 0;`;
+							for (const bf of sameBytes) {
+								const mask = (1 << (bf as any).bitSize) - 1;
+								stmt += ` _b${f.offset} |= ((val.${fieldName(bf.name)} & ${mask}) << ${(bf as any).bitOffset});`;
+							}
+							stmt += ` view.setUint8(offset + ${f.offset}, _b${f.offset});`;
+							code += `\t{ ${stmt} }\n`;
+						} else {
+							code += `\t${genWrite(f.type, `val.${fieldName(f.name)}`, `offset + ${f.offset}`)}\n`;
+						}
+					}
 					code += `}\n\n`;
 				}
 				if (t.kind === "union") {

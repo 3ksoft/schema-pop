@@ -1,10 +1,11 @@
 {
   "wordSize": "64",
-  "autoLayout": true,
+  "autoLayout": false,
   "layout": "aligned",
   "mode": "binary",
   "version": "1.0.0",
   "endian": "le",
+  "autoSort": true,
   "types": [
     {
       "kind": "struct",

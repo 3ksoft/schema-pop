@@ -101,6 +101,9 @@ export const $layout = scope({
 		"obsoleteReason?": "string",
 		"unsigned?": "boolean",
 		"isFloat?": "boolean",
+		// GPU-only: emit this scalar (or array element) as a WGSL atomic<...>.
+		// Pure layout/codec concern is unaffected — same size & offset.
+		"atomic?": "boolean",
 	},
 
 	InlineStructField: {
@@ -168,7 +171,25 @@ export const $layout = scope({
 		"obsoleteReason?": "string",
 	},
 
-	TypePlan: "StructPlan | UnionPlan | EnumPlan | AliasPlan",
+	/** A single WebGPU resource binding entry */
+	GpuBinding: {
+		name: "string",
+		group: "number",
+		binding: "number",
+		usage: "string",
+		dataTypeName: "string",
+		isArray: "boolean",
+	},
+
+	/** A struct where every field is a Binding<> — generates layout descriptors instead of binary struct */
+	GpuBindingPlan: {
+		"...": "TypeLayout",
+		kind: "'gpu-binding-layout'",
+		name: "string",
+		bindings: "GpuBinding[]",
+	},
+
+	TypePlan: "StructPlan | UnionPlan | EnumPlan | AliasPlan | GpuBindingPlan",
 
 	/** The complete Linear Layout Plan (LLP) */
 	LayoutPlan: {
@@ -185,6 +206,8 @@ export const {
 	EnumVariant,
 	Field,
 	FieldPlan,
+	GpuBinding,
+	GpuBindingPlan,
 	InlineStructField,
 	MapField,
 	OptionalField,
@@ -206,6 +229,8 @@ export type EnumPlan = typeof EnumPlan.infer;
 export type EnumVariant = typeof EnumVariant.infer;
 export type Field = typeof Field.infer;
 export type FieldPlan = typeof FieldPlan.infer;
+export type GpuBinding = typeof GpuBinding.infer;
+export type GpuBindingPlan = typeof GpuBindingPlan.infer;
 export type InlineStructField = typeof InlineStructField.infer;
 export type MapField = typeof MapField.infer;
 export type OptionalField = typeof OptionalField.infer;

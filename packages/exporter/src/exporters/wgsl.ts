@@ -19,26 +19,38 @@ export interface WgslConfig extends BaseConfig {
 	paddingStyle?: "size" | "fields";
 }
 
-function getWgslType(f: Field): string {
+function getWgslType(f: Field, atomic = false): string {
 	if (f.kind === "primitive") {
-		if (f.name === "f32") return "f32";
-		if (f.name === "f64") {
-			throw new Error(
-				`wgsl: f64 has no WGSL equivalent. Narrow the schema field to f32 explicitly, or omit it from this exporter target.`,
+		const scalar = (() => {
+			if (f.name === "f32") return "f32";
+			if (f.name === "f64") {
+				throw new Error(
+					`wgsl: f64 has no WGSL equivalent. Narrow the schema field to f32 explicitly, or omit it from this exporter target.`,
+				);
+			}
+			if (f.name === "i32" || f.name === "i16" || f.name === "i8") return "i32";
+			if (f.name === "u32" || f.name === "u16" || f.name === "u8") return "u32";
+			if (f.name === "bool" || f.name === "boolean") return "u32"; // WGSL host-shareable structs cannot contain bool
+			console.warn(
+				`  ⚠ wgsl: unknown primitive "${f.name}", falling back to u32. Add explicit support if this type is intentional.`,
 			);
+			return "u32";
+		})();
+		if (atomic && scalar !== "u32" && scalar !== "i32") {
+			console.warn(
+				`  ⚠ wgsl: atomic requested on non-integer scalar "${scalar}" — WGSL only allows atomic<u32>/atomic<i32>. Emitting non-atomic.`,
+			);
+			return scalar;
 		}
-		if (f.name === "i32" || f.name === "i16" || f.name === "i8") return "i32";
-		if (f.name === "u32" || f.name === "u16" || f.name === "u8") return "u32";
-		if (f.name === "bool" || f.name === "boolean") return "u32"; // WGSL host-shareable structs cannot contain bool
-		console.warn(
-			`  ⚠ wgsl: unknown primitive "${f.name}", falling back to u32. Add explicit support if this type is intentional.`,
-		);
-		return "u32";
+		return atomic ? `atomic<${scalar}>` : scalar;
 	}
 	if (f.kind === "reference") return f.name;
 	if (f.kind === "array") {
-		const itemType = getWgslType(f.item);
+		// atomic propagates to the element type — `array<atomic<i32>, N>`.
+		// Vectors cannot be atomic, so atomic suppresses the vec packing.
+		const itemType = getWgslType(f.item, atomic);
 		const isVector =
+			!atomic &&
 			f.exactLength !== undefined &&
 			f.item.kind === "primitive" &&
 			f.exactLength >= 2 &&
@@ -84,7 +96,10 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 				t.variants.length > 0 &&
 				t.variants.every((v) => structNames.has(v.name));
 
-			const enums = new Map<string, { underlying: "u32" | "i32"; size: number }>();
+			const enums = new Map<
+				string,
+				{ underlying: "u32" | "i32"; size: number }
+			>();
 			for (const t of plan.types) {
 				if (t.kind === "enum" && !isUnionTagEnum(t)) {
 					enums.set(t.name, {
@@ -96,6 +111,33 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 
 			const isEnumRef = (f: Field) =>
 				f.kind === "reference" && enums.has(f.name);
+
+			// Pure-bitfield structs (e.g. packed flags) are emitted as one or more
+			// `_bitfield_N: u32` words, so WGSL rounds their footprint up to a
+			// multiple of 4 bytes. A reference to such a struct therefore eats more
+			// space than schema-pop's byte-packed size — track the widening so we
+			// can drop the now-redundant trailing padding the layout planner
+			// reserved (same idea as the enum promotion above).
+			const bitfieldStructWidening = new Map<string, number>();
+			for (const t of plan.types) {
+				if (t.kind !== "struct") continue;
+				const nonUnit = t.fields.filter((f) => f.type.kind !== "unit");
+				if (
+					nonUnit.length === 0 ||
+					!nonUnit.every((f) => !!f.bitSize && f.bitSize < 8)
+				)
+					continue;
+				const codecSize =
+					(t as { paddedSize?: number; size?: number }).paddedSize ??
+					(t as { size?: number }).size ??
+					0;
+				const wgslSize = Math.ceil(codecSize / 4) * 4;
+				bitfieldStructWidening.set(t.name, wgslSize - codecSize);
+			}
+			const bitfieldRefWidening = (f: Field) =>
+				f.kind === "reference"
+					? (bitfieldStructWidening.get(f.name) ?? 0)
+					: 0;
 
 			let code = "";
 			for (const t of plan.types) {
@@ -127,9 +169,11 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 				if (t.kind === "struct") {
 					code += `struct ${typeName(t.name)} {\n`;
 					let currentBitfieldOffset = -1;
+					const bitfields: typeof t.fields = [];
 					for (const f of t.fields) {
 						if (f.type.kind !== "unit") {
 							if (f.bitSize && f.bitSize < 8) {
+								bitfields.push(f);
 								if (currentBitfieldOffset !== f.offset) {
 									code += `\t_bitfield_${f.offset}: u32,\n`;
 									currentBitfieldOffset = f.offset;
@@ -139,7 +183,10 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 									code += `\t_pad_bits_${f.name}: array<u32, ${padWords}>,\n`;
 								}
 							} else {
-								const wgslType = getWgslType(f.type);
+								const wgslType = getWgslType(
+									f.type,
+									!!(f as { atomic?: boolean }).atomic,
+								);
 								const name = fieldName(f.name);
 
 								// Enum ref: WGSL promotes 1/2-byte enums to u32, eating
@@ -147,9 +194,13 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 								const enumMeta = isEnumRef(f.type)
 									? enums.get((f.type as { name: string }).name)!
 									: null;
-								const effectivePadAfter = enumMeta
-									? Math.max(0, f.paddingAfter - (4 - enumMeta.size))
-									: f.paddingAfter;
+								const widening = enumMeta
+									? 4 - enumMeta.size
+									: bitfieldRefWidening(f.type);
+								const effectivePadAfter = Math.max(
+									0,
+									f.paddingAfter - widening,
+								);
 
 								if (effectivePadAfter > 0) {
 									if (cfg.paddingStyle === "size") {
@@ -172,6 +223,69 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 						}
 					}
 					code += `};\n\n`;
+					if (bitfields.length > 0) {
+						const sName = typeName(t.name);
+						const unpackedName = `${sName}Unpacked`;
+						const snakeName = t.name.replace(/([A-Z])/g, (_m, c, i) =>
+							i === 0 ? c.toLowerCase() : `_${c.toLowerCase()}`,
+						);
+						const unpackFnName = `unpack_${snakeName}`;
+						const packFnName = `pack_${snakeName}`;
+						code += `struct ${unpackedName} {\n`;
+						for (const f of bitfields) {
+							const wType = f.bitSize === 1 ? "bool" : "u32";
+							code += `\t${fieldName(f.name)}: ${wType},\n`;
+						}
+						code += `};\n\n`;
+						code += `fn ${unpackFnName}(packed: ${sName}) -> ${unpackedName} {\n`;
+						code += `\tvar out: ${unpackedName};\n`;
+						const seenBytes = new Set<number>();
+						for (const f of bitfields) {
+							if (!seenBytes.has(f.offset)) {
+								seenBytes.add(f.offset);
+								code += `\tlet _raw${f.offset} = packed._bitfield_${f.offset};\n`;
+							}
+							const mask = `0x${((1 << f.bitSize) - 1).toString(16).toUpperCase()}u`;
+							// At bitOffset 0 the shift is a no-op — skip it for
+							// cleaner generated WGSL.
+							const shifted =
+								f.bitOffset === 0
+									? `_raw${f.offset}`
+									: `(_raw${f.offset} >> ${f.bitOffset}u)`;
+							if (f.bitSize === 1) {
+								code += `\tout.${fieldName(f.name)} = bool(${shifted} & ${mask});\n`;
+							} else {
+								code += `\tout.${fieldName(f.name)} = ${shifted} & ${mask};\n`;
+							}
+						}
+						code += `\treturn out;\n}\n\n`;
+
+						// Symmetric pack: write each named bit back into its
+						// `_bitfield_N` word and return a fresh struct value.
+						// For pure-bitfield structs this is a full round-trip;
+						// for mixed structs (bitfield + plain fields) any
+						// non-bitfield members come out zero-initialized — the
+						// caller is responsible for repopulating them after.
+						code += `fn ${packFnName}(unpacked: ${unpackedName}) -> ${sName} {\n`;
+						code += `\tvar out: ${sName};\n`;
+						const initBytes = new Set<number>();
+						for (const f of bitfields) {
+							if (!initBytes.has(f.offset)) {
+								initBytes.add(f.offset);
+								code += `\tout._bitfield_${f.offset} = 0u;\n`;
+							}
+							const mask = `0x${((1 << f.bitSize) - 1).toString(16).toUpperCase()}u`;
+							const srcExpr =
+								f.bitSize === 1
+									? `select(0u, 1u, unpacked.${fieldName(f.name)})`
+									: `(unpacked.${fieldName(f.name)} & ${mask})`;
+							// Skip `<< 0u` at the bottom of the word.
+							const shiftSuffix =
+								f.bitOffset === 0 ? "" : ` << ${f.bitOffset}u`;
+							code += `\tout._bitfield_${f.offset} |= ${srcExpr}${shiftSuffix};\n`;
+						}
+						code += `\treturn out;\n}\n\n`;
+					}
 				}
 			}
 			return code;

@@ -36,6 +36,8 @@ The next major milestone focuses on stabilization and internal schemas finalizat
 
 ## 0.2.0 and beyond
 
+WGSL @group() @binding() support
+
 After 0.2.0 schema-pop will strictly adhere to semantic versioning. 
 Here's some loose ideas we might pursue in no particular order.
 

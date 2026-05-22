@@ -17,8 +17,10 @@ describe("SchemaAnalyzer", () => {
 	it("should sort fields by descending alignment to minimize padding", () => {
 		const schema = fromModule($) as PopSchema;
 		schema.mode = "rich";
+		// Field reordering is now opt-in via autoSort (declaration order is
+		// the default since it preserves stable offsets across schema edits).
 		const analyzer = new SchemaAnalyzer();
-		const plan = analyzer.analyze(schema);
+		const plan = analyzer.analyze(schema, { autoSort: true } as any);
 
 		const opt = plan.types.find((t) => t.name === "Optimized") as StructPlan;
 		expect(opt?.kind).toBe("struct");

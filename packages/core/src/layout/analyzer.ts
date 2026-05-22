@@ -1,4 +1,4 @@
-import type { ExtractionContext } from "@schema-pop/schema";
+import type { ArkMeta, ExtractionContext } from "@schema-pop/schema";
 import {
 	EnumPlan,
 	Field,
@@ -40,6 +40,7 @@ export interface MigrationPlan {
 export const AnalyzerConfig = type({
 	wordSize: "'32' | '64' = '32'",
 	autoLayout: "boolean = true",
+	autoSort: "boolean = false",
 	layoutType:
 		"'aligned' | 'zero-padding' | 'std140' | 'std430' | 'dynamic' | 'dbus' = 'aligned'",
 	mode: "'binary' | 'rich' = 'rich'",
@@ -558,6 +559,10 @@ export class SchemaAnalyzer {
 		}
 
 		if (typeDef.type === "object") {
+			const fieldValues = Object.values(typeDef.fields || {});
+			if (fieldValues.length > 0 && fieldValues[0]?.popKind === "gpu-binding") {
+				return this.analyzeGpuBindingLayout(name, typeDef);
+			}
 			const plan = this.analyzeStruct(name, typeDef);
 			plan.description = description;
 			if (obsolete) {
@@ -618,6 +623,47 @@ export class SchemaAnalyzer {
 		};
 	}
 
+	private analyzeGpuBindingLayout(
+		name: string,
+		typeDef: PopType & { type: "object" },
+	): any {
+		const bindings: any[] = [];
+		for (const [fieldName, fieldType] of Object.entries(typeDef.fields || {})) {
+			const ft = fieldType as any;
+			let dataTypeName = "unknown";
+			let isArray = false;
+			if (ft.type === "array") {
+				isArray = true;
+				const item = ft.item;
+				if (item?.type === "link") dataTypeName = item.target;
+				else if (item?.binaryType) dataTypeName = item.binaryType;
+				else if (item?.type) dataTypeName = item.type;
+			} else if (ft.type === "link") {
+				dataTypeName = ft.target;
+			} else if (ft.type === "symbol") {
+				dataTypeName = String(ft.value ?? "");
+			} else if (ft.binaryType) {
+				dataTypeName = ft.binaryType;
+			}
+			bindings.push({
+				name: fieldName,
+				group: ft.gpuGroup ?? 0,
+				binding: ft.gpuBinding ?? 0,
+				usage: ft.gpuUsage ?? "storage-write",
+				dataTypeName,
+				isArray,
+			});
+		}
+		return {
+			kind: "gpu-binding-layout",
+			name,
+			size: 0,
+			align: 1,
+			paddedSize: 0,
+			bindings,
+		};
+	}
+
 	private analyzeFields(
 		fieldsDict: Record<string, PopType>,
 		parentName?: string,
@@ -657,7 +703,7 @@ export class SchemaAnalyzer {
 			};
 		});
 
-		if (this.config.autoLayout) {
+		if (this.config.autoSort) {
 			propsWithMeta.sort(
 				(a, b) => b.align - a.align || a.originalIndex - b.originalIndex,
 			);
@@ -721,6 +767,7 @@ export class SchemaAnalyzer {
 						? { description: meta.fieldType.description }
 						: {}),
 					...(meta.fieldType.obsolete ? { obsolete: true } : {}),
+					...((meta.fieldType as any).atomic ? { atomic: true } : {}),
 					...(Object.keys(migrationMeta).length > 0 ? { migrationMeta } : {}),
 				});
 				currentOffset += meta.paddedSize;
@@ -786,7 +833,7 @@ export class SchemaAnalyzer {
 		}
 
 		const variants: VariantPlan[] = (typeDef.variants || []).map(
-			(branch: PopType, i: number) => {
+			(branch: any, i: number) => {
 				let vName = branch.label;
 				if (!vName) {
 					if (branch.type === "link") vName = branch.target;

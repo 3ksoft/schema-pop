@@ -1,9 +1,39 @@
 import { generic, Hkt, scope, type Type, type } from "arktype";
 
+export const ArkMeta = type({
+	"popKind?": "'rich' | 'bitwise' | 'binary' | 'reserved' | 'gpu-binding'",
+	"description?": "string",
+	"category?": "string",
+	"min?": "number",
+	"max?": "number",
+	"step?": "number",
+	"required?": "boolean",
+	"default?": "unknown.any",
+
+	"size?": "number",
+	"align?": "number",
+	"binaryType?": "string",
+	"scale?": "number",
+	"addr?": "number",
+	"isBinary?": "boolean",
+
+	"obsolete?": "boolean",
+	"obsoleteReason?": "string",
+	"renamedFrom?": "string",
+	"originalType?": "string",
+
+	"gpuGroup?": "number",
+	"gpuBinding?": "number",
+	"gpuUsage?": "string",
+	"atomic?": "boolean",
+});
+
+export type ArkMeta = typeof ArkMeta.infer;
+
 declare global {
 	interface ArkEnv {
 		meta(): {
-			popKind?: "bitwise" | "binary" | "reserved";
+			popKind?: "bitwise" | "binary" | "reserved" | "gpu-binding";
 			size?: number;
 			align?: number;
 			binaryType?: string;
@@ -15,26 +45,17 @@ declare global {
 			obsoleteReason?: string;
 			renamedFrom?: string;
 			originalType?: string;
+			gpuGroup?: number;
+			gpuBinding?: number;
+			gpuUsage?: string;
+			atomic?: boolean;
+			category?: string;
+			min?: number;
+			max?: number;
+			step?: number;
 		};
 	}
 }
-
-export const ArkMeta = type({
-	"popKind?": "'bitwise' | 'binary' | 'reserved'",
-	"size?": "number",
-	"align?": "number",
-	"binaryType?": "string",
-	"scale?": "number",
-	"addr?": "number",
-	"isBinary?": "boolean",
-	"description?": "string",
-	"obsolete?": "boolean",
-	"obsoleteReason?": "string",
-	"renamedFrom?": "string",
-	"originalType?": "string",
-});
-
-export type ArkMeta = typeof ArkMeta.infer;
 
 /**
  * Attaches a text description to the field metadata.
@@ -206,6 +227,102 @@ export const OriginalType = generic(["t", "unknown"], ["name", "string"])(
 			originalType: String((args.name as any).unit),
 		} as any),
 	class extends Hkt<[t: unknown, name: string]> {
+		declare body: this[0];
+	},
+);
+
+/**
+ * Declares a GPU resource binding for WebGPU pipeline layout generation.
+ * Generates both TypeScript `GPUBindGroupLayoutDescriptor` entries and
+ * WGSL `@group(G) @binding(B) var<...>` declarations.
+ *
+ * Usage: `"Binding<group, binding, usage, Type>"`
+ * - `usage`: `'storage-write'` | `'storage-read'` | `'uniform'` | `'texture-2d'`
+ * - `Type`: data type for buffers (e.g. `Particle[]`), or format string for textures
+ */
+export const Binding = generic(
+	["group", "number"],
+	["index", "number"],
+	["usage", "string"],
+	["t", "unknown"],
+)(
+	(args) => {
+		return (args.t as Type).configure({
+			gpuGroup: (args.group as any).unit,
+			gpuBinding: (args.index as any).unit,
+			gpuUsage: String((args.usage as any).unit),
+			popKind: "gpu-binding",
+		});
+	},
+	class extends Hkt<[group: number, index: number, usage: string, t: unknown]> {
+		declare body: this[3];
+	},
+);
+
+/**
+ * Tags a field with a UI category and an optional description in one step.
+ *
+ * Usage: `"Category<f32, 'physics', 'Time step'>"`
+ * - `category`: group label shown in editors / config UIs
+ * - `description`: human-readable tooltip / label (optional — defaults to "")
+ */
+export const Category = generic(
+	["t", "unknown"],
+	["cat", "string"],
+	["desc", "string"],
+)(
+	(args) => {
+		return (args.t as Type).configure({
+			category: String((args.cat as any).unit),
+			description: String((args.desc as any).unit),
+		});
+	},
+	class extends Hkt<[t: unknown, cat: string, desc: string]> {
+		declare body: this[0];
+	},
+);
+
+/**
+ * Attaches min/max range metadata to a type for config UI rendering.
+ * Does not add runtime validation — use the base type constraints for that.
+ *
+ * Usage: `"Constrained<f32, 0, 1>"`
+ */
+export const Constrained = generic(
+	["t", "unknown"],
+	["min", "number"],
+	["max", "number"],
+)(
+	(args) => {
+		return (args.t as Type).configure({
+			min: (args.min as any).unit,
+			max: (args.max as any).unit,
+		});
+	},
+	class extends Hkt<[t: unknown, min: number, max: number]> {
+		declare body: this[0];
+	},
+);
+
+/**
+ * Attaches min/max/step range metadata to a type for config UI rendering.
+ *
+ * Usage: `"ConstrainedStep<f32, 0, 1, 0.01>"`
+ */
+export const ConstrainedStep = generic(
+	["t", "unknown"],
+	["min", "number"],
+	["max", "number"],
+	["step", "number"],
+)(
+	(args) => {
+		return (args.t as Type).configure({
+			min: (args.min as any).unit,
+			max: (args.max as any).unit,
+			step: (args.step as any).unit,
+		});
+	},
+	class extends Hkt<[t: unknown, min: number, max: number, step: number]> {
 		declare body: this[0];
 	},
 );

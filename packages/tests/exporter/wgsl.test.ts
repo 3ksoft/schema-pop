@@ -124,3 +124,53 @@ describe("wgsl exporter — bool", () => {
 		expect(out).toMatch(/flag:\s*u32/);
 	});
 });
+
+describe("wgsl exporter — bitfields", () => {
+	test("bitfield struct emits _bitfield_N container field", () => {
+		const out = gen({ Flags: { a: "u1", b: "u3", c: "u4" } });
+		expect(out).toContain("_bitfield_0: u32");
+	});
+
+	test("unpacked helper struct is emitted with correct field types", () => {
+		const out = gen({ Flags: { a: "u1", b: "u3", c: "u4" } });
+		expect(out).toMatch(/struct FlagsUnpacked \{/);
+		expect(out).toMatch(/a:\s*bool/);
+		expect(out).toMatch(/b:\s*u32/);
+		expect(out).toMatch(/c:\s*u32/);
+	});
+
+	test("unpack function is emitted with correct shift and mask per field", () => {
+		const out = gen({ Flags: { a: "u1", b: "u3", c: "u4" } });
+		expect(out).toMatch(/fn unpack_flags\(packed: Flags\) -> FlagsUnpacked/);
+		expect(out).toMatch(/bool\(_raw0 & 0x1u\)/);    // a: u1
+		expect(out).toMatch(/_raw0 >> 1u\) & 0x7u/);   // b: u3 at bitOffset 1
+		expect(out).toMatch(/_raw0 >> 4u\) & 0xFu/);   // c: u4 at bitOffset 4
+	});
+
+	test("fields spanning two bytes emit two raw let bindings in unpack", () => {
+		// u5 + u5 = 10 bits → byte 0 and byte 1
+		const out = gen({ Wide: { x: "u5", y: "u5" } });
+		expect(out).toMatch(/_raw0/);
+		expect(out).toMatch(/_raw1/);
+	});
+
+	test("pack function is emitted symmetric to unpack", () => {
+		const out = gen({ Flags: { a: "u1", b: "u3", c: "u4" } });
+		expect(out).toMatch(/fn pack_flags\(unpacked: FlagsUnpacked\) -> Flags/);
+		// each bitfield word gets zero-initialized once, then OR'd per field
+		expect(out).toMatch(/out\._bitfield_0 = 0u;/);
+		// bool at bitOffset 0 uses select() with no shift; bit-width fields mask & shift
+		expect(out).toMatch(
+			/out\._bitfield_0 \|= select\(0u, 1u, unpacked\.a\);/,
+		);
+		expect(out).toMatch(/\(unpacked\.b & 0x7u\) << 1u/);
+		expect(out).toMatch(/\(unpacked\.c & 0xFu\) << 4u/);
+	});
+
+	test("pack handles bitfields spanning two bytes with separate word writes", () => {
+		const out = gen({ Wide: { x: "u5", y: "u5" } });
+		expect(out).toMatch(/fn pack_wide\(unpacked: WideUnpacked\) -> Wide/);
+		expect(out).toMatch(/out\._bitfield_0 = 0u;/);
+		expect(out).toMatch(/out\._bitfield_1 = 0u;/);
+	});
+});

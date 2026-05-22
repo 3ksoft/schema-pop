@@ -119,7 +119,10 @@ const FIXTURES: Record<string, Fixture> = {
 				...binary.import(),
 				Mixed: { x: "u8", y: "u32", z: "u8" },
 			}),
-		cfg: { autoLayout: true },
+		// autoSort: true opts into the greedy descending-align packing.
+		// Default is now declaration order (preserves stable offsets), so the
+		// fixture has to ask for the reorder explicitly.
+		cfg: { autoSort: true },
 	},
 	zero_padding_layout: {
 		scope: () =>
