@@ -150,6 +150,7 @@ export const $ = scope({
 		// from the source schema so std140/std430 layouts are predictable
 		// and offsets remain stable across schema edits.
 		autoSort: "boolean = false",
+		autoPack: "boolean = false",
 		layout: "LayoutType = 'aligned'",
 		mode: "'binary' | 'rich' = 'binary'",
 		"version?": SemVer,

@@ -19,7 +19,7 @@ export interface WgslConfig extends BaseConfig {
 	paddingStyle?: "size" | "fields";
 }
 
-function getWgslType(f: Field, atomic = false): string {
+function getWgslType(f: Field, atomic = false, bitfieldStructNames?: Set<string>): string {
 	if (f.kind === "primitive") {
 		const scalar = (() => {
 			if (f.name === "f32") return "f32";
@@ -44,11 +44,16 @@ function getWgslType(f: Field, atomic = false): string {
 		}
 		return atomic ? `atomic<${scalar}>` : scalar;
 	}
-	if (f.kind === "reference") return f.name;
+	if (f.kind === "reference") {
+		if (bitfieldStructNames?.has(f.name)) {
+			return `${f.name}Packed`;
+		}
+		return f.name;
+	}
 	if (f.kind === "array") {
 		// atomic propagates to the element type — `array<atomic<i32>, N>`.
 		// Vectors cannot be atomic, so atomic suppresses the vec packing.
-		const itemType = getWgslType(f.item, atomic);
+		const itemType = getWgslType(f.item, atomic, bitfieldStructNames);
 		const isVector =
 			!atomic &&
 			f.exactLength !== undefined &&
@@ -96,6 +101,13 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 				t.variants.length > 0 &&
 				t.variants.every((v) => structNames.has(v.name));
 
+			const bitfieldStructNames = new Set<string>();
+			for (const t of plan.types) {
+				if (t.kind === "struct" && t.fields.some(f => (f.type as any).popKind === "bitwise")) {
+					bitfieldStructNames.add(t.name);
+				}
+			}
+
 			const enums = new Map<
 				string,
 				{ underlying: "u32" | "i32"; size: number }
@@ -124,7 +136,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 				const nonUnit = t.fields.filter((f) => f.type.kind !== "unit");
 				if (
 					nonUnit.length === 0 ||
-					!nonUnit.every((f) => !!f.bitSize && f.bitSize < 8)
+					!nonUnit.every((f) => (f.type as any).popKind === "bitwise")
 				)
 					continue;
 				const codecSize =
@@ -162,17 +174,20 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 				if (t.kind === "alias") {
 					if (WGSL_PREDECLARED_ALIASES.has(t.name)) continue;
 					const aliasName = typeName(t.name);
-					const target = getWgslType(t.type);
+					const target = getWgslType(t.type, false, bitfieldStructNames);
 					code += `alias ${aliasName} = ${target};\n\n`;
 					continue;
 				}
 				if (t.kind === "struct") {
-					code += `struct ${typeName(t.name)} {\n`;
+					const hasBitfields = bitfieldStructNames.has(t.name);
+					const structDeclName = hasBitfields ? `${typeName(t.name)}Packed` : typeName(t.name);
+					code += `struct ${structDeclName} {\n`;
 					let currentBitfieldOffset = -1;
 					const bitfields: typeof t.fields = [];
 					for (const f of t.fields) {
 						if (f.type.kind !== "unit") {
-							if (f.bitSize && f.bitSize < 8) {
+							const isBit = (f.type as any).popKind === "bitwise";
+							if (isBit) {
 								bitfields.push(f);
 								if (currentBitfieldOffset !== f.offset) {
 									code += `\t_bitfield_${f.offset}: u32,\n`;
@@ -180,12 +195,17 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 								}
 								if (f.paddingAfter > 0) {
 									const padWords = Math.ceil(f.paddingAfter / 4);
-									code += `\t_pad_bits_${f.name}: array<u32, ${padWords}>,\n`;
+									if (padWords === 1) {
+										code += `\t_pad_bits_${f.name}: u32,\n`;
+									} else {
+										code += `\t_pad_bits_${f.name}: array<u32, ${padWords}>,\n`;
+									}
 								}
 							} else {
 								const wgslType = getWgslType(
 									f.type,
 									!!(f as { atomic?: boolean }).atomic,
+									bitfieldStructNames,
 								);
 								const name = fieldName(f.name);
 
@@ -223,9 +243,10 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 						}
 					}
 					code += `};\n\n`;
-					if (bitfields.length > 0) {
+					if (hasBitfields && bitfields.length > 0) {
 						const sName = typeName(t.name);
-						const unpackedName = `${sName}Unpacked`;
+						const packedName = `${sName}Packed`;
+						const unpackedName = sName;
 						const snakeName = t.name.replace(/([A-Z])/g, (_m, c, i) =>
 							i === 0 ? c.toLowerCase() : `_${c.toLowerCase()}`,
 						);
@@ -237,7 +258,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 							code += `\t${fieldName(f.name)}: ${wType},\n`;
 						}
 						code += `};\n\n`;
-						code += `fn ${unpackFnName}(packed: ${sName}) -> ${unpackedName} {\n`;
+						code += `fn ${unpackFnName}(packed: ${packedName}) -> ${unpackedName} {\n`;
 						code += `\tvar out: ${unpackedName};\n`;
 						const seenBytes = new Set<number>();
 						for (const f of bitfields) {
@@ -266,8 +287,8 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 						// for mixed structs (bitfield + plain fields) any
 						// non-bitfield members come out zero-initialized — the
 						// caller is responsible for repopulating them after.
-						code += `fn ${packFnName}(unpacked: ${unpackedName}) -> ${sName} {\n`;
-						code += `\tvar out: ${sName};\n`;
+						code += `fn ${packFnName}(unpacked: ${unpackedName}) -> ${packedName} {\n`;
+						code += `\tvar out: ${packedName};\n`;
 						const initBytes = new Set<number>();
 						for (const f of bitfields) {
 							if (!initBytes.has(f.offset)) {

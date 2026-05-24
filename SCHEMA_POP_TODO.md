@@ -20,6 +20,7 @@ Constraint: {
     restValue: "f32", compliance: "f32",
     extra: "vec2f", lambda: "f32",
     breakThreshold: "f32",
+    
 },
 ```
 

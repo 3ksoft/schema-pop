@@ -355,13 +355,16 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 					code += `}\n\n`;
 				}
 				if (t.kind === "struct") {
-					const readField = (f: any): string => {
-						if ((f.type as any).popKind === "bitwise" && f.bitOffset !== undefined) {
-							const mask = (1 << f.bitSize) - 1;
-							return `(view.getUint8(offset + ${f.offset}) >> ${f.bitOffset}) & ${mask}`;
-						}
-						return genRead(f.type, `offset + ${f.offset}`);
-					};
+				const readField = (f: any): string => {
+					if ((f.type as any).popKind === "bitwise" && f.bitOffset !== undefined) {
+						const mask = Math.pow(2, f.bitSize) - 1;
+						const size = f.size || 1;
+						const rMethod = size === 4 ? `getUint32` : size === 2 ? `getUint16` : `getUint8`;
+						const isLeParam = size > 1 ? `, ${isLE}` : ``;
+						return `(view.${rMethod}(offset + ${f.offset}${isLeParam}) >> ${f.bitOffset}) & ${mask}`;
+					}
+					return genRead(f.type, `offset + ${f.offset}`);
+				};
 					code += `export function deserialize${tName}(view: DataView, offset: number, outObj?: any): ${tName} {\n`;
 					code += `\tif (!outObj) {\n\t\treturn {\n`;
 					t.fields.forEach((f) => (code += `\t\t\t${fieldName(f.name)}: ${readField(f)},\n`));
@@ -377,12 +380,15 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 							const sameBytes = t.fields.filter(
 								(sf) => (sf.type as any).popKind === "bitwise" && sf.offset === f.offset,
 							);
+							const size = f.size || 1;
+							const wMethod = size === 4 ? `setUint32` : size === 2 ? `setUint16` : `setUint8`;
+							const isLeParam = size > 1 ? `, ${isLE}` : ``;
 							let stmt = `let _b${f.offset} = 0;`;
 							for (const bf of sameBytes) {
-								const mask = (1 << (bf as any).bitSize) - 1;
+								const mask = Math.pow(2, (bf as any).bitSize) - 1;
 								stmt += ` _b${f.offset} |= ((val.${fieldName(bf.name)} & ${mask}) << ${(bf as any).bitOffset});`;
 							}
-							stmt += ` view.setUint8(offset + ${f.offset}, _b${f.offset});`;
+							stmt += ` view.${wMethod}(offset + ${f.offset}, _b${f.offset}${isLeParam});`;
 							code += `\t{ ${stmt} }\n`;
 						} else {
 							code += `\t${genWrite(f.type, `val.${fieldName(f.name)}`, `offset + ${f.offset}`)}\n`;

@@ -20,9 +20,13 @@ function toSnakeCase(s: string): string {
 	);
 }
 
-function wgslVarDecl(b: GpuBinding, fieldName: (n: string) => string): string {
+function wgslVarDecl(b: GpuBinding, fieldName: (n: string) => string, bitfieldStructNames?: Set<string>): string {
 	const name = fieldName(b.name);
-	const typePart = b.isArray ? `array<${b.dataTypeName}>` : b.dataTypeName;
+	let dataTypeName = b.dataTypeName;
+	if (bitfieldStructNames?.has(dataTypeName)) {
+		dataTypeName = `${dataTypeName}Packed`;
+	}
+	const typePart = b.isArray ? `array<${dataTypeName}>` : dataTypeName;
 	switch (b.usage) {
 		case "storage-write":
 			return `var<storage, read_write> ${name}: ${typePart}`;
@@ -35,8 +39,8 @@ function wgslVarDecl(b: GpuBinding, fieldName: (n: string) => string): string {
 			// means `atomic<T>`. Access stays `read_write` — atomicity is a
 			// property of the location, orthogonal to the access mode.
 			const atomicType = b.isArray
-				? `array<atomic<${b.dataTypeName}>>`
-				: `atomic<${b.dataTypeName}>`;
+				? `array<atomic<${dataTypeName}>>`
+				: `atomic<${dataTypeName}>`;
 			return `var<storage, read_write> ${name}: ${atomicType}`;
 		}
 		case "uniform":
@@ -139,6 +143,13 @@ export function gpuBindingsWgsl(
 		extension: "wgsl",
 		config: cfg as any,
 		generate: (plan: LayoutPlan) => {
+			const bitfieldStructNames = new Set<string>();
+			for (const t of plan.types) {
+				if (t.kind === "struct" && t.fields.some(f => (f.type as any).popKind === "bitwise")) {
+					bitfieldStructNames.add(t.name);
+				}
+			}
+
 			let code = "";
 			for (const t of plan.types) {
 				if (!isGpuBindingPlan(t)) continue;
@@ -146,7 +157,7 @@ export function gpuBindingsWgsl(
 					a.group !== b.group ? a.group - b.group : a.binding - b.binding,
 				);
 				for (const b of sorted) {
-					code += `@group(${b.group}) @binding(${b.binding}) ${wgslVarDecl(b, fieldName)};\n`;
+					code += `@group(${b.group}) @binding(${b.binding}) ${wgslVarDecl(b, fieldName, bitfieldStructNames)};\n`;
 				}
 				code += "\n";
 			}

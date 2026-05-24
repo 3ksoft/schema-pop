@@ -41,6 +41,7 @@ export const AnalyzerConfig = type({
 	wordSize: "'32' | '64' = '32'",
 	autoLayout: "boolean = true",
 	autoSort: "boolean = false",
+	autoPack: "boolean = false",
 	layoutType:
 		"'aligned' | 'zero-padding' | 'std140' | 'std430' | 'dynamic' | 'dbus' = 'aligned'",
 	mode: "'binary' | 'rich' = 'rich'",
@@ -703,6 +704,32 @@ export class SchemaAnalyzer {
 			};
 		});
 
+		if (this.config.autoPack) {
+			propsWithMeta.forEach((meta) => {
+				const t = meta.type;
+				if (t.kind === "primitive") {
+					if (t.name === "bool" || t.name === "boolean") {
+						meta.type = {
+							...t,
+							popKind: "bitwise",
+							bitSize: 1,
+						};
+					} else if (t.unsigned && t.bitSize !== undefined && t.bitSize <= 16) {
+						meta.type = {
+							...t,
+							popKind: "bitwise",
+						};
+					} else if (t.unsigned && t.size !== undefined && t.size <= 2) {
+						meta.type = {
+							...t,
+							popKind: "bitwise",
+							bitSize: t.size * 8,
+						};
+					}
+				}
+			});
+		}
+
 		if (this.config.autoSort) {
 			propsWithMeta.sort(
 				(a, b) => b.align - a.align || a.originalIndex - b.originalIndex,
@@ -718,7 +745,7 @@ export class SchemaAnalyzer {
 			const isBitwise =
 				type.kind === "primitive" &&
 				type.bitSize !== undefined &&
-				type.bitSize < 8;
+				(type.bitSize < 8 || (this.config.autoPack && type.bitSize < 32));
 			const bitSize = isBitwise ? type.bitSize : meta.size * 8;
 
 			const migrationMeta: any = {};
@@ -727,8 +754,10 @@ export class SchemaAnalyzer {
 			if (meta.hasDefault) migrationMeta.defaultValue = meta.defaultValue;
 
 			if (isBitwise) {
-				if (currentBitOffset + bitSize > 8) {
-					currentOffset += 1;
+				const maxBits = this.config.autoPack ? 32 : 8;
+				const wordSize = (this.config.autoPack && type.bitSize >= 8) ? 4 : (type.bitSize < 8 ? 1 : 4);
+				if (currentBitOffset + bitSize > maxBits) {
+					currentOffset += wordSize;
 					currentBitOffset = 0;
 				}
 				fields.push({
@@ -737,7 +766,7 @@ export class SchemaAnalyzer {
 					offset: currentOffset,
 					bitOffset: currentBitOffset,
 					bitSize: bitSize,
-					size: 1,
+					size: wordSize,
 					paddingAfter: 0,
 					...(meta.fieldType.description
 						? { description: meta.fieldType.description }
@@ -748,7 +777,7 @@ export class SchemaAnalyzer {
 				currentBitOffset += bitSize;
 			} else {
 				if (currentBitOffset > 0) {
-					currentOffset += 1;
+					currentOffset += (this.config.autoPack ? 4 : 1);
 					currentBitOffset = 0;
 				}
 				const paddingBefore =
@@ -773,7 +802,9 @@ export class SchemaAnalyzer {
 				currentOffset += meta.paddedSize;
 			}
 		}
-		if (currentBitOffset > 0) currentOffset += 1;
+		if (currentBitOffset > 0) {
+			currentOffset += (this.config.autoPack ? 4 : 1);
+		}
 
 		const structAlign = fields.reduce(
 			(max, f) => Math.max(max, this.getLayout(f.type).align),
