@@ -14,7 +14,7 @@ i Codec emituje pola w kolejności alfabetycznej.
 
 Przykład — schema:
 ```ts
-Constraint: {
+Constraint: { 
     idxA: "i32", idxB: "i32", idxC: "i32",
     cType_color: "u32",
     restValue: "f32", compliance: "f32",

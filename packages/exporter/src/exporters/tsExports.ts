@@ -42,7 +42,7 @@ export function tsExports(
 			}
 			code += `} = ${scopeVar}.export();\n\n`;
 			for (const t of visibleTypes) {
-				code += `export type ${typeName(t.name)} = typeof ${typeName(t.name)}.inferIn;\n`;
+				code += `export type ${typeName(t.name)} = typeof ${typeName(t.name)}.infer;\n`;
 			}
 			if (unions.length > 0) {
 				code += "\n";

@@ -46,6 +46,24 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 			}
 
 			const typeByName = new Map(plan.types.map((t) => [t.name, t]));
+			
+			const getVariantDiscriminantValue = (v: any, t: any): string => {
+				const disc = t.discriminant || "kind";
+				if (v.type.kind === "reference") {
+					const vStruct: any = typeByName.get(v.type.name);
+					if (vStruct && vStruct.kind === "struct") {
+						const f = vStruct.fields.find((field: any) => field.name === disc);
+						if (f && f.type.kind === "reference") {
+							const refType: any = typeByName.get(f.type.name);
+							if (refType && refType.kind === "enum" && refType.variants && refType.variants.length > 0) {
+								return refType.variants[0].name;
+							}
+						}
+					}
+				}
+				return v.name;
+			};
+
 			const sizeOf = (t: any): number => t.paddedSize ?? t.size ?? 0;
 			const inlineable = (name: string): boolean => {
 				const t: any = typeByName.get(name);
@@ -405,22 +423,26 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 					code += `export function deserialize${tName}(view: DataView, offset: number): ${tName} {\n`;
 					code += `\tconst tag = view.${p.r}(offset + ${t.tagOffset}${p.b > 1 ? `, ${isLE}` : ""});\n\tswitch(tag) {\n`;
 					t.variants.forEach((v, i) => {
+						const discVal = getVariantDiscriminantValue(v, t);
 						const r = genRead(v.type, `offset + ${payloadOffset}`);
 						const isObj =
 							v.type.kind === "inlineStruct" || v.type.kind === "reference";
 						// Zero-allocation approach for references, but enforces 'kind' property addition for TS discrimination.
+						const discField = t.discriminant || "kind";
 						if (isObj) {
-							code += `\t\tcase ${i}: { const obj = ${r}; (obj as any).kind = "${v.name}"; return obj as any; }\n`;
+							code += `\t\tcase ${i}: { const obj = ${r}; (obj as any).${discField} = "${discVal}"; return obj as any; }\n`;
 						} else {
-							code += `\t\tcase ${i}: return { kind: "${v.name}", value: ${r} } as any;\n`;
+							code += `\t\tcase ${i}: return { ${discField}: "${discVal}", value: ${r} } as any;\n`;
 						}
 					});
 					code += `\t\tdefault: throw new Error("Unknown Union tag for ${tName}: " + tag);\n\t}\n}\n\n`;
 
 					code += `export function serialize${tName}(val: ${tName}, view: DataView, offset: number): void {\n`;
-					code += `\tswitch(val.kind) {\n`;
+					const discField = t.discriminant || "kind";
+					code += `\tswitch(val.${discField}) {\n`;
 					t.variants.forEach((v, i) => {
-						code += `\t\tcase "${v.name}": {\n\t\t\tview.${p.w}(offset + ${t.tagOffset}, ${i}${p.b > 1 ? `, ${isLE}` : ""});\n`;
+						const discVal = getVariantDiscriminantValue(v, t);
+						code += `\t\tcase "${discVal}": {\n\t\t\tview.${p.w}(offset + ${t.tagOffset}, ${i}${p.b > 1 ? `, ${isLE}` : ""});\n`;
 						const isObj =
 							v.type.kind === "inlineStruct" || v.type.kind === "reference";
 						code += `\t\t\t${genWrite(v.type, isObj ? "val" : "val.value", `offset + ${payloadOffset}`)}\n\t\t\tbreak;\n\t\t}\n`;
