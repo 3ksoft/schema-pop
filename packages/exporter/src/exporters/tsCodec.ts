@@ -379,7 +379,10 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 						const size = f.size || 1;
 						const rMethod = size === 4 ? `getUint32` : size === 2 ? `getUint16` : `getUint8`;
 						const isLeParam = size > 1 ? `, ${isLE}` : ``;
-						return `(view.${rMethod}(offset + ${f.offset}${isLeParam}) >> ${f.bitOffset}) & ${mask}`;
+						const raw = `(view.${rMethod}(offset + ${f.offset}${isLeParam}) >> ${f.bitOffset}) & ${mask}`;
+						const primName = (f.type as any).name;
+						if (primName === "bool" || primName === "boolean") return `(${raw}) !== 0`;
+						return raw;
 					}
 					return genRead(f.type, `offset + ${f.offset}`);
 				};
@@ -404,7 +407,11 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 							let stmt = `let _b${f.offset} = 0;`;
 							for (const bf of sameBytes) {
 								const mask = Math.pow(2, (bf as any).bitSize) - 1;
-								stmt += ` _b${f.offset} |= ((val.${fieldName(bf.name)} & ${mask}) << ${(bf as any).bitOffset});`;
+								const primName = (bf.type as any).name;
+								const src = (primName === "bool" || primName === "boolean")
+									? `(val.${fieldName(bf.name)} ? 1 : 0)`
+									: `val.${fieldName(bf.name)}`;
+								stmt += ` _b${f.offset} |= ((${src} & ${mask}) << ${(bf as any).bitOffset});`;
 							}
 							stmt += ` view.${wMethod}(offset + ${f.offset}, _b${f.offset}${isLeParam});`;
 							code += `\t{ ${stmt} }\n`;

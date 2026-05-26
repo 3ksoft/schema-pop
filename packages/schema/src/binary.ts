@@ -9,8 +9,8 @@ import { scope, type } from "arktype";
 const bool = type("boolean").configure({
 	size: 1,
 	align: 1,
-	description: "boolean",
-	popKind: "binary",
+	description: "boolean (packed as 1 bit)",
+	popKind: "bitwise",
 	isBinary: true,
 	binaryType: "bool",
 });

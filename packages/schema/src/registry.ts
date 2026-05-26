@@ -51,7 +51,7 @@ export const EXPORTER_REGISTRY = {
 } as const;
 
 export const BINARY_METADATA: Record<string, Record<string, unknown>> = {
-	bool: { size: 1, align: 1, popKind: "binary" },
+	bool: { size: 1, align: 1, popKind: "bitwise" },
 	u8: { min: 0, max: 255, size: 1, align: 1, popKind: "binary" },
 	i8: { min: -128, max: 127, size: 1, align: 1, popKind: "binary" },
 	u16: { min: 0, max: 65535, size: 2, align: 2, popKind: "binary" },

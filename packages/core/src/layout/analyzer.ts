@@ -193,7 +193,13 @@ export class SchemaAnalyzer {
 
 	private getBuiltinPrimitive(oName: string): Field | undefined {
 		const name =
-			oName === "number" ? "f64" : oName === "bigint" ? "i64" : oName;
+			oName === "number"
+				? "f64"
+				: oName === "bigint"
+					? "i64"
+					: oName === "boolean"
+						? "bool"
+						: oName;
 		if (name === "bool")
 			return {
 				kind: "primitive",
@@ -201,9 +207,9 @@ export class SchemaAnalyzer {
 				size: 1,
 				align: 1,
 				paddedSize: 1,
-				bitSize: 8,
+				bitSize: 1,
 				unsigned: true,
-				popKind: "binary",
+				popKind: "bitwise",
 			};
 		const match = name.match(/^([ui])(\d+)$/);
 		if (match) {
