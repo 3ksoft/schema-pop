@@ -87,13 +87,15 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 		config: cfg,
 		generate: (plan: LayoutPlan) => {
 			let tempId = 0;
-			function genRw(tField: Field, target: string, offsetExpr: string, isPack: boolean, rawArr: string): string {
+			function genRw(tField: Field, target: string, offsetExpr: string, isPack: boolean, rawArr: string, isAtomic: boolean = false): string {
 				if (tField.kind === "primitive") {
 					const scalar = tField.name === "f32" ? "f32" : (tField.name === "i32" ? "i32" : "u32");
+					if (isAtomic) return `\t// atomic fields cannot be packed/unpacked directly via assignment\n`;
 					if (isPack) return `\t${rawArr}[${offsetExpr}] = bitcast<u32>(${target});\n`;
 					else return `\t${target} = bitcast<${scalar}>(${rawArr}[${offsetExpr}]);\n`;
 				}
 				if (tField.kind === "reference") {
+					const refName = tField.name;
 					if (enums.has(tField.name)) {
 						const underlying = enums.get(tField.name)!.underlying;
 						if (isPack) return `\t${rawArr}[${offsetExpr}] = bitcast<u32>(${target});\n`;
@@ -121,10 +123,10 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 				if (tField.kind === "array") {
 					if (!tField.exactLength) return `\t// unsupported dynamic array\n`;
 					const len = tField.exactLength;
-					const isVector = len <= 4 && !(tField as any).atomic;
+					const isVector =  len <= 4 && !isAtomic;
 					
-					if (tField.item.kind === "primitive"  && isVector) {
-						const scalar = tField.item.isFloat ? "f32" : (tField.item.name === "i32" ? "i32" : "u32");
+					if (tField.item.kind === "primitive" && isVector) {
+						const scalar = getWgslType(tField.item, false, bitfieldStructNames);
 						let code = "";
 						if (!isPack) {
 							const args = Array.from({length: len}, (_, idx) => `bitcast<${scalar}>(${rawArr}[${offsetExpr} + ${idx}u])`).join(", ");
@@ -160,7 +162,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 					const innerOffset = `(${offsetExpr} + ${idxName} * ${strideW}u)`;
 					const innerTarget = `${target}[${idxName}]`;
 					
-					const innerCode = genRw(tField.item, innerTarget, innerOffset, isPack, rawArr);
+					const innerCode = genRw(tField.item, innerTarget, innerOffset, isPack, rawArr, isAtomic);
 					code += innerCode.split('\n').filter(Boolean).map(l => `\t${l}\n`).join('');
 					code += `\t}\n`;
 					return code;
@@ -471,15 +473,19 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 						}
 						const offsetW = Math.floor(f.offset / 4);
 						const name = fieldName(f.name);
-						structUnpackBody += genRw(f.type, `out.${name}`, `${offsetW}u`, false, "raw");
-						structPackBody += genRw(f.type, `unpacked.${name}`, `${offsetW}u`, true, "out");
+						const isAtomic = !!(f as any).atomic;
+						structUnpackBody += genRw(f.type, `out.${name}`, `${offsetW}u`, false, "raw", isAtomic);
+						structPackBody += genRw(f.type, `unpacked.${name}`, `${offsetW}u`, true, "out", isAtomic);
 					}
 
 					structUnpackBody += `\treturn out;\n`;
 					structPackBody += `\treturn out;\n`;
 
-					code += `fn ${structUnpackFn}(raw: array<u32, ${words}>) -> ${structDeclName} {\n${structUnpackBody}}\n\n`;
-					code += `fn ${structPackFn}(unpacked: ${structDeclName}) -> array<u32, ${words}> {\n${structPackBody}}\n\n`;
+					const hasAtomicFields = t.fields.some(f => !!(f as any).atomic);
+					if (!hasAtomicFields) {
+						code += `fn ${structUnpackFn}(raw: array<u32, ${words}>) -> ${structDeclName} {\n${structUnpackBody}}\n\n`;
+						code += `fn ${structPackFn}(unpacked: ${structDeclName}) -> array<u32, ${words}> {\n${structPackBody}}\n\n`;
+					}
 				}
 			}
 			return code;

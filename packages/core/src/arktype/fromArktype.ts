@@ -26,8 +26,8 @@ const ANY = PopType.assert({
 function assertPopType(field: unknown, ctx: ExtractionContext): PopType {
 	const valid = PopType(field);
 	if (valid instanceof type.errors) {
-		for (const k in valid.entries) {
-			ctx.errors.push(k);
+		for (const error of valid) {
+			ctx.errors.push(error.toString());
 		}
 		return { type: "any" };
 	}
@@ -115,7 +115,13 @@ function extractBaseRoot(
 
 	let popType: PopType | null = null;
 
-	if (root.hasKind("domain")) popType = extractDomain(root, ctx);
+	if (root.hasKind("morph")) {
+		const inputNode = (root as any).in ?? (root.inner as any)?.in;
+		if (inputNode) {
+			popType = extractBaseRoot(label, inputNode as BaseRoot, ctx, rawDef);
+		}
+	}
+	else if (root.hasKind("domain")) popType = extractDomain(root, ctx);
 	else if (root.hasKind("union"))
 		popType = extractUnion(label, root, ctx, rawDef);
 	else if (root.hasKind("unit")) popType = extractUnit(root, ctx);
@@ -224,7 +230,7 @@ function extractObject(
 			// `migrationMeta.defaultValue`.
 			const propJson = (exType as { json?: { default?: unknown } })?.json;
 			const hasDefault = !!propJson && "default" in propJson;
-			const defaultValue = hasDefault ? propJson.default : undefined;
+			const defaultValue = hasDefault ? propJson.default : undefined;			
 			const required = exType?.kind === "required" || hasDefault;
 			const value = exType?.inner.value;
 			if (value) {
@@ -241,8 +247,15 @@ function extractObject(
 					childRawDef,
 				);
 				extracted.required = required;
-				if (hasDefault)
+				const isReadableDefault =
+					hasDefault &&
+					defaultValue !== undefined &&
+					typeof defaultValue !== "function" &&
+					!(typeof defaultValue === "string" && defaultValue.startsWith("$ark"));
+
+				if (isReadableDefault) {
 					(extracted as { default?: unknown }).default = defaultValue;
+				}
 				fields[key] = extracted;
 			}
 		}
