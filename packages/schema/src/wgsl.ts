@@ -15,6 +15,14 @@ import { binary } from "./binary";
  * exporter skips emitting `alias` lines for them.
  */
 
+const ai32 = binary.type("i32").configure({
+	description: "atomic<i32>",
+	atomic: true
+});
+const au32 = binary.type("u32").configure({
+	description: "atomic<u32>",
+	atomic: true
+});
 const vec2f = binary.type("f32[] == 2").configure({
 	description: "vec2<f32>",
 });
@@ -48,6 +56,8 @@ const vec4u = binary.type("u32[] == 4").configure({
 export const wgsl = scope({
 	...binary.import(),
 
+	ai32,
+	au32,
 	vec2f,
 	vec3f,
 	vec4f,
@@ -77,6 +87,8 @@ export const wgsl = scope({
  * project-level shorthands and need explicit alias emission.
  */
 export const WGSL_PREDECLARED_ALIASES = new Set([
+	"ai32",
+	"au32",
 	"vec2f",
 	"vec3f",
 	"vec4f",

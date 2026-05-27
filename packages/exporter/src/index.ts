@@ -9,6 +9,7 @@ import { rust, type RustConfig } from "./exporters/rust";
 import { ts, type TsConfig } from "./exporters/ts";
 import { tsCodec, type TsCodecConfig } from "./exporters/tsCodec";
 import { tsExports, type TsExportsConfig } from "./exporters/tsExports";
+import { tsWebgpu, type TsWebgpuConfig } from "./exporters/tsWebgpu";
 import { zig, type ZigConfig } from "./exporters/zig";
 import { brainfuck, type BrainfuckConfig } from "./exporters/bf";
 import { glsl, type GlslConfig } from "./exporters/glsl";
@@ -42,6 +43,7 @@ export { rust, type RustConfig };
 export { rustSerde, type RustSerdeConfig };
 export { ts, type TsConfig };
 export { tsCodec, type TsCodecConfig };
+export { tsWebgpu, type TsWebgpuConfig };
 export { tsExports, type TsExportsConfig };
 export { zig, type ZigConfig };
 export { zigMatcher, type ZigMatcherConfig };
@@ -110,6 +112,7 @@ export type ExporterTarget =
 	| "ts"
 	| "ts:codec"
 	| "ts:exports"
+	| "ts:webgpu"
 	| "zig"
 	| "zig:matcher"
 	| "bf"
@@ -139,6 +142,7 @@ export type ExporterConfigMap = {
 	ts: TsConfig;
 	"ts:codec": TsCodecConfig;
 	"ts:exports": TsExportsConfig;
+	"ts:webgpu": TsWebgpuConfig;
 	zig: ZigConfig;
 	"zig:matcher": ZigMatcherConfig;
 	bf: BrainfuckConfig;
@@ -184,6 +188,8 @@ export function getExporter<T extends ExporterTarget>(
 			return tsCodec(cfg);
 		case "ts:exports":
 			return tsExports(cfg);
+		case "ts:webgpu":
+			return tsWebgpu(cfg);
 		case "zig":
 			return zig(cfg);
 		case "zig:matcher":

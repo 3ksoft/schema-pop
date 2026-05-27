@@ -324,75 +324,7 @@ export class SchemaAnalyzer {
 		return plan;
 	}
 
-	public static analyzeMigration(
-		planFrom: LayoutPlan,
-		planTo: LayoutPlan,
-	): MigrationPlan[] {
-		const migrations: MigrationPlan[] = [];
-		for (const toType of planTo.types) {
-			if (toType.kind === "alias") continue;
-			const fromType = planFrom.types.find((t) => t.name === toType.name);
-			if (!fromType || fromType.kind !== toType.kind) continue;
-
-			if (toType.kind === "struct") {
-				const fFrom = fromType as StructPlan;
-				const fields: MigrationPlan["fields"] = toType.fields.map((tf) => {
-					const sf = fFrom.fields.find((f) => f.name === tf.name);
-					return {
-						targetName: tf.name,
-						sourceName: sf ? sf.name : null,
-						targetType: tf.type,
-						sourceType: sf ? sf.type : null,
-					};
-				});
-				migrations.push({
-					typeName: toType.name,
-					kind: "struct",
-					fields,
-					variants: [],
-				});
-			} else if (toType.kind === "enum") {
-				const fFrom = fromType as EnumPlan;
-				const variants: MigrationPlan["variants"] = toType.variants.map(
-					(tv) => {
-						const sv = fFrom.variants.find((v) => v.name === tv.name);
-						return {
-							targetName: tv.name,
-							sourceName: sv ? sv.name : null,
-						};
-					},
-				);
-				migrations.push({
-					typeName: toType.name,
-					kind: "enum",
-					fields: [],
-					variants,
-				});
-			} else if (toType.kind === "union") {
-				const fFrom = fromType as UnionPlan;
-				const variants: MigrationPlan["variants"] = toType.variants.map(
-					(tv) => {
-						const sv = fFrom.variants.find((v) => v.name === tv.name);
-						return {
-							targetName: tv.name,
-							sourceName: sv ? sv.name : null,
-							targetType: tv.type,
-							sourceType: sv ? sv.type : null,
-						};
-					},
-				);
-				migrations.push({
-					typeName: toType.name,
-					kind: "union",
-					fields: [],
-					variants,
-				});
-			}
-		}
-		return migrations;
-	}
-
-	private getLayout(field: Field): TypeLayout {
+	private getLayout(field: Field): typeof TypeLayout.inferIn {
 		const layout = this.getLayoutInternal(field);
 		if (this.config.layout === "zero-padding") {
 			return { size: layout.size, align: 1, paddedSize: layout.size };
@@ -400,7 +332,7 @@ export class SchemaAnalyzer {
 		return layout;
 	}
 
-	private getDbusLayout(field: Field): TypeLayout {
+	private getDbusLayout(field: Field): typeof TypeLayout.inferIn {
 		if (field.kind === "primitive") {
 			let size = field.size;
 			let align = field.align;
@@ -455,7 +387,7 @@ export class SchemaAnalyzer {
 		return { size: 0, align: 1, paddedSize: 0 };
 	}
 
-	private getLayoutInternal(field: Field): TypeLayout {
+	private getLayoutInternal(field: Field): typeof TypeLayout.inferIn {
 		if (this.config.layout === "dbus") {
 			return this.getDbusLayout(field);
 		}
@@ -549,10 +481,6 @@ export class SchemaAnalyzer {
 		const description = typeDef.description ?? "";
 		const obsolete = typeDef.obsolete;
 		const obsoleteReason = typeDef.obsoleteReason;
-		const renamedFrom = typeDef.renamedFrom;
-		const migrationMetaSpread = renamedFrom
-			? { migrationMeta: { renamedFrom } }
-			: {};
 
 		if (typeDef.type === "union" || typeDef.type === "enum") {
 			const plan = this.analyzeUnion(name, typeDef);
@@ -561,7 +489,6 @@ export class SchemaAnalyzer {
 				plan.obsolete = true;
 				if (obsoleteReason) plan.obsoleteReason = obsoleteReason;
 			}
-			// if (renamedFrom) plan.migrationMeta = { renamedFrom };
 			return plan;
 		}
 
@@ -588,10 +515,6 @@ export class SchemaAnalyzer {
 			...layout,
 			type: field,
 			...(description ? { description } : {}),
-			...(obsolete
-				? { obsolete: true, ...(obsoleteReason ? { obsoleteReason } : {}) }
-				: {}),
-			...migrationMetaSpread,
 		};
 	}
 
@@ -653,6 +576,7 @@ export class SchemaAnalyzer {
 				dataTypeName = ft.binaryType;
 			}
 			bindings.push({
+				...ft,
 				name: fieldName,
 				group: ft.gpuGroup ?? 0,
 				binding: ft.gpuBinding ?? 0,
@@ -747,19 +671,14 @@ export class SchemaAnalyzer {
 		let currentBitOffset = 0;
 
 		for (const meta of propsWithMeta) {
-			const type = meta.type as any;
+			const type = meta.type;
 			const isBitwise =
 				type.kind === "primitive" &&
 				type.bitSize !== undefined &&
 				(type.bitSize < 8 || (this.config.autoPack && type.bitSize < 32));
-			const bitSize = isBitwise ? type.bitSize : meta.size * 8;
-
-			const migrationMeta: any = {};
-			if (meta.fieldType.renamedFrom)
-				migrationMeta.renamedFrom = meta.fieldType.renamedFrom;
-			if (meta.hasDefault) migrationMeta.defaultValue = meta.defaultValue;
-
-			if (isBitwise) {
+						
+			if (isBitwise && type.bitSize) {
+				const bitSize = isBitwise ? type.bitSize : meta.size * 8;
 				const maxBits = this.config.autoPack ? 32 : 8;
 				const wordSize = (this.config.autoPack && type.bitSize >= 8) ? 4 : (type.bitSize < 8 ? 1 : 4);
 				if (currentBitOffset + bitSize > maxBits) {
@@ -774,11 +693,6 @@ export class SchemaAnalyzer {
 					bitSize: bitSize,
 					size: wordSize,
 					paddingAfter: 0,
-					...(meta.fieldType.description
-						? { description: meta.fieldType.description }
-						: {}),
-					...(meta.fieldType.obsolete ? { obsolete: true } : {}),
-					...(Object.keys(migrationMeta).length > 0 ? { migrationMeta } : {}),
 				});
 				currentBitOffset += bitSize;
 			} else {
@@ -798,12 +712,6 @@ export class SchemaAnalyzer {
 					bitSize: meta.size * 8,
 					size: meta.size,
 					paddingAfter: 0,
-					...(meta.fieldType.description
-						? { description: meta.fieldType.description }
-						: {}),
-					...(meta.fieldType.obsolete ? { obsolete: true } : {}),
-					...((meta.fieldType as any).atomic ? { atomic: true } : {}),
-					...(Object.keys(migrationMeta).length > 0 ? { migrationMeta } : {}),
 				});
 				currentOffset += meta.paddedSize;
 			}
@@ -973,6 +881,7 @@ export class SchemaAnalyzer {
 			const paddedSize =
 				Math.ceil((type.popKind === "bitwise" ? 1 : size) / align) * align;
 			return this.assertField({
+				...type,
 				kind: "primitive",
 				name: type.binaryType || type.type,
 				size: type.popKind === "bitwise" ? 1 : size,
@@ -1072,7 +981,9 @@ export class SchemaAnalyzer {
 		}
 
 		const builtin = this.getBuiltinPrimitive(type.type);
-		if (builtin) return builtin;
+		if (builtin) {
+			return {...builtin, ...type};
+		}
 
 		return this.assertField({
 			kind: "primitive",

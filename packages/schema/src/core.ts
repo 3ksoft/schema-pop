@@ -16,6 +16,9 @@ export const ArkMeta = type({
 	"scale?": "number",
 	"addr?": "number",
 	"isBinary?": "boolean",
+	"bitSize?": "number",
+	"unsigned?": "boolean",
+	"isFloat?": "boolean",
 
 	"obsolete?": "boolean",
 	"obsoleteReason?": "string",

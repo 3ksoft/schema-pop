@@ -26,9 +26,11 @@ export interface WgslConfig extends BaseConfig {
 	outputStyle?: "types" | "helpers" | "combined";
 }
 
-function getWgslType(f: Field, atomic = false, bitfieldStructNames?: Set<string>): string {
+function getWgslType(f: Field, atomic = false, bitfieldStructNames?: Set<string>, singletonEnumNames?: Set<string>): string {
 	if (f.kind === "primitive") {
 		const scalar = (() => {
+			if(f.atomic && f.binaryType === "i32") return "atomic<i32>"
+			if(f.atomic && f.binaryType === "u32") return "atomic<u32>"
 			if (f.name === "f32") return "f32";
 			if (f.name === "f64") {
 				throw new Error(
@@ -55,10 +57,13 @@ function getWgslType(f: Field, atomic = false, bitfieldStructNames?: Set<string>
 		if (bitfieldStructNames?.has(f.name)) {
 			return `${f.name}Packed`;
 		}
+		if (singletonEnumNames?.has(f.name)) {
+			return "u32";
+		}
 		return f.name;
 	}
 	if (f.kind === "array") {
-		const itemType = getWgslType(f.item, atomic, bitfieldStructNames);
+		const itemType = getWgslType(f.item, atomic, bitfieldStructNames, singletonEnumNames);
 		const isVector =
 			!atomic &&
 			f.exactLength !== undefined &&
@@ -95,96 +100,20 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 		config: cfg,
 		generate: (plan: LayoutPlan) => {
 			let tempId = 0;
-			function genRw(tField: Field, target: string, offsetExpr: string, isPack: boolean, rawArr: string, isAtomic: boolean = false): string {
-				if (tField.kind === "primitive") {
-					const scalar = tField.name === "f32" ? "f32" : (tField.name === "i32" ? "i32" : "u32");
-					if (isAtomic) return `\t// atomic fields cannot be packed/unpacked directly via assignment\n`;
-					if (isPack) return `\t${rawArr}[${offsetExpr}] = bitcast<u32>(${target});\n`;
-					else return `\t${target} = bitcast<${scalar}>(${rawArr}[${offsetExpr}]);\n`;
+
+			// 1. Identyfikacja jednoelementowych, syntetycznych enumów (singletons)
+			const singletonEnumNames = new Set<string>();
+			for (const t of plan.types) {
+				if (t.kind === "enum" && t.variants.length === 1 && t.syntetic) {
+					singletonEnumNames.add(t.name);
 				}
-				if (tField.kind === "reference") {
-					const refName = tField.name;
-					if (enums.has(tField.name)) {
-						const underlying = enums.get(tField.name)!.underlying;
-						if (isPack) return `\t${rawArr}[${offsetExpr}] = bitcast<u32>(${target});\n`;
-						else return `\t${target} = bitcast<${underlying}>(${rawArr}[${offsetExpr}]);\n`;
-					}
-					const refStruct = plan.types.find(pt => pt.name === tField.name);
-					if (!refStruct) return `\t// unsupported reference ${tField.name}\n`;
-					const words = Math.max(1, Math.ceil((refStruct as any).paddedSize / 4));
-					const tmpName = `tmp_${tempId++}`;
-					let code = "";
-					if (!isPack) {
-						code += `\tvar ${tmpName}: array<u32, ${words}>;\n`;
-						code += `\tfor (var j_${tmpName} = 0u; j_${tmpName} < ${words}u; j_${tmpName}++) {\n`;
-						code += `\t\t${tmpName}[j_${tmpName}] = ${rawArr}[${offsetExpr} + j_${tmpName}];\n`;
-						code += `\t}\n`;
-						code += `\t${target} = unpack_words_to_${toSnakeCase(tField.name)}(${tmpName});\n`;
-					} else {
-						code += `\tlet ${tmpName} = pack_${toSnakeCase(tField.name)}_to_words(${target});\n`;
-						code += `\tfor (var j_${tmpName} = 0u; j_${tmpName} < ${words}u; j_${tmpName}++) {\n`;
-						code += `\t\t${rawArr}[${offsetExpr} + j_${tmpName}] = ${tmpName}[j_${tmpName}];\n`;
-						code += `\t}\n`;
-					}
-					return code;
-				}
-				if (tField.kind === "array") {
-					if (!tField.exactLength) return `\t// unsupported dynamic array\n`;
-					const len = tField.exactLength;
-					const isVector =  len <= 4 && !isAtomic;
-					
-					if (tField.item.kind === "primitive" && isVector) {
-						const scalar = getWgslType(tField.item, false, bitfieldStructNames);
-						let code = "";
-						if (!isPack) {
-							const args = Array.from({length: len}, (_, idx) => `bitcast<${scalar}>(${rawArr}[${offsetExpr} + ${idx}u])`).join(", ");
-							code += `\t${target} = vec${len}<${scalar}>(${args});\n`;
-						} else {
-							for (let idx=0; idx<len; idx++) {
-								const comp = ["x", "y", "z", "w"][idx];
-								code += `\t${rawArr}[${offsetExpr} + ${idx}u] = bitcast<u32>(${target}.${comp});\n`;
-							}
-						}
-						return code;
-					}
-					
-					let itemLayout = 0;
-					if (tField.item.kind === "primitive") {
-						itemLayout = (tField.item as any).paddedSize ?? (tField.item as any).size ?? 4;
-					} else if (tField.item.kind === "reference") {
-						const refName = (tField.item as any).name;
-						if (enums.has(refName)) {
-							itemLayout = enums.get(refName)!.size;
-						} else {
-							const refS = plan.types.find(pt => pt.name === tField.item.kind || pt.name === refName);
-							itemLayout = (refS as any)?.paddedSize ?? 0;
-						}
-					} else if (tField.item.kind === "array") {
-						itemLayout = (tField.item as any).paddedSize ?? 0;
-					}
-					
-					let strideW = Math.max(1, Math.floor(itemLayout / 4));
-					
-					const idxName = `i_${tempId++}`;
-					let code = `\tfor (var ${idxName} = 0u; ${idxName} < ${len}u; ${idxName}++) {\n`;
-					const innerOffset = `(${offsetExpr} + ${idxName} * ${strideW}u)`;
-					const innerTarget = `${target}[${idxName}]`;
-					
-					const innerCode = genRw(tField.item, innerTarget, innerOffset, isPack, rawArr, isAtomic);
-					code += innerCode.split('\n').filter(Boolean).map(l => `\t${l}\n`).join('');
-					code += `\t}\n`;
-					return code;
-				}
-				return `\t// unsupported field kind ${tField.kind}\n`;
 			}
 
+			// 2. Identyfikacja wszystkich struktur
 			const structNames = new Set<string>();
 			for (const t of plan.types) {
 				if (t.kind === "struct") structNames.add(t.name);
 			}
-			const isUnionTagEnum = (t: { variants: { name: string }[] }) =>
-				t.variants.length > 0 &&
-				t.variants.every((v) => structNames.has(v.name));
 
 			const bitfieldStructNames = new Set<string>();
 			for (const t of plan.types) {
@@ -193,12 +122,14 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 				}
 			}
 
+			// 3. Budowanie mapy enumów (z pominięciem mikro-enumów, ale z zachowaniem tagów unii)
 			const enums = new Map<
 				string,
 				{ underlying: "u32" | "i32"; size: number }
 			>();
 			for (const t of plan.types) {
-				if (t.kind === "enum" && !isUnionTagEnum(t)) {
+				if (t.kind === "enum") {
+					if (singletonEnumNames.has(t.name)) continue;
 					enums.set(t.name, {
 						underlying: t.underlyingType === "i32" ? "i32" : "u32",
 						size: t.size,
@@ -233,6 +164,139 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 			let typesCode = "";
 			let helpersCode = "";
 
+			function genRw(tField: Field, target: string, offsetExpr: string, isPack: boolean, rawArr: string, isAtomic: boolean = false): string {
+				if (tField.kind === "primitive") {
+					const scalar = tField.name === "f32" ? "f32" : (tField.name === "i32" ? "i32" : "u32");
+					if (isAtomic) return `\t// atomic fields cannot be packed/unpacked directly via assignment\n`;
+					if (isPack) return `\t${rawArr}[${offsetExpr}] = bitcast<u32>(${target});\n`;
+					else return `\t${target} = bitcast<${scalar}>(${rawArr}[${offsetExpr}]);\n`;
+				}
+				if (tField.kind === "reference") {
+					const refName = tField.name;
+
+					if (enums.has(tField.name) || singletonEnumNames.has(tField.name)) {
+						const underlying = enums.has(tField.name) ? enums.get(tField.name)!.underlying : "u32";
+						if (isPack) return `\t${rawArr}[${offsetExpr}] = bitcast<u32>(${target});\n`;
+						else return `\t${target} = bitcast<${underlying}>(${rawArr}[${offsetExpr}]);\n`;
+					}
+					const refStruct = plan.types.find(pt => pt.name === tField.name);
+					if (!refStruct) return `\t// unsupported reference ${tField.name}\n`;
+					const words = Math.max(1, Math.ceil((refStruct as any).paddedSize / 4));
+					const tmpName = `tmp_${tempId++}`;
+					let code = "";
+					if (!isPack) {
+						code += `\tvar ${tmpName}: array<u32, ${words}>;\n`;
+						code += `\tfor (var j_${tmpName} = 0u; j_${tmpName} < ${words}u; j_${tmpName}++) {\n`;
+						code += `\t\t${tmpName}[j_${tmpName}] = ${rawArr}[${offsetExpr} + j_${tmpName}];\n`;
+						code += `\t}\n`;
+						code += `\t${target} = unpack_words_to_${toSnakeCase(tField.name)}(${tmpName});\n`;
+					} else {
+						code += `\tlet ${tmpName} = pack_${toSnakeCase(tField.name)}_to_words(${target});\n`;
+						code += `\tfor (var j_${tmpName} = 0u; j_${tmpName} < ${words}u; j_${tmpName}++) {\n`;
+						code += `\t\t${rawArr}[${offsetExpr} + j_${tmpName}] = ${tmpName}[j_${tmpName}];\n`;
+						code += `\t}\n`;
+					}
+					return code;
+				}
+				if (tField.kind === "array") {
+					const isFixed = tField.exactLength !== undefined;
+					if (isFixed) {
+						const len = tField.exactLength!;
+						const isVector =  len <= 4 && !isAtomic;
+						
+						if (tField.item.kind === "primitive" && isVector) {
+							const scalar = getWgslType(tField.item, false, bitfieldStructNames, singletonEnumNames);
+							let code = "";
+							if (!isPack) {
+								const args = Array.from({length: len}, (_, idx) => `bitcast<${scalar}>(${rawArr}[${offsetExpr} + ${idx}u])`).join(", ");
+								code += `\t${target} = vec${len}<${scalar}>(${args});\n`;
+							} else {
+								for (let idx=0; idx<len; idx++) {
+									const comp = ["x", "y", "z", "w"][idx];
+									code += `\t${rawArr}[${offsetExpr} + ${idx}u] = bitcast<u32>(${target}.${comp});\n`;
+								}
+							}
+							return code;
+						}
+						
+						let itemLayout = 0;
+						if (tField.item.kind === "primitive") {
+							itemLayout = (tField.item as any).paddedSize ?? (tField.item as any).size ?? 4;
+						} else if (tField.item.kind === "reference") {
+							const refName = (tField.item as any).name;
+							if (enums.has(refName)) {
+								itemLayout = enums.get(refName)!.size;
+							} else {
+								const refS = plan.types.find(pt => pt.name === tField.item.kind || pt.name === refName);
+								itemLayout = (refS as any)?.paddedSize ?? 0;
+							}
+						} else if (tField.item.kind === "array") {
+							itemLayout = (tField.item as any).paddedSize ?? 0;
+						}
+						
+						let strideW = Math.max(1, Math.floor(itemLayout / 4));
+						
+						const idxName = `i_${tempId++}`;
+						let code = `\tfor (var ${idxName} = 0u; ${idxName} < ${len}u; ${idxName}++) {\n`;
+						const innerOffset = `(${offsetExpr} + ${idxName} * ${strideW}u)`;
+						const innerTarget = `${target}[${idxName}]`;
+						
+						const innerCode = genRw(tField.item, innerTarget, innerOffset, isPack, rawArr, isAtomic);
+						code += innerCode.split('\n').filter(Boolean).map(l => `\t${l}\n`).join('');
+						code += `\t}\n`;
+						return code;
+					} else {
+						// === ODKODOWYWANIE TABLICY O ZMIENNEJ DŁUGOŚCI ===
+						const maxLen = tField.maxLength || 0;
+						let itemLayout = 0;
+						if (tField.item.kind === "primitive") {
+							itemLayout = (tField.item as any).paddedSize ?? (tField.item as any).size ?? 4;
+						} else if (tField.item.kind === "reference") {
+							const refName = (tField.item as any).name;
+							if (enums.has(refName)) {
+								itemLayout = enums.get(refName)!.size;
+							} else {
+								const refS = plan.types.find(pt => pt.name === tField.item.kind || pt.name === refName);
+								itemLayout = (refS as any)?.paddedSize ?? 0;
+							}
+						} else if (tField.item.kind === "array") {
+							itemLayout = (tField.item as any).paddedSize ?? 0;
+						}
+						
+						let strideW = Math.max(1, Math.floor(itemLayout / 4));
+						
+						const parent = target.substring(0, target.lastIndexOf("."));
+						const prop = target.substring(target.lastIndexOf(".") + 1);
+						const lenTarget = `${parent}.${prop}_len`;
+						
+						let code = "";
+						if (!isPack) {
+							code += `\t${lenTarget} = ${rawArr}[${offsetExpr}];\n`;
+							const idxName = `i_${tempId++}`;
+							code += `\tfor (var ${idxName} = 0u; ${idxName} < ${maxLen}u; ${idxName}++) {\n`;
+							const innerOffset = `(${offsetExpr} + 1u + ${idxName} * ${strideW}u)`;
+							const innerTarget = `${target}[${idxName}]`;
+							
+							const innerCode = genRw(tField.item, innerTarget, innerOffset, isPack, rawArr, isAtomic);
+							code += innerCode.split('\n').filter(Boolean).map(l => `\t\t${l}\n`).join('');
+							code += `\t}\n`;
+						} else {
+							code += `\t${rawArr}[${offsetExpr}] = ${lenTarget};\n`;
+							const idxName = `i_${tempId++}`;
+							code += `\tfor (var ${idxName} = 0u; ${idxName} < ${maxLen}u; ${idxName}++) {\n`;
+							const innerOffset = `(${offsetExpr} + 1u + ${idxName} * ${strideW}u)`;
+							const innerTarget = `${target}[${idxName}]`;
+							
+							const innerCode = genRw(tField.item, innerTarget, innerOffset, isPack, rawArr, isAtomic);
+							code += innerCode.split('\n').filter(Boolean).map(l => `\t\t${l}\n`).join('');
+							code += `\t}\n`;
+						}
+						return code;
+					}
+				}
+				return `\t// unsupported field kind ${tField.kind}\n`;
+			}
+
 			for (const t of plan.types) {
 				if (isRichType(t)) {
 					console.warn(
@@ -241,12 +305,11 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 					continue;
 				}
 				if (t.kind === "enum") {
-					if (isUnionTagEnum(t)) continue;
+					if (singletonEnumNames.has(t.name)) continue;
 					const name = typeName(t.name);
 					const underlying = t.underlyingType === "i32" ? "i32" : "u32";
 					const suffix = underlying === "u32" ? "u" : "";
 					
-					// List enum variants inside comments in typesCode
 					typesCode += `// Enum variants for ${name}:\n`;
 					for (const v of t.variants) {
 						typesCode += `//   ${v.name} = ${v.value}\n`;
@@ -262,7 +325,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 				if (t.kind === "alias") {
 					if (WGSL_PREDECLARED_ALIASES.has(t.name)) continue;
 					const aliasName = typeName(t.name);
-					const target = getWgslType(t.type, false, bitfieldStructNames);
+					const target = getWgslType(t.type, false, bitfieldStructNames, singletonEnumNames);
 					typesCode += `alias ${aliasName} = ${target};\n\n`;
 					continue;
 				}
@@ -273,9 +336,24 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 					typesCode += `\t_raw: array<u32, ${rawWords}>,\n`;
 					typesCode += `};\n\n`;
 
-					// Append helper signatures to typesCode
 					typesCode += `// Helper signatures for ${structDeclName}:\n`;
 					typesCode += `// fn get_${fieldName(t.name)}_tag(val: ${structDeclName}) -> u32;\n`;
+
+					const unionUnpackFn = `unpack_words_to_${toSnakeCase(t.name)}`;
+					const unionPackFn = `pack_${toSnakeCase(t.name)}_to_words`;
+
+					typesCode += `// fn ${unionUnpackFn}(raw: array<u32, ${rawWords}>) -> ${structDeclName};\n`;
+					typesCode += `// fn ${unionPackFn}(unpacked: ${structDeclName}) -> array<u32, ${rawWords}>;\n`;
+
+					helpersCode += `fn ${unionUnpackFn}(raw: array<u32, ${rawWords}>) -> ${structDeclName} {\n`;
+					helpersCode += `\tvar out: ${structDeclName};\n`;
+					helpersCode += `\tout._raw = raw;\n`;
+					helpersCode += `\treturn out;\n`;
+					helpersCode += `}\n\n`;
+
+					helpersCode += `fn ${unionPackFn}(unpacked: ${structDeclName}) -> array<u32, ${rawWords}> {\n`;
+					helpersCode += `\treturn unpacked._raw;\n`;
+					helpersCode += `}\n\n`;
 
 					const align = t.align || 1;
 					const payloadOffset = Math.ceil((t.tagOffset + t.tagSize) / align) * align;
@@ -309,7 +387,6 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 						const words = Math.max(1, Math.ceil((vStruct as any).paddedSize / 4));
 						const payloadWordOffset = Math.floor(payloadOffset / 4);
 
-						// Write helper signatures inside the typesCode comments
 						typesCode += `// fn ${unpackFnName}(val: ${structDeclName}) -> ${variantTypeName};\n`;
 						typesCode += `// fn ${packFnName}(unpacked: ${variantTypeName}) -> ${structDeclName};\n`;
 
@@ -359,39 +436,49 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 									}
 								}
 							} else {
-								const wgslType = getWgslType(
-									f.type,
-									!!(f as { atomic?: boolean }).atomic,
-									bitfieldStructNames,
-								);
 								const name = fieldName(f.name);
 
-								const enumMeta = isEnumRef(f.type)
-									? enums.get((f.type as { name: string }).name)!
-									: null;
-								const widening = enumMeta
-									? 4 - enumMeta.size
-									: bitfieldRefWidening(f.type);
-								const effectivePadAfter = Math.max(
-									0,
-									f.paddingAfter - widening,
-								);
+								if (f.type.kind === "array" && f.type.exactLength === undefined) {
+									const itemType = getWgslType(f.type.item, false, bitfieldStructNames, singletonEnumNames);
+									const maxLen = f.type.maxLength;
+									const arrType = maxLen ? `array<${itemType}, ${maxLen}>` : `array<${itemType}>`;
+									typesCode += `\t${name}_len: u32,\n`;
+									typesCode += `\t${name}: ${arrType},\n`;
+								} else {
+									const wgslType = getWgslType(
+										f.type,
+										!!(f as { atomic?: boolean }).atomic,
+										bitfieldStructNames,
+										singletonEnumNames,
+									);
 
-								if (effectivePadAfter > 0) {
-									if (cfg.paddingStyle === "size") {
-										const totalSize = f.size + effectivePadAfter;
-										typesCode += `\t@size(${totalSize}) ${name}: ${wgslType},\n`;
+									const enumMeta = isEnumRef(f.type)
+										? enums.get((f.type as { name: string }).name)!
+										: null;
+									const widening = enumMeta
+										? 4 - enumMeta.size
+										: bitfieldRefWidening(f.type);
+									const effectivePadAfter = Math.max(
+										0,
+										f.paddingAfter - widening,
+									);
+
+									if (effectivePadAfter > 0) {
+										if (cfg.paddingStyle === "size") {
+											const totalSize = f.size + effectivePadAfter;
+											typesCode += `\t@size(${totalSize}) ${name}: ${wgslType},\n`;
+										} else {
+											typesCode += `\t${name}: ${wgslType},\n`;
+											const padWords = Math.ceil(effectivePadAfter / 4);
+											if (padWords === 1) {
+												typesCode += `\t_pad_${name}: u32,\n`;
+											} else {
+												typesCode += `\t_pad_${name}: array<u32, ${padWords}>,\n`;
+											}
+										}
 									} else {
 										typesCode += `\t${name}: ${wgslType},\n`;
-										const padWords = Math.ceil(effectivePadAfter / 4);
-										if (padWords === 1) {
-											typesCode += `\t_pad_${name}: u32,\n`;
-										} else {
-											typesCode += `\t_pad_${name}: array<u32, ${padWords}>,\n`;
-										}
 									}
-								} else {
-									typesCode += `\t${name}: ${wgslType},\n`;
 								}
 							}
 						}
@@ -410,10 +497,6 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 						const unpackFnName = `unpack_${snakeName}`;
 						const packFnName = `pack_${snakeName}`;
 
-						// Unpacked struct mirrors the full struct shape (all fields, in
-						// declaration order). Bitwise fields become bool/u32; non-bitwise
-						// keep their natural WGSL type. This lets callers round-trip
-						// through unpack → mutate → pack without losing the non-bit fields.
 						typesCode += `struct ${unpackedName} {\n`;
 						for (const f of t.fields) {
 							if (f.type.kind === "unit") continue;
@@ -422,12 +505,22 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 								const wType = f.bitSize === 1 ? "bool" : "u32";
 								typesCode += `\t${fieldName(f.name)}: ${wType},\n`;
 							} else {
-								const wgslType = getWgslType(
-									f.type,
-									!!(f as { atomic?: boolean }).atomic,
-									bitfieldStructNames,
-								);
-								typesCode += `\t${fieldName(f.name)}: ${wgslType},\n`;
+								const name = fieldName(f.name);
+								if (f.type.kind === "array" && f.type.exactLength === undefined) {
+									const itemType = getWgslType(f.type.item, false, bitfieldStructNames, singletonEnumNames);
+									const maxLen = f.type.maxLength;
+									const arrType = maxLen ? `array<${itemType}, ${maxLen}>` : `array<${itemType}>`;
+									typesCode += `\t${name}_len: u32,\n`;
+									typesCode += `\t${name}: ${arrType},\n`;
+								} else {
+									const wgslType = getWgslType(
+										f.type,
+										!!(f as { atomic?: boolean }).atomic,
+										bitfieldStructNames,
+										singletonEnumNames,
+									);
+									typesCode += `\t${name}: ${wgslType},\n`;
+								}
 							}
 						}
 						typesCode += `};\n\n`;
@@ -459,6 +552,9 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 									helpersCode += `\tout.${fName} = ${shifted} & ${mask};\n`;
 								}
 							} else {
+								if (f.type.kind === "array" && f.type.exactLength === undefined) {
+									helpersCode += `\tout.${fName}_len = packed.${fName}_len;\n`;
+								}
 								helpersCode += `\tout.${fName} = packed.${fName};\n`;
 							}
 						}
@@ -486,6 +582,9 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 									shift === 0 ? "" : ` << ${shift}u`;
 								helpersCode += `\tout._bitfield_${f.offset} |= ${srcExpr}${shiftSuffix};\n`;
 							} else {
+								if (f.type.kind === "array" && f.type.exactLength === undefined) {
+									helpersCode += `\tout.${fName}_len = unpacked.${fName}_len;\n`;
+								}
 								helpersCode += `\tout.${fName} = unpacked.${fName};\n`;
 							}
 						}
@@ -499,7 +598,6 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 					let structUnpackBody = `\tvar out: ${structDeclName};\n`;
 					const seenBits = new Set<number>();
 
-					// Helper function to get simple packing expression for word grouping
 					const getPackExpression = (tField: Field, target: string): string => {
 						if (tField.kind === "primitive") {
 							const scalar = tField.name === "f32" ? "f32" : (tField.name === "i32" ? "i32" : "u32");
@@ -530,11 +628,6 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 						const name = fieldName(f.name);
 						const isAtomic = !!(f as any).atomic;
 
-						// Sub-word leaf: enum / primitive zajmujące <4 bajty albo niezaczynające
-						// się od byte 0 w u32 słowie. Bez shift/mask wiele takich pól w jednym
-						// słowie nadpisywałoby się (np. Force.shape@36 i Force.field@37 lądują
-						// oba w word 9 — efekt: oba czytały tę samą wartość, a pack OR-ował
-						// bez przesunięcia).
 						const byteShift = (f.offset % 4) * 8;
 						const isLeafPrim = f.type.kind === "primitive";
 						const isLeafEnum = f.type.kind === "reference" && enums.has((f.type as any).name);
@@ -554,6 +647,12 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 							const packShift = byteShift === 0 ? "" : ` << ${byteShift}u`;
 							const packExpr = `((bitcast<u32>(unpacked.${name}) & ${mask})${packShift})`;
 							wordWrites.set(offsetW, [...(wordWrites.get(offsetW) || []), packExpr]);
+							continue;
+						}
+
+						if (f.type.kind === "array" && f.type.exactLength === undefined) {
+							structUnpackBody += genRw(f.type, `out.${name}`, `${offsetW}u`, false, "raw", isAtomic);
+							complexWrites.push(genRw(f.type, `unpacked.${name}`, `${offsetW}u`, true, "out", isAtomic));
 							continue;
 						}
 
@@ -583,7 +682,6 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 
 					const hasAtomicFields = t.fields.some(f => !!(f as any).atomic);
 					if (!hasAtomicFields) {
-						// Signatures for word packers/unpackers
 						helperSignatures += `// fn ${structUnpackFn}(raw: array<u32, ${words}>) -> ${structDeclName};\n`;
 						helperSignatures += `// fn ${structPackFn}(unpacked: ${structDeclName}) -> array<u32, ${words}>;\n`;
 
@@ -595,7 +693,6 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 				}
 			}
 
-			// Return output based on style configuration
 			if (cfg.outputStyle === "types") {
 				return typesCode;
 			}
@@ -603,7 +700,6 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 				return helpersCode;
 			}
 			
-			// Combined style fallback
 			return `${typesCode}\n// ==========================================\n// HELPERS\n// ==========================================\n\n${helpersCode}`;
 		},
 	};

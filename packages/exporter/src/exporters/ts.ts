@@ -2,6 +2,7 @@ import type {
 	BaseConfig,
 	ExporterPlugin,
 	Field,
+	FieldPlan,
 	LayoutPlan,
 	TypePlan,
 } from "@schema-pop/schema";
@@ -103,7 +104,7 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 		s += `export interface ${name} {\n`;
 		for (const f of t.fields) {
 			if (f.type.kind === "unit") continue;
-			s += jsdoc(f, indent());
+			s += jsdoc(f as FieldPlan, indent());
 			const optional = f.type.kind === "optional";
 			const inner = optional
 				? fieldType((f.type as any).inner)

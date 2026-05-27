@@ -1,6 +1,7 @@
 import { scope } from "arktype";
 import { binary } from "./binary";
 import { $ as schema } from "./schema";
+import type { ArkMeta } from "./core";
 
 /**
  * Core schema definitions for the Linear Layout Plan (LLP).
@@ -11,9 +12,11 @@ export const $layout = scope({
 
 	/** Unified layout information for any element */
 	TypeLayout: {
+		"...": "Base",
 		size: "number",
 		align: "number",
 		paddedSize: "number",
+		name: "string = ''",
 	},
 
 	/** Recursive field definition */
@@ -23,11 +26,6 @@ export const $layout = scope({
 	PrimitiveField: {
 		"...": "TypeLayout",
 		kind: "'primitive'",
-		name: "string",
-		"bitSize?": "number",
-		"unsigned?": "boolean",
-		"isFloat?": "boolean",
-		popKind: "'binary' | 'bitwise' | 'reserved' | 'rich' = 'binary'",
 	},
 
 	/**
@@ -96,14 +94,6 @@ export const $layout = scope({
 		bitSize: "number",
 		size: "number",
 		paddingAfter: "number",
-		"description?": "string",
-		"obsolete?": "boolean",
-		"obsoleteReason?": "string",
-		"unsigned?": "boolean",
-		"isFloat?": "boolean",
-		// GPU-only: emit this scalar (or array element) as a WGSL atomic<...>.
-		// Pure layout/codec concern is unaffected — same size & offset.
-		"atomic?": "boolean",
 	},
 
 	InlineStructField: {
@@ -121,7 +111,6 @@ export const $layout = scope({
 	StructPlan: {
 		"...": "TypeLayout",
 		kind: "'struct'",
-		name: "string",
 		fields: "FieldPlan[]",
 		"description?": "string",
 		"obsolete?": "boolean",
@@ -131,7 +120,6 @@ export const $layout = scope({
 	UnionPlan: {
 		"...": "TypeLayout",
 		kind: "'union'",
-		name: "string",
 		tagOffset: "number",
 		tagSize: "number",
 		tagType: "'u8' | 'u16' | 'u32'",
@@ -151,7 +139,6 @@ export const $layout = scope({
 	EnumPlan: {
 		"...": "TypeLayout",
 		kind: "'enum'",
-		name: "string",
 		variants: "EnumVariant[]",
 		underlyingType: "'u8' | 'u16' | 'i32'",
 		"description?": "string",
@@ -163,7 +150,6 @@ export const $layout = scope({
 	AliasPlan: {
 		"...": "TypeLayout",
 		kind: "'alias'",
-		name: "string",
 		type: "Field",
 		"targetOffset?": "number", // Binary offset of the aliased type
 		"description?": "string",
@@ -185,7 +171,6 @@ export const $layout = scope({
 	GpuBindingPlan: {
 		"...": "TypeLayout",
 		kind: "'gpu-binding-layout'",
-		name: "string",
 		bindings: "GpuBinding[]",
 	},
 
@@ -222,24 +207,24 @@ export const {
 	LayoutPlan,
 } = $layout.export();
 
-export type AliasPlan = typeof AliasPlan.infer;
-export type AnyField = typeof AnyField.infer;
-export type ArrayField = typeof ArrayField.infer;
-export type EnumPlan = typeof EnumPlan.infer;
-export type EnumVariant = typeof EnumVariant.infer;
-export type Field = typeof Field.infer;
-export type FieldPlan = typeof FieldPlan.infer;
-export type GpuBinding = typeof GpuBinding.infer;
-export type GpuBindingPlan = typeof GpuBindingPlan.infer;
-export type InlineStructField = typeof InlineStructField.infer;
-export type MapField = typeof MapField.infer;
-export type OptionalField = typeof OptionalField.infer;
-export type PrimitiveField = typeof PrimitiveField.infer;
-export type ReferenceField = typeof ReferenceField.infer;
-export type StringField = typeof StringField.infer;
-export type StructPlan = typeof StructPlan.infer;
-export type UnionPlan = typeof UnionPlan.infer;
-export type VariantPlan = typeof VariantPlan.infer;
-export type TypePlan = typeof TypePlan.infer;
-export type TypeLayout = typeof TypeLayout.infer;
-export type LayoutPlan = typeof LayoutPlan.infer;
+export type AliasPlan = typeof AliasPlan.infer & ArkMeta;
+export type AnyField = typeof AnyField.infer & ArkMeta;
+export type ArrayField = typeof ArrayField.infer & ArkMeta;
+export type EnumPlan = typeof EnumPlan.infer & ArkMeta;
+export type EnumVariant = typeof EnumVariant.infer & ArkMeta;
+export type Field = typeof Field.infer & ArkMeta;
+export type FieldPlan = typeof FieldPlan.infer & ArkMeta;
+export type GpuBinding = typeof GpuBinding.infer & ArkMeta;
+export type GpuBindingPlan = typeof GpuBindingPlan.infer & ArkMeta;
+export type InlineStructField = typeof InlineStructField.infer & ArkMeta;
+export type MapField = typeof MapField.infer & ArkMeta;
+export type OptionalField = typeof OptionalField.infer & ArkMeta;
+export type PrimitiveField = typeof PrimitiveField.infer & ArkMeta;
+export type ReferenceField = typeof ReferenceField.infer & ArkMeta;
+export type StringField = typeof StringField.infer & ArkMeta;
+export type StructPlan = typeof StructPlan.infer & ArkMeta;
+export type UnionPlan = typeof UnionPlan.infer & ArkMeta;
+export type VariantPlan = typeof VariantPlan.infer & ArkMeta;
+export type TypePlan = typeof TypePlan.infer & ArkMeta;
+export type TypeLayout = typeof TypeLayout.infer & ArkMeta;
+export type LayoutPlan = typeof LayoutPlan.infer & ArkMeta;

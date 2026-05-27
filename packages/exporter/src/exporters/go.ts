@@ -4,6 +4,7 @@ import type {
 	EnumPlan,
 	ExporterPlugin,
 	Field,
+	FieldPlan,
 	LayoutPlan,
 	StructPlan,
 	UnionPlan,
@@ -267,8 +268,8 @@ export function go(config: GoConfig = {}): ExporterPlugin<GoConfig> {
 		for (const f of t.fields) {
 			if (f.type.kind === "unit") continue;
 			const fn = fieldName(f.name);
-			code += descriptionComment(f.description, indent());
-			code += deprecatedComment(f.obsolete, f.obsoleteReason, indent());
+			code += descriptionComment((f as FieldPlan).description, indent());
+			code += deprecatedComment((f as FieldPlan).obsolete, (f as FieldPlan).obsoleteReason, indent());
 			if (f.bitSize && f.bitSize < 8) {
 				if (currentBitfieldOffset !== f.offset) {
 					code += `${indent()}_bitfield_${f.offset} uint8\n`;

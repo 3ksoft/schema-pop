@@ -16,6 +16,7 @@ export * from "./rustSerde";
 export * from "./svg";
 export * from "./ts";
 export * from "./tsCodec";
+export * from "./tsWebgpu";
 export * from "./vueNuxtUi";
 export * from "./wgsl";
 export * from "./zig";

@@ -4,6 +4,7 @@ import type {
 	Field,
 	FieldPlan,
 	LayoutPlan,
+	StructPlan,
 	TypePlan,
 } from "@schema-pop/schema";
 import { ExporterTools } from "../exporterTools";
@@ -155,7 +156,7 @@ function typeToDocs(
 					name: f.name,
 					type: labelOf(f.type),
 					typeKind: f.type.kind,
-					description: f.description,
+					description: fAny.description,
 					obsolete: fAny.obsolete === true ? true : undefined,
 					obsoleteReason: fAny.obsoleteReason,
 				};
