@@ -19,10 +19,10 @@
 		}
 	},
 	"scripts": {
-		"build": "rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --packages external && tsc --declaration --emitDeclarationOnly --outDir dist --noEmit false",
+		"build": "rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --packages external && tsgo --declaration --emitDeclarationOnly --outDir dist --noEmit false",
 		"build:wasm": "bash ./scripts/build-wasm.sh",
 		"build:gimli": "bash ./scripts/build-gimli.sh",
-		"typecheck": "tsc --noEmit",
+		"typecheck": "tsgo --noEmit",
 		"test": "bun test"
 	},
 	"dependencies": {

@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"test": "bun test",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsgo --noEmit"
 	},
 	"dependencies": {
 		"@schema-pop/core": "workspace:*",

@@ -24,8 +24,8 @@
 	},
 	"scripts": {
 		"build:wasm": "cd wasm && wasm-pack build --target web --out-dir ../pkg",
-		"build": "bun run build:wasm && rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --packages external && tsc --declaration --emitDeclarationOnly --outDir dist --noEmit false",
-		"typecheck": "tsc --noEmit",
+		"build": "bun run build:wasm && rm -rf dist && bun build ./src/index.ts --outdir ./dist --target node --packages external && tsgo --declaration --emitDeclarationOnly --outDir dist --noEmit false",
+		"typecheck": "tsgo --noEmit",
 		"test": "bun test"
 	},
 	"dependencies": {

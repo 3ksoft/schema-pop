@@ -25,7 +25,7 @@
 	},
 	"scripts": {
 		"build": "rm -rf dist && bun build ./src/cli.ts --outdir ./dist --target node --packages external",
-		"typecheck": "tsc --noEmit",
+		"typecheck": "tsgo --noEmit",
 		"test": "bun test"
 	},
 	"dependencies": {
