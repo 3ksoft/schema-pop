@@ -17,6 +17,11 @@ export interface TsCodecConfig extends Omit<BaseConfig, "commentStyle"> {
 	 * keeps struct refs as function calls.
 	 */
 	inlineRefBytes?: number;
+	/**
+	 * Generates surgical patch functions (`patch[TypeName]`) to perform
+	 * zero-allocation, byte-targeted updates directly on a DataView.
+	 */
+	generatePatches?: boolean;
 }
 
 export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
@@ -340,6 +345,74 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 				}
 			};
 
+			const genPatchField = (
+				f: Field,
+				val: string,
+				off: string,
+				pathIdx: string,
+				isTopLevelArray: boolean = false, 
+				visited: Set<string> = new Set(),
+			): string => {
+				switch (f.kind) {
+					case "primitive": {
+						const p = getPrim(f.name);
+						let v: string;
+						if (p.isBool) v = `(${val} ? 1 : 0)`;
+						else if (p.b === 8 && (f.name === "u64" || f.name === "i64"))
+							v = `BigInt(${val})`;
+						else v = val;
+						return p.b === 1
+							? `view.${p.w}(${off}, ${v});`
+							: `view.${p.w}(${off}, ${v}, ${isLE});`;
+					}
+					case "reference": {
+						if (singletonEnumByName.has(f.name))
+							return `view.setUint8(${off}, 0);`;
+						return `patch${typeName(f.name)}(path, ${pathIdx} + 1, ${val}, view, ${off});`;
+					}
+					case "string": {
+						const maxLen = f.maxLength ?? 255;
+						return `{ const bytes = __textEncoder!.encode(${val}); const len = Math.min(bytes.length, ${maxLen}); view.setUint32(${off}, len, ${isLE}); new Uint8Array(view.buffer, view.byteOffset + ${off} + 4, ${maxLen}).fill(0); new Uint8Array(view.buffer, view.byteOffset + ${off} + 4, len).set(bytes.subarray(0, len)); }`;
+					}
+					case "array": {
+						const isU8 = f.item.kind === "primitive" && f.item.name === "u8";
+						const idxExpr = isTopLevelArray ? `${pathIdx}` : `${pathIdx} + 1`;
+						
+						let serializeWholeArrayCode = "";
+						if (!isTopLevelArray) {
+							serializeWholeArrayCode = `if (${pathIdx} + 1 >= path.length) { ${genWrite(f, val, off, visited)} return; } `;
+						}
+
+						if (isU8) {
+							const itemOffset = f.exactLength !== undefined ? "" : "4 + ";
+							return `${serializeWholeArrayCode}{ const idx = path[${idxExpr}] as number; view.setUint8(${off} + ${itemOffset}idx, ${val}); }`;
+						}
+						
+						const step = getItemStep(f.item);
+						const nextPathIdxExpr = isTopLevelArray ? `${pathIdx} + 1` : `${pathIdx} + 2`;
+						
+						if (f.item.kind === "primitive") {
+							return `${serializeWholeArrayCode}{ const idx = path[${idxExpr}] as number; ${genPatchField(f.item, val, `${off} + (idx * ${step})`, `${pathIdx} + 1`, false, visited)} }`;
+						} else if (f.item.kind === "reference") {
+							return `${serializeWholeArrayCode}{ const idx = path[${idxExpr}] as number; patch${typeName((f.item as any).name)}(path, ${nextPathIdxExpr}, ${val}, view, ${off} + (idx * ${step})); }`;
+						}
+						return serializeWholeArrayCode;
+					}
+					case "optional":
+						return `if (${val} !== undefined) { view.setUint8(${off}, 1); ${genPatchField(f.inner, val, `${off} + 1`, `${pathIdx} + 1`, false, visited)} } else { view.setUint8(${off}, 0); }`;
+					case "inlineStruct":
+						return `{ const subKey = path[${pathIdx} + 1]; switch(subKey) { ${f.fields.map((sf) => `case "${fieldName(sf.name)}": ${genPatchField(sf.type, val, `${off} + ${sf.offset}`, `${pathIdx} + 1`, false, visited)}; break;`).join(" ")} default: break; } }`;
+					case "unit": {
+						const sz = (f as any).size ?? 0;
+						return sz > 0
+							? `{ new Uint8Array(view.buffer, view.byteOffset + ${off}, ${sz}).fill(0); new Uint8Array(view.buffer, view.byteOffset + ${off}, ${sz}).set(${val}.subarray(0, ${sz})); }`
+							: "";
+					}
+					default:
+						return "";
+				}
+			};
+
 			for (const t of plan.types) {
 				if (t.kind === "enum") continue;
 				const sz = (t as any).paddedSize ?? (t as any).size ?? 0;
@@ -356,6 +429,16 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 					code += `\treturn ${genRead(t.type, "offset")} as any;\n}\n\n`;
 					code += `export function serialize${tName}(val: ${tName}, view: DataView, offset: number): void {\n`;
 					code += `\t${genWrite(t.type, "val", "offset")}\n}\n\n`;
+					
+					if (cfg.generatePatches) {
+						code += `export function patch${tName}(path: (string | number)[], pathIdx: number, val: any, view: DataView, offset: number): void {\n`;
+						code += `\tif (pathIdx >= path.length) {\n`;
+						code += `\t\tserialize${tName}(val, view, offset);\n`;
+						code += `\t\treturn;\n`;
+						code += `\t}\n`;
+						code += `\t${genPatchField(t.type, "val", "offset", "pathIdx", t.type.kind === "array")}\n`;
+						code += `}\n\n`;
+					}
 				}
 				if (t.kind === "enum") {
 					const p = getPrim(t.underlyingType);
@@ -371,21 +454,28 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 							(code += `\tif(val === "${v.name}") { view.${p.w}(offset, ${v.value}${p.b > 1 ? `, ${isLE}` : ""}); return; }\n`),
 					);
 					code += `}\n\n`;
+
+
+					if (cfg.generatePatches) {
+						code += `export function patch${tName}(path: (string | number)[], pathIdx: number, val: any, view: DataView, offset: number): void {\n`;
+						code += `\tserialize${tName}(val, view, offset)\n`;
+						code += `}\n\n`;
+					}
 				}
 				if (t.kind === "struct") {
-				const readField = (f: any): string => {
-					if ((f.type as any).popKind === "bitwise" && f.bitOffset !== undefined) {
-						const mask = Math.pow(2, f.bitSize) - 1;
-						const size = f.size || 1;
-						const rMethod = size === 4 ? `getUint32` : size === 2 ? `getUint16` : `getUint8`;
-						const isLeParam = size > 1 ? `, ${isLE}` : ``;
-						const raw = `(view.${rMethod}(offset + ${f.offset}${isLeParam}) >> ${f.bitOffset}) & ${mask}`;
-						const primName = (f.type as any).name;
-						if (primName === "bool" || primName === "boolean") return `(${raw}) !== 0`;
-						return raw;
-					}
-					return genRead(f.type, `offset + ${f.offset}`);
-				};
+					const readField = (f: any): string => {
+						if ((f.type as any).popKind === "bitwise" && f.bitOffset !== undefined) {
+							const mask = Math.pow(2, f.bitSize) - 1;
+							const size = f.size || 1;
+							const rMethod = size === 4 ? `getUint32` : size === 2 ? `getUint16` : `getUint8`;
+							const isLeParam = size > 1 ? `, ${isLE}` : ``;
+							const raw = `(view.${rMethod}(offset + ${f.offset}${isLeParam}) >> ${f.bitOffset}) & ${mask}`;
+							const primName = (f.type as any).name;
+							if (primName === "bool" || primName === "boolean") return `(${raw}) !== 0`;
+							return raw;
+						}
+						return genRead(f.type, `offset + ${f.offset}`);
+					};
 					code += `export function deserialize${tName}(view: DataView, offset: number, outObj?: any): ${tName} {\n`;
 					code += `\tif (!outObj) {\n\t\treturn {\n`;
 					t.fields.forEach((f) => (code += `\t\t\t${fieldName(f.name)}: ${readField(f)},\n`));
@@ -420,6 +510,39 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 						}
 					}
 					code += `}\n\n`;
+
+					if (cfg.generatePatches) {
+						code += `export function patch${tName}(path: (string | number)[], pathIdx: number, val: any, view: DataView, offset: number): void {\n`;
+						code += `\tif (pathIdx >= path.length) {\n`;
+						code += `\t\tserialize${tName}(val, view, offset);\n`;
+						code += `\t\treturn;\n`;
+						code += `\t}\n`;
+						code += `\tconst key = path[pathIdx];\n`;
+						code += `\tswitch(key) {\n`;
+						
+						t.fields.forEach((f) => {
+							code += `\t\tcase "${fieldName(f.name)}":\n`;
+							if ((f.type as any).popKind === "bitwise" && f.bitOffset !== undefined) {
+								const size = f.size || 1;
+								const rMethod = size === 4 ? `getUint32` : size === 2 ? `getUint16` : `getUint8`;
+								const wMethod = size === 4 ? `setUint32` : size === 2 ? `setUint16` : `setUint8`;
+								const isLeParam = size > 1 ? `, ${isLE}` : ``;
+								const mask = Math.pow(2, f.bitSize) - 1;
+								const primName = (f.type as any).name;
+								const src = (primName === "bool" || primName === "boolean")
+									? `(val ? 1 : 0)`
+									: `val`;
+								code += `\t\t\t{ let temp = view.${rMethod}(offset + ${f.offset}${isLeParam}); temp &= ~(${mask} << ${f.bitOffset}); temp |= ((${src} & ${mask}) << ${f.bitOffset}); view.${wMethod}(offset + ${f.offset}, temp${isLeParam}); }\n`;
+							} else {
+								code += `\t\t\t${genPatchField(f.type, "val", `offset + ${f.offset}`, "pathIdx", false)}\n`;
+							}
+							code += `\t\t\tbreak;\n`;
+						});
+						
+						code += `\t\tdefault: break;\n`;
+						code += `\t}\n`;
+						code += `}\n\n`;
+					}
 				}
 				if (t.kind === "union") {
 					const p = getPrim(t.tagType);
@@ -437,9 +560,9 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 						// Zero-allocation approach for references, but enforces 'kind' property addition for TS discrimination.
 						const discField = t.discriminant || "kind";
 						if (isObj) {
-							code += `\t\tcase ${i}: { const obj = ${r}; (obj as any).${discField} = "${discVal}"; return obj as any; }\n`;
+							code += `\t\tcase ${i+1}: { const obj = ${r}; (obj as any).${discField} = "${discVal}"; return obj as any; }\n`;
 						} else {
-							code += `\t\tcase ${i}: return { ${discField}: "${discVal}", value: ${r} } as any;\n`;
+							code += `\t\tcase ${i+1}: return { ${discField}: "${discVal}", value: ${r} } as any; }\n`;
 						}
 					});
 					code += `\t\tdefault: throw new Error("Unknown Union tag for ${tName}: " + tag);\n\t}\n}\n\n`;
@@ -449,12 +572,19 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 					code += `\tswitch(val.${discField}) {\n`;
 					t.variants.forEach((v, i) => {
 						const discVal = getVariantDiscriminantValue(v, t);
-						code += `\t\tcase "${discVal}": {\n\t\t\tview.${p.w}(offset + ${t.tagOffset}, ${i}${p.b > 1 ? `, ${isLE}` : ""});\n`;
+						code += `\t\tcase "${discVal}": {\n\t\t\tview.${p.w}(offset + ${t.tagOffset}, ${i+1}${p.b > 1 ? `, ${isLE}` : ""});\n`;
 						const isObj =
 							v.type.kind === "inlineStruct" || v.type.kind === "reference";
 						code += `\t\t\t${genWrite(v.type, isObj ? "val" : "val.value", `offset + ${payloadOffset}`)}\n\t\t\tbreak;\n\t\t}\n`;
 					});
 					code += `\t}\n}\n\n`;
+
+					if (cfg.generatePatches) {
+						code += `export function patch${tName}(path: (string | number)[], pathIdx: number, val: any, view: DataView, offset: number): void {\n`;
+						// W przypadku unii ze zmiennymi wariantami, bezpieczną domyślną operacją jest pełna serializacja unii
+						code += `\tserialize${tName}(val, view, offset);\n`;
+						code += `}\n\n`;
+					}
 				}
 			}
 			return code;

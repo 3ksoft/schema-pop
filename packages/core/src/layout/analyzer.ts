@@ -1,5 +1,6 @@
-import type { ArkMeta, ExtractionContext } from "@schema-pop/schema";
+import type { ExtractionContext } from "@schema-pop/schema";
 import {
+	ArkMeta,
 	EnumPlan,
 	Field,
 	FieldPlan,
@@ -16,25 +17,8 @@ import {
 import { type } from "arktype";
 
 interface TagContext {
-	name: string; // np. "kin"
-	enumName: string; // np. "PepsTag"
-}
-
-export interface MigrationPlan {
-	typeName: string;
-	kind: "struct" | "enum" | "union" | "alias";
-	fields: {
-		targetName: string;
-		sourceName: string | null;
-		targetType: Field;
-		sourceType: Field | null;
-	}[];
-	variants: {
-		targetName: string;
-		sourceName: string | null;
-		targetType?: Field;
-		sourceType?: Field | null;
-	}[];
+	name: string;
+	enumName: string;
 }
 
 export const AnalyzerConfig = type({
@@ -112,7 +96,7 @@ export class SchemaAnalyzer {
 		if (this.errors.length > 0) {
 			throw new Error(
 				`Schema analysis failed with ${this.errors.length} errors:\n` +
-					this.errors.map((e) => `  - ${e}`).join("\n"),
+				this.errors.map((e) => `  - ${e}`).join("\n"),
 			);
 		}
 
@@ -162,7 +146,11 @@ export class SchemaAnalyzer {
 			size,
 			align: size,
 			paddedSize: size,
-			variants: values.map((v, i) => ({ name: v, value: i, description: "" })),
+			variants: values.sort((a, b) => {
+				if (a === 'none') return -1;
+				if (b === 'none') return 1;
+				return 0;
+			}).map((v, i) => ({ name: v, value: i, description: "" })),
 			underlyingType,
 			syntetic: true,
 		};
@@ -181,7 +169,7 @@ export class SchemaAnalyzer {
 	}
 
 	private assertField(field: unknown): Field {
-		const valid = Field(field);
+		const valid = Field.and(ArkMeta)(field);
 		if (valid instanceof type.errors) {
 			for (const e of Object.values(valid.entries)) {
 				this.error(e.message);
@@ -503,7 +491,6 @@ export class SchemaAnalyzer {
 				plan.obsolete = true;
 				if (obsoleteReason) plan.obsoleteReason = obsoleteReason;
 			}
-			// if (renamedFrom) plan.migrationMeta = { renamedFrom };
 			return plan;
 		}
 
@@ -676,7 +663,7 @@ export class SchemaAnalyzer {
 				type.kind === "primitive" &&
 				type.bitSize !== undefined &&
 				(type.bitSize < 8 || (this.config.autoPack && type.bitSize < 32));
-						
+
 			if (isBitwise && type.bitSize) {
 				const bitSize = isBitwise ? type.bitSize : meta.size * 8;
 				const maxBits = this.config.autoPack ? 32 : 8;
@@ -982,7 +969,7 @@ export class SchemaAnalyzer {
 
 		const builtin = this.getBuiltinPrimitive(type.type);
 		if (builtin) {
-			return {...builtin, ...type};
+			return { ...builtin, ...type };
 		}
 
 		return this.assertField({

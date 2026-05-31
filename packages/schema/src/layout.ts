@@ -183,10 +183,12 @@ export const $layout = scope({
 	},
 });
 
+const layout = $layout.export();
+
 export const {
 	AliasPlan,
 	AnyField,
-	ArrayField,
+	// ArrayField,
 	EnumPlan,
 	EnumVariant,
 	Field,
@@ -205,11 +207,12 @@ export const {
 	TypePlan,
 	TypeLayout,
 	LayoutPlan,
-} = $layout.export();
+} = layout;
+
+
 
 export type AliasPlan = typeof AliasPlan.infer & ArkMeta;
 export type AnyField = typeof AnyField.infer & ArkMeta;
-export type ArrayField = typeof ArrayField.infer & ArkMeta;
 export type EnumPlan = typeof EnumPlan.infer & ArkMeta;
 export type EnumVariant = typeof EnumVariant.infer & ArkMeta;
 export type Field = typeof Field.infer & ArkMeta;
@@ -228,3 +231,6 @@ export type VariantPlan = typeof VariantPlan.infer & ArkMeta;
 export type TypePlan = typeof TypePlan.infer & ArkMeta;
 export type TypeLayout = typeof TypeLayout.infer & ArkMeta;
 export type LayoutPlan = typeof LayoutPlan.infer & ArkMeta;
+
+export const ArrayField = layout.ArrayField.omit("item").and({ item: Field });
+export type ArrayField = typeof ArrayField.infer & ArkMeta;

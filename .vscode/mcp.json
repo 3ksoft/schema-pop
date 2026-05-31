@@ -1,0 +1,13 @@
+{
+	"servers": {
+		"codegraph": {
+			"type": "stdio",
+			"command": "/home/kr/.local/share/pi/npm/bin/codegraph",
+			"args": [
+				"serve",
+				"--mcp"
+			]
+		}
+	},
+	"inputs": []
+}

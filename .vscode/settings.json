@@ -49,10 +49,4 @@
 			"color": "foldercolorizer.color_d75faf"
 		}
 	],
-	"[typescript]": {
-		"editor.defaultFormatter": "biomejs.biome"
-	},
-	"[json]": {
-		"editor.defaultFormatter": "biomejs.biome"
-	}
 }

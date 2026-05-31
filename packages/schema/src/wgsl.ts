@@ -54,7 +54,7 @@ const vec4u = binary.type("u32[] == 4").configure({
 });
 
 export const wgsl = scope({
-	...binary.import(),
+	...binary.export(),
 
 	ai32,
 	au32,

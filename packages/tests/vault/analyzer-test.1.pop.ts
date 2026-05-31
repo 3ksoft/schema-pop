@@ -1,7 +1,7 @@
-import { type } from "arktype";
+import { scope } from "arktype";
 import { binary } from "@schema-pop/schema";
 
-export const $ = type.module({
+export const $ = scope({
 	...binary.import(),
 
 	// Layout / analyzer fixtures
