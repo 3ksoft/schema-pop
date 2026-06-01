@@ -27,7 +27,6 @@ export const $ = scope({
 	}),
 	Base: {
 		// Field kind
-		"popKind?": "'rich' | 'bitwise' | 'binary' | 'reserved' | 'gpu-binding'",
 	},
 
 	String: {
@@ -141,19 +140,19 @@ export const $ = scope({
 		"'aligned' | 'zero-padding' | 'std140' | 'std430' | 'dynamic' | 'dbus'",
 
 	PopSchemaSettings: {
-		"schemaName?": "string",
-		endian: "'le' | 'be' = 'le'",
-		wordSize: "'32' | '64' = '64'",
-		autoLayout: "boolean = true",
+		schemaName: "string",
+		endian: "'le' | 'be'",
+		wordSize: "'32' | '64'",
+		autoLayout: "boolean",
 		// When true, reorder struct fields by descending align (greedy pack)
 		// before assigning offsets. Default false: keep declaration order
 		// from the source schema so std140/std430 layouts are predictable
 		// and offsets remain stable across schema edits.
-		autoSort: "boolean = false",
-		autoPack: "boolean = false",
-		layout: "LayoutType = 'aligned'",
-		mode: "'binary' | 'rich' = 'binary'",
-		"version?": SemVer,
+		autoSort: "boolean",
+		autoPack: "boolean",
+		layout: "LayoutType",
+		mode: "'binary' | 'rich'",
+		version: "string",
 	},
 	PopSchema: {
 		"...": "PopSchemaSettings",
@@ -163,6 +162,18 @@ export const $ = scope({
 	PopType:
 		"String | Symbol | Number | Boolean | Enum | Array | Object | Any | Link | Union | Unit",
 });
+
+export const PopSchemaSettingsDefaults = {
+	schemaName: "Schema",
+	endian: "le",
+	wordSize: "32",
+	autoLayout: true,
+	autoSort: false,
+	autoPack: false,
+	layout: "aligned",
+	mode: "rich",
+	version: "1.0.0",
+} as const;
 
 const schema = $.export();
 
@@ -184,6 +195,7 @@ export const {
 	PopSchemaSettings,
 	PopSchema,
 	PopType,
+	LayoutType
 } = schema;
 
 export type Base = typeof Base.infer;
@@ -199,6 +211,9 @@ export type Any = typeof Any.infer;
 export type Link = typeof Link.infer;
 export type Union = typeof Union.infer;
 export type PopFunction = typeof PopFunction.infer;
-export type PopSchemaSettings = typeof PopSchemaSettings.inferIn;
+export type PopSchemaSettings = typeof PopSchemaSettings.infer;
 export type PopSchema = typeof PopSchema.infer;
 export type PopType = typeof PopType.infer & ArkMeta;
+export type LayoutType = typeof LayoutType.infer;
+
+export type PopSchemaSettingsPartial = Partial<PopSchemaSettings>;

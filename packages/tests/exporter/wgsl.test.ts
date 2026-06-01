@@ -1,12 +1,13 @@
 /// <reference types="@types/bun" />
 import { describe, expect, test } from "bun:test";
 import { scope } from "arktype";
-import { binary } from "@schema-pop/schema";
-import { wgsl } from "@schema-pop/exporter";
+import { binary, wgsl as wgslSchema } from "../../schema/src";
+import { wgsl } from "../../exporter/src";
 import { analyze } from "./utils";
+import { fromModule, SchemaAnalyzer } from "../../core/src";
 
 function gen(s: any, cfg: Parameters<typeof wgsl>[0] = { dest: "out.wgsl" }) {
-	return wgsl(cfg).generate(analyze(scope({ ...binary.import(), ...s }), "v1"));
+	return wgsl(cfg).generate(analyze(scope({ ...wgslSchema.import(), ...s }), "v1"));
 }
 
 function genStd430(
@@ -14,11 +15,27 @@ function genStd430(
 	cfg: Parameters<typeof wgsl>[0] = { dest: "out.wgsl" },
 ) {
 	return wgsl(cfg).generate(
-		analyze(scope({ ...binary.import(), ...s }), "v1", "std430"),
+		analyze(scope({ ...wgslSchema.import(), ...s }), "v1", "std430"),
 	);
 }
 
 describe("wgsl exporter — primitive types", () => {
+	test("generates proper unpacker for small types", () => {
+		const sc = scope({
+			...wgslSchema.import(),
+			Color: "u8[] == 4",
+			Struct: {
+				field: "Color"
+			}
+		});
+		const mod = sc.export();
+		const schema = fromModule(mod);
+		const plan = new SchemaAnalyzer().analyze(schema);
+		const out = wgsl({ outputStyle: "helpers" }).generate(plan);
+		expect(out).not.toContain("NaN");
+	});
+
+
 	test("u8/u16/u32 all collapse to u32", () => {
 		const out = gen({ S: { a: "u8", b: "u16", c: "u32" } });
 		// every field should appear, all typed as u32

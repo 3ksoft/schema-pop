@@ -1,7 +1,7 @@
 import { generic, Hkt, scope, type Type, type } from "arktype";
 
 export const ArkMeta = type({
-	"popKind?": "'rich' | 'bitwise' | 'binary' | 'reserved' | 'gpu-binding'",
+	"popKind?": "'rich' | 'bitwise' | 'binary' | 'reserved' | 'gpu-binding' | 'gpu-shader'",
 	"description?": "string",
 	"category?": "string",
 	"min?": "number",
@@ -29,34 +29,16 @@ export const ArkMeta = type({
 	"gpuBinding?": "number",
 	"gpuUsage?": "string",
 	"atomic?": "boolean",
+	"entryPoint?": "string",
+	"bindGroups?": "number[]",
+	"workGroupSize?": "number",
 });
 
 export type ArkMeta = typeof ArkMeta.infer;
 
 declare global {
 	interface ArkEnv {
-		meta(): {
-			popKind?: "bitwise" | "binary" | "reserved" | "gpu-binding";
-			size?: number;
-			align?: number;
-			binaryType?: string;
-			scale?: number;
-			addr?: number;
-			isBinary?: boolean;
-			description?: string;
-			obsolete?: boolean;
-			obsoleteReason?: string;
-			renamedFrom?: string;
-			originalType?: string;
-			gpuGroup?: number;
-			gpuBinding?: number;
-			gpuUsage?: string;
-			atomic?: boolean;
-			category?: string;
-			min?: number;
-			max?: number;
-			step?: number;
-		};
+		meta(): ArkMeta
 	}
 }
 
@@ -259,6 +241,38 @@ export const Binding = generic(
 	},
 	class extends Hkt<[group: number, index: number, usage: string, t: unknown]> {
 		declare body: this[3];
+	},
+);
+
+
+/**
+ * Declares a GPU compute shader for WebGPU pipeline layout generation.
+ *
+ * Usage: `"Shader<entryPoint, bindGroups, workGroupSize>"`
+ * Example: `"Shader<string, 'mpm', [0,1,2,3], 512>"`
+ */
+export const Shader = generic(
+	["t", "unknown"],
+	["entryPoint", "string"],
+	["bindGroups", "string"],
+	["workGroupSize", "number"],
+)(
+	(args) => {
+		const bindGroupsRaw = (args.bindGroups as any).unit as string;
+
+		// Mapujemy string na rzeczywistą tablicę liczb w runtime
+		const bindGroups = bindGroupsRaw
+			? bindGroupsRaw.split(",").map(s => s.trim()).filter(Boolean).map(Number)
+			: [];
+		return (args.t as Type).configure({
+			entryPoint: (args.entryPoint as any).unit,
+			bindGroups: bindGroups,
+			workGroupSize: (args.workGroupSize as any).unit,
+			popKind: "gpu-shader",
+		});
+	},
+	class extends Hkt<[t: unknown, entryPoint: string, bindGroups: string, workGroupSize: number]> {
+		declare body: this[0];
 	},
 );
 

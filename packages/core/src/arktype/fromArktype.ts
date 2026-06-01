@@ -13,6 +13,7 @@ import {
 	binary,
 	PopSchema,
 	PopSchemaSettings,
+	PopSchemaSettingsDefaults,
 	PopType,
 } from "@schema-pop/schema";
 import { type } from "arktype";
@@ -44,6 +45,7 @@ export function fromModule(
 		map: new Map(),
 		module,
 		schema: PopSchema.assert({
+			...PopSchemaSettingsDefaults,
 			...options,
 			types: {},
 			functions: {},
@@ -104,11 +106,11 @@ function extractBaseRoot(
 		const gpuMeta =
 			meta.popKind === "gpu-binding"
 				? {
-						popKind: meta.popKind,
-						gpuGroup: meta.gpuGroup,
-						gpuBinding: meta.gpuBinding,
-						gpuUsage: meta.gpuUsage,
-					}
+					popKind: meta.popKind,
+					gpuGroup: meta.gpuGroup,
+					gpuBinding: meta.gpuBinding,
+					gpuUsage: meta.gpuUsage,
+				}
 				: {};
 		return assertPopType({ type: "link", target: linkedName, ...gpuMeta }, ctx);
 	}
@@ -187,9 +189,9 @@ function extractObject(
 		// key `"..."` because arktype has already inlined those props.
 		const rawDefObj =
 			rawDef &&
-			typeof rawDef === "object" &&
-			!Array.isArray(rawDef) &&
-			!(rawDef instanceof RegExp)
+				typeof rawDef === "object" &&
+				!Array.isArray(rawDef) &&
+				!(rawDef instanceof RegExp)
 				? (rawDef as Record<string, unknown>)
 				: null;
 		const propKeys = (() => {
@@ -230,7 +232,7 @@ function extractObject(
 			// `migrationMeta.defaultValue`.
 			const propJson = (exType as { json?: { default?: unknown } })?.json;
 			const hasDefault = !!propJson && "default" in propJson;
-			const defaultValue = hasDefault ? propJson.default : undefined;			
+			const defaultValue = hasDefault ? propJson.default : undefined;
 			const required = exType?.kind === "required" || hasDefault;
 			const value = exType?.inner.value;
 			if (value) {

@@ -16,7 +16,7 @@ export const $layout = scope({
 		size: "number",
 		align: "number",
 		paddedSize: "number",
-		name: "string = ''",
+		name: "string",
 	},
 
 	/** Recursive field definition */
@@ -25,6 +25,7 @@ export const $layout = scope({
 
 	PrimitiveField: {
 		"...": "TypeLayout",
+		name: "string",
 		kind: "'primitive'",
 	},
 
@@ -34,7 +35,7 @@ export const $layout = scope({
 	 */
 	MapField: {
 		kind: "'map'",
-		keyKind: "'string' | 'number' | 'symbol' = 'string'",
+		keyKind: "'string' | 'number' | 'symbol'",
 		value: "Field",
 	},
 
@@ -53,6 +54,7 @@ export const $layout = scope({
 	 */
 	AnyField: {
 		kind: "'any'",
+		name: "string",
 		"originalType?": "string",
 	},
 
@@ -110,6 +112,7 @@ export const $layout = scope({
 	/** Top-level type definitions */
 	StructPlan: {
 		"...": "TypeLayout",
+		name: "string",
 		kind: "'struct'",
 		fields: "FieldPlan[]",
 		"description?": "string",
@@ -119,6 +122,7 @@ export const $layout = scope({
 
 	UnionPlan: {
 		"...": "TypeLayout",
+		name: "string",
 		kind: "'union'",
 		tagOffset: "number",
 		tagSize: "number",
@@ -138,6 +142,7 @@ export const $layout = scope({
 
 	EnumPlan: {
 		"...": "TypeLayout",
+		name: "string",
 		kind: "'enum'",
 		variants: "EnumVariant[]",
 		underlyingType: "'u8' | 'u16' | 'i32'",
@@ -149,6 +154,7 @@ export const $layout = scope({
 
 	AliasPlan: {
 		"...": "TypeLayout",
+		name: "string",
 		kind: "'alias'",
 		type: "Field",
 		"targetOffset?": "number", // Binary offset of the aliased type
@@ -167,11 +173,19 @@ export const $layout = scope({
 		isArray: "boolean",
 	},
 
+	GpuShader: {
+		name: "string",
+		bindGroups: "number[]",
+		entryPoint: "string",
+		workGroupSize: "number",
+	},
+
 	/** A struct where every field is a Binding<> — generates layout descriptors instead of binary struct */
 	GpuBindingPlan: {
 		"...": "TypeLayout",
 		kind: "'gpu-binding-layout'",
 		bindings: "GpuBinding[]",
+		shaders: "GpuShader[]",
 	},
 
 	TypePlan: "StructPlan | UnionPlan | EnumPlan | AliasPlan | GpuBindingPlan",

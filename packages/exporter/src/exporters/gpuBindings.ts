@@ -7,8 +7,8 @@ import type {
 } from "@schema-pop/schema";
 import { ExporterTools } from "../exporterTools";
 
-export interface GpuBindingsTsConfig extends Omit<BaseConfig, "commentStyle"> {}
-export interface GpuBindingsWgslConfig extends BaseConfig {}
+export interface GpuBindingsTsConfig extends Omit<BaseConfig, "commentStyle"> { }
+export interface GpuBindingsWgslConfig extends BaseConfig { }
 
 function isGpuBindingPlan(t: any): t is GpuBindingPlan {
 	return t.kind === "gpu-binding-layout";
@@ -81,6 +81,100 @@ function webgpuResource(b: GpuBinding): string {
 			return `buffer: { type: "storage" as const }`;
 	}
 }
+// 1. Generowanie zbiorczego kreatora układów (BGL)
+function generateBindGroupLayoutsCreator(t: GpuBindingPlan): string {
+	const declaredGroups = new Set<number>();
+	for (const b of t.bindings) {
+		declaredGroups.add(b.group);
+	}
+	const sortedGroups = [...declaredGroups].sort((a, b) => a - b);
+
+	let code = `export function create${t.name}BindGroupLayouts(device: GPUDevice) {\n`;
+	code += `\treturn {\n`;
+	for (const g of sortedGroups) {
+		code += `\t\tbg${g}: device.createBindGroupLayout({\n`;
+		code += `\t\t\tlabel: "${t.name}_bg${g}Layout",\n`;
+		code += `\t\t\tentries: ${t.name.toUpperCase()}_BINDINGS.group${g},\n`;
+		code += `\t\t}),\n`;
+	}
+	code += `\t};\n`;
+	code += `}\n\n`;
+	return code;
+}
+
+// 2. Zmodyfikowany kompilator potoków (przyjmuje JEDEN GPUShaderModule)
+function generatePipelineCompiler(t: GpuBindingPlan): string {
+	if (!t.shaders || t.shaders.length === 0) return "";
+
+	const declaredGroups = new Set<number>();
+	for (const b of t.bindings) {
+		declaredGroups.add(b.group);
+	}
+	const sortedDeclaredGroups = [...declaredGroups].sort((a, b) => a - b);
+	const layoutsType = `{ ${sortedDeclaredGroups.map(g => `bg${g}: GPUBindGroupLayout`).join("; ")} }`;
+
+	let code = `export interface ${t.name}Pipelines {\n`;
+	for (const s of t.shaders) {
+		code += `\t${s.entryPoint}: GPUComputePipeline;\n`;
+	}
+	code += `}\n\n`;
+
+	// Zmiana: shaderModule jako pojedynczy obiekt GPUShaderModule
+	code += `export async function create${t.name}Pipelines(\n`;
+	code += `\tdevice: GPUDevice,\n`;
+	code += `\tlayouts: ${layoutsType},\n`;
+	code += `\tshaderModule: GPUShaderModule\n`; // <-- Tutaj pojedynczy moduł
+	code += `): Promise<${t.name}Pipelines> {\n`;
+
+	const layoutsCode: string[] = [];
+	const shaderToLayoutName = new Map<string, string>();
+	const layoutSet = new Set<string>();
+
+	for (const s of t.shaders) {
+		const sorted = [...s.bindGroups].sort((a, b) => a - b);
+		const key = sorted.join("_");
+		const layoutVarName = `layout_${key}`;
+		if (!layoutSet.has(key)) {
+			layoutSet.add(key);
+			const bgls = sorted.map(g => `layouts.bg${g}`).join(", ");
+			layoutsCode.push(`\tconst ${layoutVarName} = device.createPipelineLayout({ bindGroupLayouts: [${bgls}] });`);
+		}
+		shaderToLayoutName.set(s.entryPoint, layoutVarName);
+	}
+
+	for (const line of layoutsCode) {
+		code += `${line}\n`;
+	}
+	code += `\n`;
+
+	code += `\treturn {\n`;
+	for (const s of t.shaders) {
+		const layoutVar = shaderToLayoutName.get(s.entryPoint);
+		code += `\t\t"${s.entryPoint}": await device.createComputePipelineAsync({\n`;
+		code += `\t\t\tlabel: "pipeline_${s.entryPoint}",\n`;
+		code += `\t\t\tlayout: ${layoutVar},\n`;
+		code += `\t\t\tcompute: { module: shaderModule, entryPoint: "${s.entryPoint}" }\n`; // <-- Użycie wspólnego modułu
+		code += `\t\t}),\n`;
+	}
+	code += `\t};\n`;
+	code += `}\n\n`;
+
+	return code;
+}
+
+// 3. Generowanie metadanych o powiązaniach grup bindowania
+function generatePipelineMetadata(t: GpuBindingPlan): string {
+	if (!t.shaders || t.shaders.length === 0) return "";
+
+	let code = `export const ${t.name.toUpperCase()}_PIPELINE_BIND_GROUPS: Record<keyof ${t.name}Pipelines, number[]> = {\n`;
+	for (const s of t.shaders) {
+		const sortedGroups = [...s.bindGroups].sort((a, b) => a - b);
+		code += `\t"${s.entryPoint}": [${sortedGroups.join(", ")}],\n`;
+	}
+	code += `};\n\n`;
+	return code;
+}
+
 
 export function gpuBindingsTs(
 	config: GpuBindingsTsConfig,
@@ -121,6 +215,10 @@ export function gpuBindingsTs(
 					code += `\t],\n`;
 				}
 				code += `} satisfies Record<string, GPUBindGroupLayoutEntry[]>;\n\n`;
+
+				// Generowanie kompilatora potoków oraz funkcji dispatchujących bezpośrednio w pliku TypeScript
+				code += generatePipelineCompiler(t);
+				code += generatePipelineMetadata(t);
 			}
 			return code;
 		},

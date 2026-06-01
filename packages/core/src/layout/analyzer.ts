@@ -1,4 +1,4 @@
-import type { ExtractionContext } from "@schema-pop/schema";
+import type { ExtractionContext, PopSchemaSettingsPartial } from "@schema-pop/schema";
 import {
 	ArkMeta,
 	EnumPlan,
@@ -7,6 +7,7 @@ import {
 	LayoutPlan,
 	PopSchema,
 	PopSchemaSettings,
+	PopSchemaSettingsDefaults,
 	PopType,
 	StructPlan,
 	TypeLayout,
@@ -15,22 +16,10 @@ import {
 	VariantPlan,
 } from "@schema-pop/schema";
 import { type } from "arktype";
-
 interface TagContext {
 	name: string;
 	enumName: string;
 }
-
-export const AnalyzerConfig = type({
-	wordSize: "'32' | '64' = '32'",
-	autoLayout: "boolean = true",
-	autoSort: "boolean = false",
-	autoPack: "boolean = false",
-	layoutType:
-		"'aligned' | 'zero-padding' | 'std140' | 'std430' | 'dynamic' | 'dbus' = 'aligned'",
-	mode: "'binary' | 'rich' = 'rich'",
-});
-export type AnalyzerConfig = typeof AnalyzerConfig.infer;
 
 export class SchemaAnalyzer {
 	private schema!: PopSchema;
@@ -45,9 +34,10 @@ export class SchemaAnalyzer {
 
 	public analyze(
 		schema: PopSchema | ExtractionContext,
-		settings?: PopSchemaSettings,
+		settings?: PopSchemaSettingsPartial,
 	): LayoutPlan {
-		this.config = settings ?? PopSchemaSettings.assert({});
+		const mergedSettings = { ...PopSchemaSettingsDefaults, ...settings };
+		this.config = settings ? PopSchemaSettings.assert(mergedSettings) : PopSchemaSettingsDefaults;
 		this.schema = Object.hasOwn(schema, "schema")
 			? (schema as any).schema
 			: schema;
@@ -101,7 +91,7 @@ export class SchemaAnalyzer {
 		}
 
 		return LayoutPlan.assert({
-			...settings,
+			...mergedSettings,
 			types: sorted,
 		});
 	}
@@ -315,12 +305,13 @@ export class SchemaAnalyzer {
 	private getLayout(field: Field): typeof TypeLayout.inferIn {
 		const layout = this.getLayoutInternal(field);
 		if (this.config.layout === "zero-padding") {
-			return { size: layout.size, align: 1, paddedSize: layout.size };
+			return { name: "", size: layout.size, align: 1, paddedSize: layout.size };
 		}
 		return layout;
 	}
 
 	private getDbusLayout(field: Field): typeof TypeLayout.inferIn {
+		const name = "";
 		if (field.kind === "primitive") {
 			let size = field.size;
 			let align = field.align;
@@ -337,12 +328,12 @@ export class SchemaAnalyzer {
 			}
 
 			const paddedSize = Math.ceil(size / align) * align;
-			return { size, align, paddedSize };
+			return { name, size, align, paddedSize };
 		}
 
 		if (field.kind === "string") {
 			const size = 4 + (field.maxLength || field.exactLength || 0) + 1;
-			return { size, align: 4, paddedSize: Math.ceil(size / 4) * 4 };
+			return { name, size, align: 4, paddedSize: Math.ceil(size / 4) * 4 };
 		}
 
 		if (field.kind === "array") {
@@ -352,12 +343,13 @@ export class SchemaAnalyzer {
 			const bodySize =
 				(field.maxLength || field.exactLength || 0) * itemLayout.paddedSize;
 			const size = headerSize + bodySize;
-			return { size, align, paddedSize: Math.ceil(size / align) * align };
+			return { name, size, align, paddedSize: Math.ceil(size / align) * align };
 		}
 
 		if (field.kind === "reference") {
 			const plan = this.getPlan(field.name);
 			return {
+				name,
 				size: plan.size,
 				align: plan.align,
 				paddedSize: plan.paddedSize,
@@ -366,20 +358,22 @@ export class SchemaAnalyzer {
 
 		if (field.kind === "inlineStruct") {
 			return {
+				name,
 				size: field.size,
 				align: field.align,
 				paddedSize: field.paddedSize,
 			};
 		}
 
-		return { size: 0, align: 1, paddedSize: 0 };
+		return { name, size: 0, align: 1, paddedSize: 0 };
 	}
 
 	private getLayoutInternal(field: Field): typeof TypeLayout.inferIn {
+		const name = "";
 		if (this.config.layout === "dbus") {
 			return this.getDbusLayout(field);
 		}
-		if (field.kind === "unit") return { size: 0, align: 1, paddedSize: 0 };
+		if (field.kind === "unit") return { name, size: 0, align: 1, paddedSize: 0 };
 
 		if (field.kind === "primitive") {
 			if ("size" in field && "align" in field) {
@@ -389,18 +383,20 @@ export class SchemaAnalyzer {
 				}
 				const paddedSize = Math.ceil(field.size / align) * align;
 				return {
+					name,
 					size: field.size,
 					align,
 					paddedSize,
 				};
 			}
 			this.error(`Field ${JSON.stringify(field)} is missing layout metadata.`);
-			return { size: 0, align: 1, paddedSize: 0 };
+			return { name, size: 0, align: 1, paddedSize: 0 };
 		}
 
 		if (field.kind === "reference") {
 			const plan = this.getPlan(field.name);
 			return {
+				name,
 				size: plan.size,
 				align: plan.align,
 				paddedSize: plan.paddedSize ?? plan.size,
@@ -434,13 +430,13 @@ export class SchemaAnalyzer {
 				(isFixed && isVector ? 0 : isFixed ? 0 : 4) + max * stride;
 			const paddedSize = Math.ceil(baseSize / align) * align;
 
-			return { size: baseSize, align, paddedSize };
+			return { name, size: baseSize, align, paddedSize };
 		}
 
 		if (field.kind === "string") {
 			const size = 4 + (field.maxLength || field.exactLength || 0);
 			const align = 4;
-			return { size, align, paddedSize: Math.ceil(size / align) * align };
+			return { name, size, align, paddedSize: Math.ceil(size / align) * align };
 		}
 
 		if (field.kind === "optional") {
@@ -451,18 +447,19 @@ export class SchemaAnalyzer {
 			const totalSize = tagSize + paddingBeforeData + inner.size;
 			const paddedSize = Math.ceil(totalSize / align) * align;
 
-			return { size: totalSize, align, paddedSize };
+			return { name, size: totalSize, align, paddedSize };
 		}
 
 		if (field.kind === "inlineStruct") {
 			return {
+				name,
 				size: field.size,
 				align: field.align,
 				paddedSize: field.paddedSize ?? field.size,
 			};
 		}
 
-		return { size: 0, align: 1, paddedSize: 0 };
+		return { name, size: 0, align: 1, paddedSize: 0 };
 	}
 
 	private analyzeTopLevel(name: string, typeDef: PopType): TypePlan {
@@ -482,9 +479,11 @@ export class SchemaAnalyzer {
 
 		if (typeDef.type === "object") {
 			const fieldValues = Object.values(typeDef.fields || {});
-			if (fieldValues.length > 0 && fieldValues[0]?.popKind === "gpu-binding") {
+			const popKind = (fieldValues[0] as ArkMeta)?.popKind;
+			if (fieldValues.length > 0 && (popKind === "gpu-binding" || popKind === "gpu-shader")) {
 				return this.analyzeGpuBindingLayout(name, typeDef);
 			}
+
 			const plan = this.analyzeStruct(name, typeDef);
 			plan.description = description;
 			if (obsolete) {
@@ -498,8 +497,8 @@ export class SchemaAnalyzer {
 		const layout = this.getLayout(field);
 		return {
 			kind: "alias",
-			name,
 			...layout,
+			name,
 			type: field,
 			...(description ? { description } : {}),
 		};
@@ -545,15 +544,24 @@ export class SchemaAnalyzer {
 		typeDef: PopType & { type: "object" },
 	): any {
 		const bindings: any[] = [];
+		const shaders: any[] = [];
 		for (const [fieldName, fieldType] of Object.entries(typeDef.fields || {})) {
-			const ft = fieldType as any;
+			const ft = fieldType as PopType & ArkMeta;
 			let dataTypeName = "unknown";
 			let isArray = false;
+			if (ft.popKind === "gpu-shader") {
+				shaders.push({
+					name: fieldName,
+					bindGroups: ft.bindGroups || [],
+					entryPoint: ft.entryPoint || "",
+					workGroupSize: ft.workGroupSize || 0,
+				});
+				continue;
+			}
 			if (ft.type === "array") {
 				isArray = true;
 				const item = ft.item;
 				if (item?.type === "link") dataTypeName = item.target;
-				else if (item?.binaryType) dataTypeName = item.binaryType;
 				else if (item?.type) dataTypeName = item.type;
 			} else if (ft.type === "link") {
 				dataTypeName = ft.target;
@@ -579,6 +587,7 @@ export class SchemaAnalyzer {
 			align: 1,
 			paddedSize: 0,
 			bindings,
+			shaders
 		};
 	}
 
@@ -712,7 +721,7 @@ export class SchemaAnalyzer {
 			1,
 		);
 		const finalAlign =
-			this.config.layout === "std140" ? Math.max(structAlign, 16) : structAlign;
+			(this.config.layout === "std140") ? Math.max(structAlign, 16) : structAlign;
 
 		for (let i = 0; i < fields.length; i++) {
 			const f = fields[i]!;
