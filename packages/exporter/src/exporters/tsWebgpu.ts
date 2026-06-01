@@ -59,6 +59,74 @@ export function tsWebgpu(
 				}
 			}
 
+			const typesMap = new Map<string, any>(plan.types.map(t => [t.name, t]));
+
+			const hasAtomics = (typePlan: any, visited = new Set<string>()): boolean => {
+				if (visited.has(typePlan.name)) return false;
+				visited.add(typePlan.name);
+
+				if (typePlan.kind === "struct") {
+					return typePlan.fields.some((f: any) => {
+						if ((f.type as any).atomic) return true;
+						if (f.type.kind === "reference") {
+							const ref = typesMap.get(f.type.name);
+							return ref ? hasAtomics(ref, visited) : false;
+						}
+						if (f.type.kind === "array") {
+							let item = f.type.item;
+							while (item.kind === "array") item = item.item;
+							if (item.kind === "reference") {
+								const ref = typesMap.get(item.name);
+								return ref ? hasAtomics(ref, visited) : false;
+							}
+							return !!(item as any).atomic;
+						}
+						return false;
+					});
+				}
+				if (typePlan.kind === "alias") {
+					if ((typePlan.type as any).atomic) return true;
+					if (typePlan.type.kind === "reference") {
+						const ref = typesMap.get(typePlan.type.name);
+						return ref ? hasAtomics(ref, visited) : false;
+					}
+					if (typePlan.type.kind === "array") {
+						let item = typePlan.type.item;
+						while (item.kind === "array") item = item.item;
+						if (item.kind === "reference") {
+							const ref = typesMap.get(item.name);
+							return ref ? hasAtomics(ref, visited) : false;
+						}
+						return !!(item as any).atomic;
+					}
+				}
+				return false;
+			};
+
+			const getRawWgslType = (name: string, typeNameConverter: (s: string) => string, usage: string): string => {
+				const t = typesMap.get(name);
+				if (!t) return name;
+
+				const cleanName = typeNameConverter(name);
+
+				if (usage === "uniform") {
+					return cleanName;
+				}
+
+				if (hasAtomics(t)) {
+					return cleanName;
+				}
+
+				if (t.kind === "union") {
+					return cleanName;
+				}
+
+				if (t.kind === "enum") return "u32";
+
+				const words = Math.max(1, Math.ceil((t.paddedSize ?? t.size ?? 4) / 4));
+				return words === 1 ? "u32" : `array<u32, ${words}>`;
+			};
+
 			let code = ``;
 
 			if (usedDataTypes.size > 0) {
@@ -205,7 +273,33 @@ export function tsWebgpu(
 				code += `}\n\n`;
 			}
 
-			return code;
+			// === GENEROWANIE METADANYCH O POWIĄZANIACH WGSL ===
+			let metadataCode = `export const WGSL_BINDINGS = [\n`;
+			for (const b of bindingPlan.bindings) {
+				let typeVal = "storage";
+				if (b.usage === "uniform") {
+					typeVal = "uniform";
+				} else if (b.usage === "texture-2d") {
+					typeVal = "texture";
+				}
+
+				const rawDataType = getRawWgslType(b.dataTypeName, typeName, b.usage);
+				const objectType = b.isArray ? `array<${rawDataType}>` : rawDataType;
+
+				metadataCode += `\t{\n`;
+				metadataCode += `\t\tgroup: ${b.group},\n`;
+				metadataCode += `\t\tbinding: ${b.binding},\n`;
+				metadataCode += `\t\ttype: "${typeVal}",\n`;
+				metadataCode += `\t\tname: "${fieldName(b.name)}",\n`;
+				metadataCode += `\t\tobject: "${objectType}",\n`;
+				metadataCode += `\t},\n`;
+			}
+			metadataCode += `] as const;\n\n`;
+
+			return {
+				code: code,
+				metadata: metadataCode
+			};
 		},
 	};
 }

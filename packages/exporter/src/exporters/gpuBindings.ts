@@ -34,8 +34,51 @@ function getRawWgslType(name: string, typeNameConverter: (s: string) => string, 
 		return cleanName;
 	}
 
+	// Helper do sprawdzania atomików rekurencyjnie
+	const hasAtomics = (typePlan: TypePlan, visited = new Set<string>()): boolean => {
+		if (visited.has(typePlan.name)) return false;
+		visited.add(typePlan.name);
+
+		if (typePlan.kind === "struct") {
+			return typePlan.fields.some(f => {
+				if ((f.type as any).atomic) return true;
+				if (f.type.kind === "reference") {
+					const ref = typesMap.get(f.type.name);
+					return ref ? hasAtomics(ref, visited) : false;
+				}
+				if (f.type.kind === "array") {
+					let item = f.type.item;
+					while (item.kind === "array") item = item.item;
+					if (item.kind === "reference") {
+						const ref = typesMap.get(item.name);
+						return ref ? hasAtomics(ref, visited) : false;
+					}
+					return !!(item as any).atomic;
+				}
+				return false;
+			});
+		}
+		if (typePlan.kind === "alias") {
+			if ((typePlan.type as any).atomic) return true;
+			if (typePlan.type.kind === "reference") {
+				const ref = typesMap.get(typePlan.type.name);
+				return ref ? hasAtomics(ref, visited) : false;
+			}
+			if (typePlan.type.kind === "array") {
+				let item = typePlan.type.item;
+				while (item.kind === "array") item = item.item;
+				if (item.kind === "reference") {
+					const ref = typesMap.get(item.name);
+					return ref ? hasAtomics(ref, visited) : false;
+				}
+				return !!(item as any).atomic;
+			}
+		}
+		return false;
+	};
+
 	// 2. Struktury z atomikami również są czystymi strukturami WGSL, używamy ich bezpośrednio
-	if (t.kind === "struct" && t.fields.some(f => (f.type as any).atomic)) {
+	if (hasAtomics(t)) {
 		return cleanName;
 	}
 
@@ -134,6 +177,7 @@ function generatePipelineCompiler(t: GpuBindingPlan): string {
 	const sortedDeclaredGroups = [...declaredGroups].sort((a, b) => a - b);
 	const layoutsType = `{ ${sortedDeclaredGroups.map(g => `bg${g}: GPUBindGroupLayout`).join("; ")} }`;
 
+	let staticsCode = ``
 	let code = `export interface ${t.name}Pipelines {\n`;
 	for (const s of t.shaders) {
 		code += `\t${s.entryPoint}: GPUComputePipeline;\n`;
@@ -143,8 +187,11 @@ function generatePipelineCompiler(t: GpuBindingPlan): string {
 	code += `export async function create${t.name}Pipelines(\n`;
 	code += `\tdevice: GPUDevice,\n`;
 	code += `\tlayouts: ${layoutsType},\n`;
-	code += `\tshaderModule: GPUShaderModule\n`;
+	code += `\tshaderModule: (entryPoint:keyof PhysicsPipelines) => GPUShaderModule\n`;
 	code += `): Promise<${t.name}Pipelines> {\n`;
+
+	// Collect all declared groups and find the max to build contiguous layouts
+	const maxGroup = sortedDeclaredGroups[sortedDeclaredGroups.length - 1];
 
 	const layoutsCode: string[] = [];
 	const shaderToLayoutName = new Map<string, string>();
@@ -153,10 +200,20 @@ function generatePipelineCompiler(t: GpuBindingPlan): string {
 	for (const s of t.shaders) {
 		const sorted = [...s.bindGroups].sort((a, b) => a - b);
 		const key = sorted.join("_");
-		const layoutVarName = `layout_${key}`;
-		if (!layoutSet.has(key)) {
-			layoutSet.add(key);
-			const bgls = sorted.map(g => `layouts.bg${g}`).join(", ");
+
+		// WebGPU requires contiguous group indices — fill gaps with intermediate groups
+		const contiguous = [];
+		for (let g = 0; g <= maxGroup; g++) {
+			if (sorted.includes(g)) {
+				contiguous.push(g);
+			}
+		}
+		const contKey = contiguous.join("_");
+
+		const layoutVarName = `layout_${contKey}`;
+		if (!layoutSet.has(contKey)) {
+			layoutSet.add(contKey);
+			const bgls = contiguous.map(g => `layouts.bg${g}`).join(", ");
 			layoutsCode.push(`\tconst ${layoutVarName} = device.createPipelineLayout({ bindGroupLayouts: [${bgls}] });`);
 		}
 		shaderToLayoutName.set(s.entryPoint, layoutVarName);
@@ -173,7 +230,7 @@ function generatePipelineCompiler(t: GpuBindingPlan): string {
 		code += `\t\t"${s.entryPoint}": await device.createComputePipelineAsync({\n`;
 		code += `\t\t\tlabel: "pipeline_${s.entryPoint}",\n`;
 		code += `\t\t\tlayout: ${layoutVar},\n`;
-		code += `\t\t\tcompute: { module: shaderModule, entryPoint: "${s.entryPoint}" }\n`;
+		code += `\t\t\tcompute: { module: shaderModule("${s.entryPoint}"), entryPoint: "${s.entryPoint}" }\n`;
 		code += `\t\t}),\n`;
 	}
 	code += `\t};\n`;
@@ -185,12 +242,13 @@ function generatePipelineCompiler(t: GpuBindingPlan): string {
 function generatePipelineMetadata(t: GpuBindingPlan): string {
 	if (!t.shaders || t.shaders.length === 0) return "";
 
-	let code = `export const ${t.name.toUpperCase()}_PIPELINE_BIND_GROUPS: Record<keyof ${t.name}Pipelines, number[]> = {\n`;
+	let code = `export const ${t.name.toUpperCase()}_PIPELINE_BIND_GROUPS: Record<string, number[]> = {\n`;
+
 	for (const s of t.shaders) {
 		const sortedGroups = [...s.bindGroups].sort((a, b) => a - b);
 		code += `\t"${s.entryPoint}": [${sortedGroups.join(", ")}],\n`;
 	}
-	code += `};\n\n`;
+	code += `} as const;\n\n`;
 	return code;
 }
 
@@ -201,10 +259,13 @@ export function gpuBindingsTs(
 	const { typeName } = ExporterTools(cfg as any);
 
 	return {
+
 		name: "gpu-bindings-ts",
 		config: cfg as any,
 		generate: (plan: LayoutPlan) => {
 			let code = "";
+			let pipelineCode = "";
+			let metadataCode = "";
 			for (const t of plan.types) {
 				if (!isGpuBindingPlan(t)) continue;
 				const constName = `${typeName(t.name)
@@ -229,10 +290,15 @@ export function gpuBindingsTs(
 				}
 				code += `} satisfies Record<string, GPUBindGroupLayoutEntry[]>;\n\n`;
 
-				code += generatePipelineCompiler(t);
-				code += generatePipelineMetadata(t);
+				pipelineCode += generatePipelineCompiler(t);
+				metadataCode += generatePipelineMetadata(t);
+
 			}
-			return code;
+			return {
+				bindings: code,
+				pipelines: pipelineCode,
+				metadata: metadataCode
+			};
 		},
 	};
 }

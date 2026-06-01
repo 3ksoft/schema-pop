@@ -4,7 +4,7 @@ import type {
 	Field,
 	LayoutPlan,
 } from "@schema-pop/schema";
-import { ExporterTools } from "../exporterTools";
+import { ExporterTools, toSnakeCase } from "../exporterTools";
 
 export interface TsCodecConfig extends Omit<BaseConfig, "commentStyle"> {
 	importPath?: string;
@@ -416,8 +416,27 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 			for (const t of plan.types) {
 				if (t.kind === "enum") continue;
 				const sz = (t as any).paddedSize ?? (t as any).size ?? 0;
-				if (sz > 0)
+				if (sz > 0) {
 					code += `export const SIZEOF_${typeName(t.name)} = ${sz};\n`;
+				}
+				if (t.kind === "struct") {
+					for (const f of t.fields) {
+						if (f.type.kind === "array") {
+							const len = f.type.exactLength ?? f.type.maxLength ?? 0;
+							if (len > 0) {
+								code += `export const ${toSnakeCase(t.name).toUpperCase()}_${fieldName(f.name).toUpperCase()}_LEN = ${len};\n`;
+							}
+						}
+					}
+				}
+				if (t.kind === "alias") {
+					if (t.type.kind === "array") {
+						const len = t.type.exactLength ?? t.type.maxLength ?? 0;
+						if (len > 0) { 
+							code += `export const ${toSnakeCase(t.name).toUpperCase()}_LEN = ${len};\n`;
+						}
+					}
+				}
 			}
 			code += "\n";
 

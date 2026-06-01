@@ -41,12 +41,6 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 		config: cfg,
 		generate: (plan: LayoutPlan) => {
 			const typesMap = new Map<string, TypePlan>(plan.types.map(t => [t.name, t]));
-			const singletonEnumNames = new Set<string>();
-			for (const t of plan.types) {
-				if (t.kind === "enum" && t.variants.length === 1 && t.syntetic) {
-					singletonEnumNames.add(t.name);
-				}
-			}
 
 			const getSizeInWords = (paddedSize: number) => Math.max(1, Math.ceil(paddedSize / 4));
 
@@ -60,12 +54,10 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 
 			const getFieldSizeInWords = (f: Field): number => {
 				if (f.kind === "primitive") return 1;
-				if (f.kind === "reference") {
-					if (singletonEnumNames.has(f.name)) return 0;
-					return getTypeSizeInWords(f.name);
-				}
+				if (f.kind === "reference") return getTypeSizeInWords(f.name);
 				if (f.kind === "array") {
 					const len = f.exactLength || f.maxLength || 0;
+					// U8 vector packing do 1 słowa
 					if (len >= 2 && len <= 4 && f.item.kind === "primitive" && f.item.name === "u8") return 1;
 					if (len >= 2 && len <= 4 && f.item.kind === "primitive") return len;
 					return len * getFieldSizeInWords(f.item);
@@ -94,7 +86,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 				if (f.kind === "array") {
 					const itemType = getCleanWgslType(f.item);
 					const len = f.exactLength || f.maxLength || 0;
-					if (len >= 2 && len <= 4 && f.item.kind === "primitive" && f.item.name !== "u8") {
+					if (len >= 2 && len <= 4 && f.item.kind === "primitive") {
 						return `vec${len}<${itemType}>`;
 					}
 					return `array<${itemType}, ${len}>`;
@@ -103,8 +95,49 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 			};
 
 			const hasAtomics = (t: TypePlan): boolean => {
-				if (t.kind !== "struct") return false;
-				return t.fields.some(f => (f.type as any).atomic);
+				const visited = new Set<string>();
+				const check = (typePlan: TypePlan): boolean => {
+					if (visited.has(typePlan.name)) return false;
+					visited.add(typePlan.name);
+
+					if (typePlan.kind === "struct") {
+						return typePlan.fields.some(f => {
+							if ((f.type as any).atomic) return true;
+							if (f.type.kind === "reference") {
+								const ref = typesMap.get(f.type.name);
+								return ref ? check(ref) : false;
+							}
+							if (f.type.kind === "array") {
+								let item = f.type.item;
+								while (item.kind === "array") item = item.item;
+								if (item.kind === "reference") {
+									const ref = typesMap.get(item.name);
+									return ref ? check(ref) : false;
+								}
+								return !!(item as any).atomic;
+							}
+							return false;
+						});
+					}
+					if (typePlan.kind === "alias") {
+						if ((typePlan.type as any).atomic) return true;
+						if (typePlan.type.kind === "reference") {
+							const ref = typesMap.get(typePlan.type.name);
+							return ref ? check(ref) : false;
+						}
+						if (typePlan.type.kind === "array") {
+							let item = typePlan.type.item;
+							while (item.kind === "array") item = item.item;
+							if (item.kind === "reference") {
+								const ref = typesMap.get(item.name);
+								return ref ? check(ref) : false;
+							}
+							return !!(item as any).atomic;
+						}
+					}
+					return false;
+				};
+				return check(t);
 			};
 
 			let typesCode = "";
@@ -116,7 +149,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 			for (const t of plan.types) {
 				if (isRichType(t)) continue;
 
-				if (t.kind === "enum" && !singletonEnumNames.has(t.name)) {
+				if (t.kind === "enum") {
 					const name = typeName(t.name);
 					const underlying = t.underlyingType === "i32" ? "i32" : "u32";
 					const suffix = underlying === "u32" ? "u" : "";
@@ -131,6 +164,12 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 					const aliasName = typeName(t.name);
 					const target = getCleanWgslType(t.type as Field);
 					typesCode += `alias ${aliasName} = ${target};\n\n`;
+					if (t.type.kind === "array") {
+						const len = t.type.exactLength ?? t.type.maxLength ?? 0;
+						if (len > 0) {
+							typesCode += `const ${toSnakeCase(t.name).toUpperCase()}_LEN: u32 = ${len}u;\n\n`;
+						}
+					}
 				}
 
 				if (t.kind === "struct") {
@@ -141,6 +180,15 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 						typesCode += `\t${fieldName(f.name)}: ${getCleanWgslType(f.type)},\n`;
 					}
 					typesCode += `};\n\n`;
+					for (const f of t.fields) {
+						if (f.type.kind === "array") {
+							const len = f.type.exactLength ?? f.type.maxLength ?? 0;
+							if (len > 0) {
+								typesCode += `const ${toSnakeCase(t.name).toUpperCase()}_${fieldName(f.name).toUpperCase()}_LEN: u32 = ${len}u;\n`;
+							}
+						}
+					}
+					typesCode += `\n`;
 				}
 
 				if (t.kind === "union") {
@@ -179,9 +227,16 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 				if (f.kind === "array") {
 					if (cleanType.startsWith("vec")) {
 						const len = f.exactLength || f.maxLength || 0;
-						const innerType = getCleanWgslType(f.item);
-						const args = Array.from({ length: len }, (_, i) => `bitcast<${innerType}>(${rawAt(`${baseWord} + ${i}u`)})`);
-						return `${target} = ${cleanType}(${args.join(", ")});\n`;
+						if (f.item.kind === "primitive" && f.item.name === "u8") {
+							// Unpacking małych u8 (np. Color) z jednego słowa (extractBits)
+							const args = Array.from({ length: len }, (_, i) => `extractBits(${rawAt(baseWord)}, ${i * 8}u, 8u)`);
+							return `${target} = vec${len}<u32>(${args.join(", ")});\n`;
+						} else {
+							// Unpacking klasycznych wektorów rozłożonych na słowa (np. vec3<f32>)
+							const innerType = getCleanWgslType(f.item);
+							const args = Array.from({ length: len }, (_, i) => `bitcast<${innerType}>(${rawAt(`${baseWord} + ${i}u`)})`);
+							return `${target} = ${cleanType}(${args.join(", ")});\n`;
+						}
 					} else {
 						const len = f.exactLength || f.maxLength || 0;
 						const itemWords = getFieldSizeInWords(f.item);
@@ -220,9 +275,19 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 					if (cleanType.startsWith("vec")) {
 						const len = f.exactLength || f.maxLength || 0;
 						const comps = ["x", "y", "z", "w"];
-						let p = "";
-						for (let i = 0; i < len; i++) p += `${outAt(`${baseWord} + ${i}u`)} = bitcast<u32>(${source}.${comps[i]});\n\t\t`;
-						return p;
+
+						if (f.item.kind === "primitive" && f.item.name === "u8") {
+							// Packing małych u8 (np. Color) z powrotem do jednego słowa (insertBits)
+							let p = `${outAt(baseWord)} = 0u;\n\t\t`;
+							for (let i = 0; i < len; i++) {
+								p += `${outAt(baseWord)} = insertBits(${outAt(baseWord)}, ${source}.${comps[i]}, ${i * 8}u, 8u);\n\t\t`;
+							}
+							return p;
+						} else {
+							let p = "";
+							for (let i = 0; i < len; i++) p += `${outAt(`${baseWord} + ${i}u`)} = bitcast<u32>(${source}.${comps[i]});\n\t\t`;
+							return p;
+						}
 					} else {
 						const len = f.exactLength || f.maxLength || 0;
 						const itemWords = getFieldSizeInWords(f.item);
@@ -241,81 +306,91 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 			for (const t of plan.types) {
 				if (isRichType(t)) continue;
 
-				if (t.kind === "struct" && !hasAtomics(t)) {
+				if ((t.kind === "struct" || (t.kind === "alias" && !WGSL_PREDECLARED_ALIASES.has(t.name))) && !hasAtomics(t)) {
 					const cleanName = typeName(t.name);
 					const snakeName = toSnakeCase(t.name);
-					const words = getSizeInWords(t.paddedSize);
+					const words = getSizeInWords(t.paddedSize ?? t.size ?? 4);
 					const rawType = words === 1 ? "u32" : `array<u32, ${words}>`;
 					const rawAt = (idx: string) => words === 1 ? `raw` : `raw[${idx}]`;
 					const outAt = (idx: string) => words === 1 ? `out` : `out[${idx}]`;
 
 					// --- Unpacker ---
 					let unpackBody = `\tvar out: ${cleanName};\n`;
-					for (const f of t.fields) {
-						if (f.type.kind === "unit") continue;
-						if (f.type.kind === "reference" && singletonEnumNames.has(f.type.name)) continue;
 
-						const l = getFieldLayout(f);
-						const fname = fieldName(f.name);
-						const cleanType = getCleanWgslType(f.type);
-						const target = `out.${fname}`;
+					if (t.kind === "alias") {
+						unpackBody += `\t` + genUnpack(t.type as Field, "0u", "out", 0, words);
+					} else {
+						for (const f of t.fields) {
+							if (f.type.kind === "unit") continue;
 
-						if (l.isBitfield) {
-							const ext = `extractBits(${rawAt(`${l.wordIndex}u`)}, ${l.bitShift}u, ${l.bitSize}u)`;
-							if (cleanType === "bool") {
-								unpackBody += `\t${target} = ${ext} != 0u;\n`;
-							} else if (f.type.kind === "reference") {
-								const refKind = typesMap.get(f.type.name)?.kind;
-								if (refKind === "struct" || refKind === "alias") {
-									unpackBody += `\t${target} = unpack_words_to_${toSnakeCase(f.type.name)}(${ext});\n`;
+							const l = getFieldLayout(f);
+							const fname = fieldName(f.name);
+							const cleanType = getCleanWgslType(f.type);
+							const target = `out.${fname}`;
+
+							if (l.isBitfield) {
+								const ext = `extractBits(${rawAt(`${l.wordIndex}u`)}, ${l.bitShift}u, ${l.bitSize}u)`;
+								if (cleanType === "bool") {
+									unpackBody += `\t${target} = ${ext} != 0u;\n`;
+								} else if (f.type.kind === "reference") {
+									const refKind = typesMap.get(f.type.name)?.kind;
+									if (refKind === "struct" || refKind === "alias") {
+										unpackBody += `\t${target} = unpack_words_to_${toSnakeCase(f.type.name)}(${ext});\n`;
+									} else {
+										unpackBody += `\t${target} = ${cleanType}(${ext});\n`;
+									}
 								} else {
 									unpackBody += `\t${target} = ${cleanType}(${ext});\n`;
 								}
 							} else {
-								unpackBody += `\t${target} = ${cleanType}(${ext});\n`;
+								unpackBody += `\t` + genUnpack(f.type, `${l.wordIndex}u`, target, 0, words);
 							}
-						} else {
-							unpackBody += `\t` + genUnpack(f.type, `${l.wordIndex}u`, target, 0, words);
 						}
 					}
 					unpackBody += `\treturn out;\n`;
 					helpersCode += `fn unpack_words_to_${snakeName}(raw: ${rawType}) -> ${cleanName} {\n${unpackBody}}\n\n`;
+					helpersCode += `fn unpack_${snakeName}(raw: ${rawType}) -> ${cleanName} {\n\treturn unpack_words_to_${snakeName}(raw);\n}\n\n`;
 
 					// --- Packer ---
 					let packBody = `\tvar out: ${rawType};\n`;
 					const initializedWords = new Set<number>();
 
-					for (const f of t.fields) {
-						if (f.type.kind === "unit" || (f.type.kind === "reference" && singletonEnumNames.has(f.type.name))) continue;
-						const l = getFieldLayout(f);
-						const fname = fieldName(f.name);
-						const source = `unpacked.${fname}`;
-						const cleanType = getCleanWgslType(f.type);
+					if (t.kind === "alias") {
+						packBody += `\t` + genPack(t.type as Field, "0u", "unpacked", 0, words);
+					} else {
+						for (const f of t.fields) {
+							if (f.type.kind === "unit") continue;
+							const l = getFieldLayout(f);
+							const fname = fieldName(f.name);
+							const source = `unpacked.${fname}`;
+							const cleanType = getCleanWgslType(f.type);
 
-						if (l.isBitfield) {
-							if (!initializedWords.has(l.wordIndex)) {
-								packBody += `\t${outAt(`${l.wordIndex}u`)} = 0u;\n`;
-								initializedWords.add(l.wordIndex);
-							}
-							let valExpr = "";
-							if (cleanType === "bool") valExpr = `select(0u, 1u, ${source})`;
-							else if (f.type.kind === "reference") {
-								const refKind = typesMap.get(f.type.name)?.kind;
-								if (refKind === "struct" || refKind === "alias") {
-									valExpr = `pack_${toSnakeCase(f.type.name)}_to_words(${source})`;
+							if (l.isBitfield) {
+								if (!initializedWords.has(l.wordIndex)) {
+									packBody += `\t${outAt(`${l.wordIndex}u`)} = 0u;\n`;
+									initializedWords.add(l.wordIndex);
+								}
+								let valExpr = "";
+								if (cleanType === "bool") valExpr = `select(0u, 1u, ${source})`;
+								else if (f.type.kind === "reference") {
+									const refKind = typesMap.get(f.type.name)?.kind;
+									if (refKind === "struct" || refKind === "alias") {
+										valExpr = `pack_${toSnakeCase(f.type.name)}_to_words(${source})`;
+									} else {
+										valExpr = `u32(${source})`;
+									}
 								} else {
 									valExpr = `u32(${source})`;
 								}
+								packBody += `\t${outAt(`${l.wordIndex}u`)} = insertBits(${outAt(`${l.wordIndex}u`)}, ${valExpr}, ${l.bitShift}u, ${l.bitSize}u);\n`;
 							} else {
-								valExpr = `u32(${source})`;
+								packBody += `\t` + genPack(f.type, `${l.wordIndex}u`, source, 0, words);
 							}
-							packBody += `\t${outAt(`${l.wordIndex}u`)} = insertBits(${outAt(`${l.wordIndex}u`)}, ${valExpr}, ${l.bitShift}u, ${l.bitSize}u);\n`;
-						} else {
-							packBody += `\t` + genPack(f.type, `${l.wordIndex}u`, source, 0, words);
 						}
 					}
 					packBody += `\treturn out;\n`;
 					helpersCode += `fn pack_${snakeName}_to_words(unpacked: ${cleanName}) -> ${rawType} {\n${packBody}}\n\n`;
+					helpersCode += `fn pack_${snakeName}(unpacked: ${cleanName}) -> ${rawType} {\n\treturn pack_${snakeName}_to_words(unpacked);\n}\n\n`;
 				}
 
 				if (t.kind === "union") {
@@ -332,13 +407,13 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 					helpersCode += `fn get_${snakeName}_tag(val: ${rawType}) -> u32 {\n`;
 					helpersCode += `\treturn extractBits(${rawAt(`${tagWord}u`)}, ${tagShift}u, ${tagSize}u);\n}\n\n`;
 
-					// 2. Unpack/Pack wariantów za pomocą zgrabnych for-loopów
+					// 2. Unpack/Pack wariantów
 					for (let i = 0; i < t.variants.length; i++) {
 						const v = t.variants[i];
-						if (v.type.kind !== "reference" || singletonEnumNames.has(v.type.name)) continue;
+						if (v.type.kind !== "reference") continue;
 
 						const vStruct = typesMap.get(v.type.name);
-						if (!vStruct) continue;
+						if (!vStruct || vStruct.kind !== "struct") continue;
 
 						const cleanVarName = typeName(vStruct.name);
 						const snakeVarName = toSnakeCase(vStruct.name);

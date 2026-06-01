@@ -3,7 +3,7 @@
     {
       "name": "task",
       "label": "task",
-      "query": "+packages/exporter/src/exporters/tsCodec.ts\n+packages/exporter/src/exporters/gpuBindings.ts\n+packages/exporter/src/exporters/wgsl.ts\n+packages/exporter/src/exporterTools.ts"
+      "query": "+packages/exporter/src/exporters/tsCodec.ts\n+packages/exporter/src/exporters/gpuBindings.ts\n+packages/exporter/src/exporters/wgsl.ts\n+packages/exporter/src/exporterTools.ts\n+packages/exporter/src/exporters/tsWebgpu.ts"
     },
     {
       "name": "gimli",
@@ -61,7 +61,7 @@
       "query": "+ manual_test/**/*.{ts,hpp,cpp,rs,toml,json,md,zig}"
     }
   ],
-  "projectRoot": "/home/kr/Documents/schema-pop",
+  "projectRoot": "/home/kr/Projects/schema-pop",
   "server": {
     "host": "127.0.0.1",
     "port": 7401,
@@ -74,5 +74,5 @@
   },
   "forceRoot": false,
   "syncVersion": false,
-  "version": "0.0.205"
+  "version": "0.0.209"
 }
