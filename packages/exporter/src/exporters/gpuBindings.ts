@@ -4,6 +4,7 @@ import type {
 	GpuBinding,
 	GpuBindingPlan,
 	LayoutPlan,
+	TypePlan,
 } from "@schema-pop/schema";
 import { ExporterTools } from "../exporterTools";
 
@@ -20,31 +21,57 @@ function toSnakeCase(s: string): string {
 	);
 }
 
-function wgslVarDecl(b: GpuBinding, fieldName: (n: string) => string, bitfieldStructNames?: Set<string>): string {
-	const name = fieldName(b.name);
-	let dataTypeName = b.dataTypeName;
-	if (bitfieldStructNames?.has(dataTypeName)) {
-		dataTypeName = `${dataTypeName}Packed`;
+// Pobiera surowy typ WGSL dla bindingu bazując na nowym modelu pamięci
+function getRawWgslType(name: string, typeNameConverter: (s: string) => string, typesMap: Map<string, TypePlan>, usage: string): string {
+	const t = typesMap.get(name);
+	if (!t) return name; // np. typy wbudowane jak u32
+
+	const cleanName = typeNameConverter(name);
+
+	// 1. Zwracamy Czysty Typ dla uniformów. WebGPU wymaga tu wyrównania std140, a Twoje struktury 
+	// jak `Simulation` nie mają bitfieldów na top-levelu, więc możemy używać ich natywnie w shaderze!
+	if (usage === "uniform") {
+		return cleanName;
 	}
-	const typePart = b.isArray ? `array<${dataTypeName}>` : dataTypeName;
+
+	// 2. Struktury z atomikami również są czystymi strukturami WGSL, używamy ich bezpośrednio
+	if (t.kind === "struct" && t.fields.some(f => (f.type as any).atomic)) {
+		return cleanName;
+	}
+
+	// 3. Unie dostały natywny alias w WGSL (np. alias GameObject = array<u32, 16>)
+	if (t.kind === "union") {
+		return cleanName;
+	}
+
+	if (t.kind === "enum") return "u32";
+
+	// 4. Dla buforów Storage (read_write/read) używamy bezpiecznych, płaskich tablic słów u32
+	const words = Math.max(1, Math.ceil((t.paddedSize ?? t.size ?? 4) / 4));
+	return words === 1 ? "u32" : `array<u32, ${words}>`;
+}
+
+function wgslVarDecl(b: GpuBinding, fieldName: (n: string) => string, typeName: (n: string) => string, typesMap: Map<string, TypePlan>): string {
+	const name = fieldName(b.name);
+	const rawDataType = getRawWgslType(b.dataTypeName, typeName, typesMap, b.usage);
+
+	// Tworzymy tablice wielowymiarowe jeśli b.isArray jest true (np. array<array<u32, 12>>)
+	const typePart = b.isArray ? `array<${rawDataType}>` : rawDataType;
+
 	switch (b.usage) {
 		case "storage-write":
 			return `var<storage, read_write> ${name}: ${typePart}`;
 		case "storage-read":
 			return `var<storage, read> ${name}: ${typePart}`;
+		case "uniform":
+			// PRZYWRÓCONO: poprawne deklarowanie uniformów w WGSL
+			return `var<uniform> ${name}: ${typePart}`;
 		case "storage-atomic": {
-			// WGSL's atomic ops (atomicStore/atomicLoad/atomicAdd/...) require
-			// the underlying storage location to be `atomic<T>`. For an array
-			// binding that means `array<atomic<T>>`; for a scalar binding it
-			// means `atomic<T>`. Access stays `read_write` — atomicity is a
-			// property of the location, orthogonal to the access mode.
 			const atomicType = b.isArray
-				? `array<atomic<${dataTypeName}>>`
-				: `atomic<${dataTypeName}>`;
+				? `array<atomic<${rawDataType}>>`
+				: `atomic<${rawDataType}>`;
 			return `var<storage, read_write> ${name}: ${atomicType}`;
 		}
-		case "uniform":
-			return `var<uniform> ${name}: ${typePart}`;
 		case "texture-2d": {
 			const texType = textureWgslType(b.dataTypeName);
 			return `var ${name}: ${texType}`;
@@ -61,19 +88,14 @@ function textureWgslType(format: string): string {
 }
 
 function webgpuResource(b: GpuBinding): string {
-	// `as const` on the string literal keeps it narrowed to the
-	// GPUBufferBindingType / GPUTextureSampleType union so consumers don't
-	// have to `as any` the descriptor when calling `createBindGroupLayout`.
 	switch (b.usage) {
 		case "storage-write":
 		case "storage-atomic":
-			// 'storage-atomic' is a WGSL-shader concern (forces the element
-			// type to `atomic<T>` in the generated WGSL). At the WebGPU
-			// pipeline-layout level it's an ordinary writable storage buffer.
 			return `buffer: { type: "storage" as const }`;
 		case "storage-read":
 			return `buffer: { type: "read-only-storage" as const }`;
 		case "uniform":
+			// PRZYWRÓCONO: poprawne deklarowanie powiązań TS dla JS
 			return `buffer: { type: "uniform" as const }`;
 		case "texture-2d":
 			return `texture: { sampleType: "${b.dataTypeName}" as GPUTextureSampleType }`;
@@ -81,7 +103,7 @@ function webgpuResource(b: GpuBinding): string {
 			return `buffer: { type: "storage" as const }`;
 	}
 }
-// 1. Generowanie zbiorczego kreatora układów (BGL)
+
 function generateBindGroupLayoutsCreator(t: GpuBindingPlan): string {
 	const declaredGroups = new Set<number>();
 	for (const b of t.bindings) {
@@ -102,7 +124,6 @@ function generateBindGroupLayoutsCreator(t: GpuBindingPlan): string {
 	return code;
 }
 
-// 2. Zmodyfikowany kompilator potoków (przyjmuje JEDEN GPUShaderModule)
 function generatePipelineCompiler(t: GpuBindingPlan): string {
 	if (!t.shaders || t.shaders.length === 0) return "";
 
@@ -119,11 +140,10 @@ function generatePipelineCompiler(t: GpuBindingPlan): string {
 	}
 	code += `}\n\n`;
 
-	// Zmiana: shaderModule jako pojedynczy obiekt GPUShaderModule
 	code += `export async function create${t.name}Pipelines(\n`;
 	code += `\tdevice: GPUDevice,\n`;
 	code += `\tlayouts: ${layoutsType},\n`;
-	code += `\tshaderModule: GPUShaderModule\n`; // <-- Tutaj pojedynczy moduł
+	code += `\tshaderModule: GPUShaderModule\n`;
 	code += `): Promise<${t.name}Pipelines> {\n`;
 
 	const layoutsCode: string[] = [];
@@ -153,7 +173,7 @@ function generatePipelineCompiler(t: GpuBindingPlan): string {
 		code += `\t\t"${s.entryPoint}": await device.createComputePipelineAsync({\n`;
 		code += `\t\t\tlabel: "pipeline_${s.entryPoint}",\n`;
 		code += `\t\t\tlayout: ${layoutVar},\n`;
-		code += `\t\t\tcompute: { module: shaderModule, entryPoint: "${s.entryPoint}" }\n`; // <-- Użycie wspólnego modułu
+		code += `\t\t\tcompute: { module: shaderModule, entryPoint: "${s.entryPoint}" }\n`;
 		code += `\t\t}),\n`;
 	}
 	code += `\t};\n`;
@@ -162,7 +182,6 @@ function generatePipelineCompiler(t: GpuBindingPlan): string {
 	return code;
 }
 
-// 3. Generowanie metadanych o powiązaniach grup bindowania
 function generatePipelineMetadata(t: GpuBindingPlan): string {
 	if (!t.shaders || t.shaders.length === 0) return "";
 
@@ -174,7 +193,6 @@ function generatePipelineMetadata(t: GpuBindingPlan): string {
 	code += `};\n\n`;
 	return code;
 }
-
 
 export function gpuBindingsTs(
 	config: GpuBindingsTsConfig,
@@ -193,17 +211,12 @@ export function gpuBindingsTs(
 					.replace(/([a-z])([A-Z])/g, "$1_$2")
 					.toUpperCase()}_BINDINGS`;
 
-				// Group bindings by group index
 				const byGroup = new Map<number, GpuBinding[]>();
 				for (const b of t.bindings) {
 					if (!byGroup.has(b.group)) byGroup.set(b.group, []);
 					byGroup.get(b.group)!.push(b);
 				}
 
-				// `satisfies` (rather than `: Record<...>` annotation) keeps the
-				// inferred narrow literal types for `buffer.type` / `texture.sampleType`,
-				// so the exported value is still typed as a precise GPU descriptor
-				// while also being statically verified against the WebGPU shape.
 				code += `export const ${constName} = {\n`;
 				for (const [group, bindings] of [...byGroup.entries()].sort(
 					(a, b) => a[0] - b[0],
@@ -216,7 +229,6 @@ export function gpuBindingsTs(
 				}
 				code += `} satisfies Record<string, GPUBindGroupLayoutEntry[]>;\n\n`;
 
-				// Generowanie kompilatora potoków oraz funkcji dispatchujących bezpośrednio w pliku TypeScript
 				code += generatePipelineCompiler(t);
 				code += generatePipelineMetadata(t);
 			}
@@ -234,19 +246,15 @@ export function gpuBindingsWgsl(
 		commentStyle: "slash",
 		...config,
 	};
-	const { fieldName } = ExporterTools(cfg as any);
+
+	const { fieldName, typeName } = ExporterTools(cfg as any);
 
 	return {
 		name: "gpu-bindings-wgsl",
 		extension: "wgsl",
 		config: cfg as any,
 		generate: (plan: LayoutPlan) => {
-			const bitfieldStructNames = new Set<string>();
-			for (const t of plan.types) {
-				if (t.kind === "struct" && t.fields.some(f => (f.type as any).popKind === "bitwise")) {
-					bitfieldStructNames.add(t.name);
-				}
-			}
+			const typesMap = new Map<string, TypePlan>(plan.types.map(t => [t.name, t]));
 
 			let code = "";
 			for (const t of plan.types) {
@@ -255,7 +263,7 @@ export function gpuBindingsWgsl(
 					a.group !== b.group ? a.group - b.group : a.binding - b.binding,
 				);
 				for (const b of sorted) {
-					code += `@group(${b.group}) @binding(${b.binding}) ${wgslVarDecl(b, fieldName, bitfieldStructNames)};\n`;
+					code += `@group(${b.group}) @binding(${b.binding}) ${wgslVarDecl(b, fieldName, typeName, typesMap)};\n`;
 				}
 				code += "\n";
 			}
