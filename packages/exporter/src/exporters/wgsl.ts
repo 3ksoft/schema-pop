@@ -161,7 +161,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 					const unpackFn = `unpack_words_to_${itemSnake}`;
 
 					if (sizeWords === 1) {
-						return [`${targetExpr} = ${unpackFn}(array<u32, 1>(${rawVar}[${wordIdxExpr}]));`];
+						return [`${targetExpr} = ${unpackFn}(u32(${rawVar}[${wordIdxExpr}]));`];
 					}
 
 					return [
@@ -324,9 +324,10 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 				if (t.kind === "union") {
 					const structDeclName = typeName(t.name);
 					const rawWords = Math.max(1, Math.ceil(t.paddedSize / 4));
+					let tType = rawWords > 1 ? `array<u32, ${rawWords}>` : 'u32'
 
 					typesCode += `struct ${structDeclName} {\n`;
-					typesCode += `\t_raw: array<u32, ${rawWords}>,\n`;
+					typesCode += `\t_raw: ${tType},\n`;
 					typesCode += `};\n\n`;
 
 					const align = t.align || 1;
@@ -351,25 +352,38 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 
 						const words = Math.max(1, Math.ceil((vStruct as any).paddedSize / 4));
 						const payloadWordOffset = Math.floor(payloadOffset / 4);
+						tType = tType = rawWords > 1 ? `array<u32, ${words}>` : 'u32'
+						if (variantTypeName === "none") continue;
+						if (words == 1) {
+							helpersCode += `fn ${unpackFnName}(val: u32) -> ${variantTypeName} {\n`;
+							helpersCode += `\treturn unpack_words_to_${vSnakeName}(val);\n`;
+							helpersCode += `}\n\n`;
+						} else {
+							helpersCode += `fn ${unpackFnName}(val: ${structDeclName}) -> ${variantTypeName} {\n`;
+							helpersCode += `\tvar tmp: ${tType};\n`;
+							helpersCode += `\tfor (var i = 0u; i < ${words}u; i++) {\n`;
+							helpersCode += `\t\ttmp[i] = val._raw[${payloadWordOffset}u + i];\n`;
+							helpersCode += `\t}\n`;
+							helpersCode += `\treturn unpack_words_to_${vSnakeName}(tmp);\n`;
+							helpersCode += `}\n\n`;
+						}
 
-						helpersCode += `fn ${unpackFnName}(val: ${structDeclName}) -> ${variantTypeName} {\n`;
-						helpersCode += `\tvar tmp: array<u32, ${words}>;\n`;
-						helpersCode += `\tfor (var i = 0u; i < ${words}u; i++) {\n`;
-						helpersCode += `\t\ttmp[i] = val._raw[${payloadWordOffset}u + i];\n`;
-						helpersCode += `\t}\n`;
-						helpersCode += `\treturn unpack_words_to_${vSnakeName}(tmp);\n`;
-						helpersCode += `}\n\n`;
-
-						helpersCode += `fn ${packFnName}(unpacked: ${variantTypeName}) -> ${structDeclName} {\n`;
-						helpersCode += `\tvar out: ${structDeclName};\n`;
-						const tagVal = i + 1;
-						helpersCode += `\tout._raw[${tagWord}] = insertBits(out._raw[${tagWord}], ${tagVal}u, ${tagShift}u, ${tagSize * 8}u);\n`;
-						helpersCode += `\tlet tmp = pack_${vSnakeName}_to_words(unpacked);\n`;
-						helpersCode += `\tfor (var i = 0u; i < ${words}u; i++) {\n`;
-						helpersCode += `\t\tout._raw[${payloadWordOffset}u + i] = tmp[i];\n`;
-						helpersCode += `\t}\n`;
-						helpersCode += `\treturn out;\n`;
-						helpersCode += `}\n\n`;
+						if (words == 1) {
+							helpersCode += `fn ${packFnName}(unpacked: ${variantTypeName}) -> ${structDeclName} {\n`;
+							helpersCode += `\treturn ${structDeclName}(unpacked._raw);\n`;
+							helpersCode += `}\n\n`;
+						} else {
+							helpersCode += `fn ${packFnName}(unpacked: ${variantTypeName}) -> ${structDeclName} {\n`;
+							helpersCode += `\tvar out: ${structDeclName};\n`;
+							const tagVal = i + 1;
+							helpersCode += `\tout._raw[${tagWord}] = insertBits(out._raw[${tagWord}], ${tagVal}u, ${tagShift}u, ${tagSize * 8}u);\n`;
+							helpersCode += `\tlet tmp = pack_${vSnakeName}_to_words(unpacked);\n`;
+							helpersCode += `\tfor (var i = 0u; i < ${words}u; i++) {\n`;
+							helpersCode += `\t\tout._raw[${payloadWordOffset}u + i] = tmp[i];\n`;
+							helpersCode += `\t}\n`;
+							helpersCode += `\treturn out;\n`;
+							helpersCode += `}\n\n`;
+						}
 					}
 					typesCode += `\n`;
 				}
@@ -436,12 +450,15 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 								const bitSize = f.bitSize ?? (f.size * 8);
 
 								const extractedExpr = `extractBits(packed._word_${wordOffset}, ${bitShift}u, ${bitSize}u)`;
-								const targetType = f.type.kind === "primitive" && (f.type.name === "bool" || f.type.name === "boolean") ? "bool" : getWgslType(f.type, singletonEnumNames);
+								const targetType = f.type.kind === "primitive" && (f.type.name === "bool") ? "bool" : getWgslType(f.type, singletonEnumNames);
 
 								if (targetType === "bool") {
 									helpersCode += `\tout.${name} = bool(${extractedExpr});\n`;
 								} else if (f.type.kind === "reference" && getTypeKind(f.type.name) === "enum") {
 									helpersCode += `\tout.${name} = ${targetType}(${extractedExpr});\n`;
+								} else if (f.type.kind === "reference" && getTypeKind(f.type.name) === "struct") {
+									const refSnake = toSnakeCase(f.type.name);
+									helpersCode += `\tout.${name} = unpack_words_to_${refSnake}(${extractedExpr});\n`;
 								} else {
 									helpersCode += `\tout.${name} = ${targetType}(${extractedExpr});\n`;
 								}
@@ -487,7 +504,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 					for (const f of t.fields) {
 						if (f.type.kind === "unit") continue;
 						const name = fieldName(f.name);
-						const wgslType = f.type.kind === "primitive" && (f.type.name === "bool" || f.type.name === "boolean") ? "bool" : getWgslType(f.type, singletonEnumNames);
+						const wgslType = f.type.kind === "primitive" && (f.type.name === "bool") ? "bool" : getWgslType(f.type, singletonEnumNames);
 						typesCode += `\t${name}: ${wgslType},\n`;
 					}
 					typesCode += `};\n\n`;
@@ -496,6 +513,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 
 					// 3. Spłaszczone funkcje array<u32> <-> Struct (niezależne od Packed)
 					if (!hasAtomicFields) {
+						const packedType = words === 1 ? "u32" : `array<u32, ${words}>`;
 
 						let unpackBody = `\tvar out: ${cleanName};\n`;
 						for (const f of t.fields) {
@@ -511,14 +529,20 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 								const byteShift = (f.offset % 4) * 8;
 								const bitShift = byteShift + (f.bitOffset ?? 0);
 								const bitSize = f.bitSize ?? (f.size * 8);
-								const extractedExpr = `extractBits(raw[${wordIdx}u], ${bitShift}u, ${bitSize}u)`;
 
-								const targetType = f.type.kind === "primitive" && (f.type.name === "bool" || f.type.name === "boolean") ? "bool" : getWgslType(f.type, singletonEnumNames);
+								const extrVar = words > 2 ? `raw[${wordIdx}u]` : `raw`;
+
+								const extractedExpr = `extractBits(${extrVar}, ${bitShift}u, ${bitSize}u)`;
+
+								const targetType = f.type.kind === "primitive" && (f.type.name === "bool") ? "bool" : getWgslType(f.type, singletonEnumNames);
 
 								if (targetType === "bool") {
-									unpackBody += `\tout.${name} = bool(${extractedExpr});\n`;
+									unpackBody += `\tout.${name} = select(true, false, extractBits(${extrVar}, ${bitShift}u, ${bitSize}u) > 0u);\n`;
 								} else if (f.type.kind === "reference" && getTypeKind(f.type.name) === "enum") {
 									unpackBody += `\tout.${name} = ${targetType}(${extractedExpr});\n`;
+								} else if (f.type.kind === "reference" && getTypeKind(f.type.name) === "struct") {
+									const refSnake = toSnakeCase(f.type.name);
+									unpackBody += `\tout.${name} = unpack_words_to_${refSnake}(${extractedExpr});\n`;
 								} else {
 									unpackBody += `\tout.${name} = ${targetType}(${extractedExpr});\n`;
 								}
@@ -526,7 +550,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 						}
 						unpackBody += `\treturn out;\n`;
 
-						let packBody = `\tvar out: array<u32, ${words}>;\n`;
+						let packBody = `\tvar out: ${packedType};\n`;
 
 						const wordsToInit = new Set<number>();
 						for (const f of t.fields) {
@@ -535,8 +559,9 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 								wordsToInit.add(Math.floor(f.offset / 4));
 							}
 						}
+
 						for (const wIdx of wordsToInit) {
-							packBody += `\tout[${wIdx}u] = 0u;\n`;
+							packBody += words > 2 ? `\tout[${wIdx}u] = 0u;\n` : `\tout = 0u;\n`;
 						}
 
 						for (const f of t.fields) {
@@ -553,13 +578,14 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 								const bitShift = byteShift + (f.bitOffset ?? 0);
 								const bitSize = f.bitSize ?? (f.size * 8);
 								const valExpr = getPackValExpr(f.type, name);
-								packBody += `\tout[${wordIdx}u] = insertBits(out[${wordIdx}u], ${valExpr}, ${bitShift}u, ${bitSize}u);\n`;
+								const outVar = words > 2 ? `out[${wordIdx}u]` : `out`;
+								packBody += `\t${outVar} = insertBits(${outVar}, ${valExpr}, ${bitShift}u, ${bitSize}u);\n`;
 							}
 						}
 						packBody += `\treturn out;\n`;
 
-						helpersCode += `fn unpack_words_to_${snakeName}(raw: array<u32, ${words}>) -> ${cleanName} {\n${unpackBody}}\n\n`;
-						helpersCode += `fn pack_${snakeName}_to_words(unpacked: ${cleanName}) -> array<u32, ${words}> {\n${packBody}}\n\n`;
+						helpersCode += `fn unpack_words_to_${snakeName}(raw: ${packedType}) -> ${cleanName} {\n${unpackBody}}\n\n`;
+						helpersCode += `fn pack_${snakeName}_to_words(unpacked: ${cleanName}) -> ${packedType} {\n${packBody}}\n\n`;
 					}
 				}
 			}

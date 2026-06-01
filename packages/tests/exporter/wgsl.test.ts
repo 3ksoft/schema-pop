@@ -105,6 +105,57 @@ describe("wgsl exporter — struct shape", () => {
 		expect(out).toContain("struct Body");
 		expect(out).toMatch(/p:\s*Particle/);
 	});
+
+	test("packed struct with nested struct reference uses unpack_words_to_ helper", () => {
+		// A small struct (TypesMask) that gets packed into a shared word,
+		// referenced by a larger struct. The unpack should call the nested
+		// struct's unpack_words_to_ helper, not try to construct it with
+		// extractBits as a single-argument constructor.
+		const out = gen({
+			TypesMask: { type: "u8", flags: "u8" },
+			Container: {
+				id: "u32",
+				mask: "TypesMask",
+			},
+		});
+		expect(out).toContain("struct TypesMask");
+		expect(out).toMatch(/unpack_words_to_types_mask\(/);
+		// Should NOT emit a broken single-argument struct constructor
+		expect(out).not.toMatch(/TypesMask\(extractBits/);
+		expect(out).not.toMatch(/types_mask = TypesMask\(/);
+	});
+
+	test("unions should pack properly", () => {
+		const out = gen({
+			None: { kind: "'none'" },
+			Some: { kind: "'some'", value: "u32" },
+			AnyOf: "None | Some",
+		});
+		expect(out).not.toContain("array<u32, 1>");
+
+	});
+
+	test("size should be properly calculated", () => {
+		const out = gen({
+			Zone: {
+				kind: "'zone'",
+				bounds: "vec4f",
+			},
+			Obstacle: {
+				kind: "'obstacle'",
+				pos: ["vec2f", "=", () => [0, 0]],
+				rotation: "f32",
+				material: { mass: "f32" },
+				enabled: "boolean = true",
+				static: "boolean = true",
+				round: "boolean = true"
+			},
+			GameObject: "Zone | Obstacle"
+		});
+		expect(out).toContain("array<u32, 1>");
+
+	});
+
 });
 
 describe("wgsl exporter — padding", () => {
