@@ -107,6 +107,7 @@ export const $layout = scope({
 	VariantPlan: {
 		name: "string",
 		type: "Field",
+		"tag?": "number",
 	},
 
 	/** Top-level type definitions */

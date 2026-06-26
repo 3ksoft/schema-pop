@@ -433,6 +433,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 						helpersCode += `}\n\n`;
 
 						// Pack variant
+						const tagVal = v.tag !== undefined ? v.tag : (v as any).tag ?? (i + 1);
 						helpersCode += `fn pack_${snakeName}_from_${snakeVarName}(unpacked: ${cleanVarName}) -> ${rawType} {\n`;
 						helpersCode += `\tvar out: ${rawType};\n`;
 						if (vWords === 1) {
@@ -440,10 +441,10 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 						} else {
 							helpersCode += `\tlet tmp = pack_${snakeVarName}_to_words(unpacked);\n`;
 							helpersCode += `\tfor (var w = 0u; w < ${vWords}u; w++) {\n`;
-							helpersCode += `\t\t${rawWords === 1 ? "out" : `out[w]`} = tmp[w];\n`;
-							helpersCode += `\t}\n`;
+										helpersCode += `\t\t${rawWords === 1 ? "out" : `out[w]`} = tmp[w];\n`;
+										helpersCode += `\t}\n`;
 						}
-						helpersCode += `\t${rawWords === 1 ? "out" : `out[${tagWord}u]`} = insertBits(${rawWords === 1 ? "out" : `out[${tagWord}u]`}, ${i + 1}u, ${tagShift}u, ${tagSize}u);\n`;
+						helpersCode += `\t${rawWords === 1 ? "out" : `out[${tagWord}u]`} = insertBits(${rawWords === 1 ? "out" : `out[${tagWord}u]`}, ${tagVal}u, ${tagShift}u, ${tagSize}u);\n`;
 						helpersCode += `\treturn out;\n}\n\n`;
 					}
 				}

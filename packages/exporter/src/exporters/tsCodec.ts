@@ -51,7 +51,7 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 			}
 
 			const typeByName = new Map(plan.types.map((t) => [t.name, t]));
-			
+
 			const getVariantDiscriminantValue = (v: any, t: any): string => {
 				const disc = t.discriminant || "kind";
 				if (v.type.kind === "reference") {
@@ -350,7 +350,7 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 				val: string,
 				off: string,
 				pathIdx: string,
-				isTopLevelArray: boolean = false, 
+				isTopLevelArray: boolean = false,
 				visited: Set<string> = new Set(),
 			): string => {
 				switch (f.kind) {
@@ -377,7 +377,7 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 					case "array": {
 						const isU8 = f.item.kind === "primitive" && f.item.name === "u8";
 						const idxExpr = isTopLevelArray ? `${pathIdx}` : `${pathIdx} + 1`;
-						
+
 						let serializeWholeArrayCode = "";
 						if (!isTopLevelArray) {
 							serializeWholeArrayCode = `if (${pathIdx} + 1 >= path.length) { ${genWrite(f, val, off, visited)} return; } `;
@@ -387,10 +387,10 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 							const itemOffset = f.exactLength !== undefined ? "" : "4 + ";
 							return `${serializeWholeArrayCode}{ const idx = path[${idxExpr}] as number; view.setUint8(${off} + ${itemOffset}idx, ${val}); }`;
 						}
-						
+
 						const step = getItemStep(f.item);
 						const nextPathIdxExpr = isTopLevelArray ? `${pathIdx} + 1` : `${pathIdx} + 2`;
-						
+
 						if (f.item.kind === "primitive") {
 							return `${serializeWholeArrayCode}{ const idx = path[${idxExpr}] as number; ${genPatchField(f.item, val, `${off} + (idx * ${step})`, `${pathIdx} + 1`, false, visited)} }`;
 						} else if (f.item.kind === "reference") {
@@ -432,7 +432,7 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 				if (t.kind === "alias") {
 					if (t.type.kind === "array") {
 						const len = t.type.exactLength ?? t.type.maxLength ?? 0;
-						if (len > 0) { 
+						if (len > 0) {
 							code += `export const ${toSnakeCase(t.name).toUpperCase()}_LEN = ${len};\n`;
 						}
 					}
@@ -448,7 +448,7 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 					code += `\treturn ${genRead(t.type, "offset")} as any;\n}\n\n`;
 					code += `export function serialize${tName}(val: ${tName}, view: DataView, offset: number): void {\n`;
 					code += `\t${genWrite(t.type, "val", "offset")}\n}\n\n`;
-					
+
 					if (cfg.generatePatches) {
 						code += `export function patch${tName}(path: (string | number)[], pathIdx: number, val: any, view: DataView, offset: number): void {\n`;
 						code += `\tif (pathIdx >= path.length) {\n`;
@@ -538,7 +538,7 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 						code += `\t}\n`;
 						code += `\tconst key = path[pathIdx];\n`;
 						code += `\tswitch(key) {\n`;
-						
+
 						t.fields.forEach((f) => {
 							code += `\t\tcase "${fieldName(f.name)}":\n`;
 							if ((f.type as any).popKind === "bitwise" && f.bitOffset !== undefined) {
@@ -557,7 +557,7 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 							}
 							code += `\t\t\tbreak;\n`;
 						});
-						
+
 						code += `\t\tdefault: break;\n`;
 						code += `\t}\n`;
 						code += `}\n\n`;
@@ -572,6 +572,7 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 					code += `export function deserialize${tName}(view: DataView, offset: number): ${tName} {\n`;
 					code += `\tconst tag = view.${p.r}(offset + ${t.tagOffset}${p.b > 1 ? `, ${isLE}` : ""});\n\tswitch(tag) {\n`;
 					t.variants.forEach((v, i) => {
+						const tagVal = v.tag !== undefined ? v.tag : (v as any).tag ?? (i + 1);
 						const discVal = getVariantDiscriminantValue(v, t);
 						const r = genRead(v.type, `offset + ${payloadOffset}`);
 						const isObj =
@@ -579,9 +580,9 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 						// Zero-allocation approach for references, but enforces 'kind' property addition for TS discrimination.
 						const discField = t.discriminant || "kind";
 						if (isObj) {
-							code += `\t\tcase ${i+1}: { const obj = ${r}; (obj as any).${discField} = "${discVal}"; return obj as any; }\n`;
+							code += `\t\tcase ${tagVal}: { const obj = ${r}; (obj as any).${discField} = "${discVal}"; return obj as any; }\n`;
 						} else {
-							code += `\t\tcase ${i+1}: return { ${discField}: "${discVal}", value: ${r} } as any; }\n`;
+							code += `\t\tcase ${tagVal}: { return { ${discField}: "${discVal}", value: ${r} } as any; }\n`;
 						}
 					});
 					code += `\t\tdefault: throw new Error("Unknown Union tag for ${tName}: " + tag);\n\t}\n}\n\n`;
@@ -590,8 +591,9 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 					const discField = t.discriminant || "kind";
 					code += `\tswitch(val.${discField}) {\n`;
 					t.variants.forEach((v, i) => {
+						const tagVal = v.tag !== undefined ? v.tag : (v as any).tag ?? (i + 1);
 						const discVal = getVariantDiscriminantValue(v, t);
-						code += `\t\tcase "${discVal}": {\n\t\t\tview.${p.w}(offset + ${t.tagOffset}, ${i+1}${p.b > 1 ? `, ${isLE}` : ""});\n`;
+						code += `\t\tcase "${discVal}": {\n\t\t\tview.${p.w}(offset + ${t.tagOffset}, ${tagVal}${p.b > 1 ? `, ${isLE}` : ""});\n`;
 						const isObj =
 							v.type.kind === "inlineStruct" || v.type.kind === "reference";
 						code += `\t\t\t${genWrite(v.type, isObj ? "val" : "val.value", `offset + ${payloadOffset}`)}\n\t\t\tbreak;\n\t\t}\n`;

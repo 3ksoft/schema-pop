@@ -187,34 +187,32 @@ function generatePipelineCompiler(t: GpuBindingPlan): string {
 	code += `export async function create${t.name}Pipelines(\n`;
 	code += `\tdevice: GPUDevice,\n`;
 	code += `\tlayouts: ${layoutsType},\n`;
-	code += `\tshaderModule: (entryPoint:keyof PhysicsPipelines) => GPUShaderModule\n`;
+	code += `\tshaderModule: (entryPoint:keyof ${t.name}Pipelines) => GPUShaderModule\n`;
 	code += `): Promise<${t.name}Pipelines> {\n`;
 
-	// Collect all declared groups and find the max to build contiguous layouts
-	const maxGroup = sortedDeclaredGroups[sortedDeclaredGroups.length - 1];
-
+	// Build contiguous layouts by filling gaps with empty bind group layouts
 	const layoutsCode: string[] = [];
 	const shaderToLayoutName = new Map<string, string>();
 	const layoutSet = new Set<string>();
 
 	for (const s of t.shaders) {
 		const sorted = [...s.bindGroups].sort((a, b) => a - b);
-		const key = sorted.join("_");
 
-		// WebGPU requires contiguous group indices — fill gaps with intermediate groups
-		const contiguous = [];
+		// Build contiguous array: include BG layout where group is used, empty layout for gaps
+		const maxGroup = sortedDeclaredGroups[sortedDeclaredGroups.length - 1];
+		const entries = [];
 		for (let g = 0; g <= maxGroup; g++) {
 			if (sorted.includes(g)) {
-				contiguous.push(g);
+				entries.push(`layouts.bg${g}`);
+			} else {
+				entries.push(`device.createBindGroupLayout({ entries: [] })`);
 			}
 		}
-		const contKey = contiguous.join("_");
-
-		const layoutVarName = `layout_${contKey}`;
-		if (!layoutSet.has(contKey)) {
-			layoutSet.add(contKey);
-			const bgls = contiguous.map(g => `layouts.bg${g}`).join(", ");
-			layoutsCode.push(`\tconst ${layoutVarName} = device.createPipelineLayout({ bindGroupLayouts: [${bgls}] });`);
+		const key = sorted.join("-");
+		const layoutVarName = `l_${sorted.map((n: number) => `g${n}`).join("")}`;
+		if (!layoutSet.has(key)) {
+			layoutSet.add(key);
+			layoutsCode.push(`\tconst ${layoutVarName} = device.createPipelineLayout({ bindGroupLayouts: [${entries.join(", ")}] });`);
 		}
 		shaderToLayoutName.set(s.entryPoint, layoutVarName);
 	}

@@ -806,6 +806,14 @@ export class SchemaAnalyzer {
 				? "u32"
 				: (tagEnum.underlyingType as "u8" | "u16");
 
+		// Attach the correct tag value from the tagEnum to each variant
+		const tagByVariantName = new Map(
+			tagEnum.variants.map((v) => [v.name, v.value] as const),
+		);
+		for (const v of variants) {
+			(v as any).tag = tagByVariantName.get(v.name) ?? 0;
+		}
+
 		const payloadAlign = variants.reduce(
 			(max, v) =>
 				Math.max(
