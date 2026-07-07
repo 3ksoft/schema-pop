@@ -185,9 +185,11 @@ export class SchemaAnalyzer {
 				size: 1,
 				align: 1,
 				paddedSize: 1,
-				bitSize: 1,
+				// Only pack booleans into bitfields under autoPack; otherwise emit a
+				// full byte (the `autoPack` pass at the bottom still bit-packs when on).
+				bitSize: this.config.autoPack ? 1 : 8,
 				unsigned: true,
-				popKind: "bitwise",
+				popKind: this.config.autoPack ? "bitwise" : "binary",
 			};
 		const match = name.match(/^([ui])(\d+)$/);
 		if (match) {
@@ -773,6 +775,7 @@ export class SchemaAnalyzer {
 			};
 		}
 
+		const disc = (typeDef as any).discriminant || "kind";
 		const variants: VariantPlan[] = (typeDef.variants || []).map(
 			(branch: any, i: number) => {
 				let vName = branch.label;
@@ -782,14 +785,30 @@ export class SchemaAnalyzer {
 						vName = branch.typeString;
 					else vName = `Variant${i + 1}`;
 				}
+				// Binary tagged unions name each variant by its discriminant value
+				// (`kind: "'release'"` → `Release`), not the variant's type name.
+				// GPU (std430) layouts keep the type name (custom WebGPU union handling).
+				// The raw value is also kept on the variant (`discriminantValue`) so
+				// text codecs can emit the original literal (`release`) — the binary
+				// layout strips the kind field to a unit, which would otherwise lose it.
+				let discriminantValue: string | undefined;
+				if (this.config.layout !== "std430" && branch.type === "link") {
+					const targetDef: any = this.schema.types[branch.target];
+					const kindField: any = targetDef?.fields?.[disc];
+					if (kindField?.type === "symbol" && kindField.value != null) {
+						discriminantValue = String(kindField.value);
+						vName = this.toPascal(discriminantValue);
+					}
+				}
 				vName = vName.replace(/[^a-zA-Z0-9_]/g, "");
 				return {
 					name: vName,
 					type: this.resolveFieldType(branch, undefined, `${name}_${vName}`),
+					...(discriminantValue != null ? { discriminantValue } : {}),
 					...(branch.renamedFrom
 						? { migrationMeta: { renamedFrom: branch.renamedFrom } }
 						: {}),
-				};
+				} as VariantPlan;
 			},
 		);
 
@@ -857,14 +876,22 @@ export class SchemaAnalyzer {
 		tagCtx?: TagContext,
 	): Field {
 		if (type.type === "symbol") {
-			const val = String(type.value);
-			const synthName = this.synthesizeEnum([val], pathHint || "Constant");
-			return this.assertField({
-				kind: "reference",
-				name: synthName,
-				indirection: "inline",
-				isForward: false,
-			});
+			// A single-literal discriminant (`kind: "'foo'"`) carries no payload in a
+			// binary tagged union — the union's tag enum already encodes which
+			// variant it is. Strip it to a zero-size unit so it occupies no space and
+			// is skipped by the exporters/codec. GPU (std430) layouts keep it as a
+			// self-describing single-value enum field (custom WebGPU union handling).
+			if (this.config.layout === "std430") {
+				const val = String(type.value);
+				const synthName = this.synthesizeEnum([val], pathHint || "Constant");
+				return this.assertField({
+					kind: "reference",
+					name: synthName,
+					indirection: "inline",
+					isForward: false,
+				});
+			}
+			return this.assertField({ kind: "unit" });
 		}
 
 		if (type.type === "link") {

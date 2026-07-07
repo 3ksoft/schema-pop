@@ -53,6 +53,9 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 			const typeByName = new Map(plan.types.map((t) => [t.name, t]));
 
 			const getVariantDiscriminantValue = (v: any, t: any): string => {
+				// Preserved raw discriminant literal (binary layouts strip the kind
+				// field, so we can't re-derive it from the struct).
+				if (v.discriminantValue != null) return v.discriminantValue;
 				const disc = t.discriminant || "kind";
 				if (v.type.kind === "reference") {
 					const vStruct: any = typeByName.get(v.type.name);
@@ -150,6 +153,11 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 				if ((item as any).paddedSize !== undefined)
 					return (item as any).paddedSize;
 				if ((item as any).size !== undefined) return (item as any).size;
+				// Inline string elements (SharedString<N>): u32 length + N bytes.
+				// Without this the per-element stride is 0 and every element of a
+				// SharedVec<SharedString<N>, M> aliases the first one.
+				if (item.kind === "string")
+					return 4 + ((item as any).maxLength ?? 0);
 				if (item.kind === "reference") {
 					const ref = plan.types.find((t) => t.name === (item as any).name);
 					if (ref) return (ref as any).paddedSize ?? (ref as any).size ?? 0;
@@ -588,6 +596,12 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
 					code += `\t\tdefault: throw new Error("Unknown Union tag for ${tName}: " + tag);\n\t}\n}\n\n`;
 
 					code += `export function serialize${tName}(val: ${tName}, view: DataView, offset: number): void {\n`;
+					// Zero the whole union region first: variants have different sizes,
+					// so leftover bytes from a previously-written (larger) variant would
+					// otherwise leak into the payload / padding.
+					const unionBytes = (t as any).paddedSize ?? (t as any).size ?? 0;
+					if (unionBytes > 0)
+						code += `\tfor(let i=0; i<${unionBytes}; i++) view.setUint8(offset + i, 0);\n`;
 					const discField = t.discriminant || "kind";
 					code += `\tswitch(val.${discField}) {\n`;
 					t.variants.forEach((v, i) => {

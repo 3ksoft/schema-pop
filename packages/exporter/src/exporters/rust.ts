@@ -379,7 +379,9 @@ export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
 						}
 					}
 					code += `}\n\n`;
-					code += `impl PopAlloc for ${tn} {}\n\n`;
+					// `PopAlloc` is defined under `#[cfg(feature = "alloc")]`; gate the
+					// impls the same way so no_std crates without `alloc` still compile.
+					code += `#[cfg(feature = "alloc")]\nimpl PopAlloc for ${tn} {}\n\n`;
 				} else if (t.kind === "enum") {
 					// Emit a real `#[repr(uN)] enum` so consumers get exhaustive
 					// match warnings + type-safe construction. Wire format is

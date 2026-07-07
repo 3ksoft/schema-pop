@@ -134,11 +134,14 @@ export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
 	function renderUnion(t: TypePlan & { kind: "union" }): string {
 		const name = typeName(t.name);
 		const branches = t.variants.map((v) => {
-			if (v.type.kind === "unit") return `"${v.name}"`;
+			// Prefer the preserved discriminant literal (camelCase `kind` from the
+			// schema) over the variant name (which binary layouts PascalCase).
+			const k = (v as any).discriminantValue ?? v.name;
+			if (v.type.kind === "unit") return `"${k}"`;
 			if (v.type.kind === "reference" || v.type.kind === "inlineStruct") {
-				return `({ kind: "${v.name}" } & ${fieldType(v.type)})`;
+				return `({ kind: "${k}" } & ${fieldType(v.type)})`;
 			}
-			return `{ kind: "${v.name}"; value: ${fieldType(v.type)} }`;
+			return `{ kind: "${k}"; value: ${fieldType(v.type)} }`;
 		});
 		return `${jsdoc(t)}export type ${name} = ${branches.join(" | ")};\n`;
 	}

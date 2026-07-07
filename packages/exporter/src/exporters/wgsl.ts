@@ -403,6 +403,17 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 					const tagShift = (t.tagOffset % 4) * 8;
 					const tagSize = t.tagSize * 8;
 
+					// Variant payloads are packed AFTER the tag/header region, at the
+					// union's payloadOffset (same formula tsCodec uses). Without this
+					// word offset the payload aliases the tag word (out[0]) and the
+					// insertBits() below clobbers the low byte of the first field.
+					const unionAlign = t.align || 1;
+					const payloadByteOffset =
+						Math.ceil((t.tagOffset + t.tagSize) / unionAlign) * unionAlign;
+					const payloadWord = Math.floor(payloadByteOffset / 4);
+					const pOff =
+						rawWords > 1 && payloadWord > 0 ? ` + ${payloadWord}u` : "";
+
 					// 1. Wyciąganie taga
 					helpersCode += `fn get_${snakeName}_tag(val: ${rawType}) -> u32 {\n`;
 					helpersCode += `\treturn extractBits(${rawAt(`${tagWord}u`)}, ${tagShift}u, ${tagSize}u);\n}\n\n`;
@@ -422,11 +433,11 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 						// Unpack variant
 						helpersCode += `fn unpack_${snakeName}_as_${snakeVarName}(val: ${rawType}) -> ${cleanVarName} {\n`;
 						if (vWords === 1) {
-							helpersCode += `\treturn unpack_words_to_${snakeVarName}(${rawAt("0u")});\n`;
+							helpersCode += `\treturn unpack_words_to_${snakeVarName}(${rawAt(`0u${pOff}`)});\n`;
 						} else {
 							helpersCode += `\tvar tmp: array<u32, ${vWords}>;\n`;
 							helpersCode += `\tfor (var w = 0u; w < ${vWords}u; w++) {\n`;
-							helpersCode += `\t\ttmp[w] = ${rawAt("w")};\n`;
+							helpersCode += `\t\ttmp[w] = ${rawAt(`w${pOff}`)};\n`;
 							helpersCode += `\t}\n`;
 							helpersCode += `\treturn unpack_words_to_${snakeVarName}(tmp);\n`;
 						}
@@ -437,11 +448,11 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 						helpersCode += `fn pack_${snakeName}_from_${snakeVarName}(unpacked: ${cleanVarName}) -> ${rawType} {\n`;
 						helpersCode += `\tvar out: ${rawType};\n`;
 						if (vWords === 1) {
-							helpersCode += `\t${rawWords === 1 ? "out" : "out[0u]"} = pack_${snakeVarName}_to_words(unpacked);\n`;
+							helpersCode += `\t${rawWords === 1 ? "out" : `out[0u${pOff}]`} = pack_${snakeVarName}_to_words(unpacked);\n`;
 						} else {
 							helpersCode += `\tlet tmp = pack_${snakeVarName}_to_words(unpacked);\n`;
 							helpersCode += `\tfor (var w = 0u; w < ${vWords}u; w++) {\n`;
-										helpersCode += `\t\t${rawWords === 1 ? "out" : `out[w]`} = tmp[w];\n`;
+										helpersCode += `\t\t${rawWords === 1 ? "out" : `out[w${pOff}]`} = tmp[w];\n`;
 										helpersCode += `\t}\n`;
 						}
 						helpersCode += `\t${rawWords === 1 ? "out" : `out[${tagWord}u]`} = insertBits(${rawWords === 1 ? "out" : `out[${tagWord}u]`}, ${tagVal}u, ${tagShift}u, ${tagSize}u);\n`;

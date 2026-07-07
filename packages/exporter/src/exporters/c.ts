@@ -6,7 +6,7 @@ import type {
 	StructPlan,
 	BaseConfig,
 } from "@schema-pop/schema";
-import { ExporterTools } from "../exporterTools";
+import { ExporterTools, toSnakeCase } from "../exporterTools";
 
 export interface CConfig
 	extends Omit<BaseConfig, "fieldNaming" | "typeNaming" | "commentStyle"> {
@@ -83,7 +83,7 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 		generate: (plan: LayoutPlan) => {
 			let code = "";
 			const mod =
-				cfg.versionNamespace === "false"
+				cfg.versionNamespace === "false" || cfg.versionNamespace === false
 					? ""
 					: typeof cfg.versionNamespace === "string"
 						? cfg.versionNamespace
@@ -123,28 +123,41 @@ export function c(config: CConfig): ExporterPlugin<CConfig> {
 					continue;
 				}
 
-				const fields = (t as StructPlan).fields;
-				if (fields === undefined || fields.length === 0) {
-					code += `typedef struct _${typeName(t.name)} {\n`;
-					code += `${indent()}uint8_t unit;\n`;
-					code += `${indent()}} _${typeName(t.name)};\n`;
+				// Enums: `typedef uint8_t Foo;` + one `#define FOO_BAR ((Foo)N)`
+				// per variant (SCREAMING_SNAKE of type name + variant name).
+				if (t.kind === "enum") {
+					const C_INT: Record<string, string> = {
+						u8: "uint8_t", i8: "int8_t", u16: "uint16_t", i16: "int16_t",
+						u32: "uint32_t", i32: "int32_t", u64: "uint64_t", i64: "int64_t",
+					};
+					const scream = (n: string) => toSnakeCase(n).toUpperCase();
+					const tn = refName(t.name);
+					const ut = (t as any).underlyingType as string | undefined;
+					code += `typedef ${C_INT[ut ?? "u8"] ?? "uint8_t"} ${tn};\n`;
+					for (const v of (t as any).variants ?? []) {
+						code += `#define ${scream(tn)}_${scream(v.name)} ((${tn})${v.value})\n`;
+					}
 					code += `\n`;
 					continue;
 				}
 
-				code += `typedef struct _${typeName(t.name)} {\n`;
+				const sn = refName(t.name);
+				const fields = (t as StructPlan).fields;
+				if (fields === undefined || fields.length === 0) {
+					code += `typedef struct ${sn} {\n`;
+					code += `${indent()}uint8_t unit;\n`;
+					code += `${indent()}} ${sn};\n`;
+					code += `\n`;
+					continue;
+				}
+
+				code += `typedef struct ${sn} {\n`;
 				for (const field of fields) {
 					const ft = fieldCType(field.type, field.size);
 					code += `${indent()}${ft.type} ${fieldName(field.name)}${ft.suffix || ""};\n`;
 				}
-				code += `${indent()}} _${typeName(t.name)};\n`;
+				code += `${indent()}} ${sn};\n`;
 				code += `\n`;
-			}
-
-			if (cfg.prefix) {
-				for (const t of plan.types) {
-					code += `#define ${cfg.prefix}_${typeName(t.name)} _${typeName(t.name)}\n`;
-				}
 			}
 
 			return code;
