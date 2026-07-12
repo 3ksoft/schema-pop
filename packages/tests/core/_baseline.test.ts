@@ -182,13 +182,12 @@ function plan(name: string): string {
 	return JSON.stringify(
 		a.analyze(fromModule(f.scope().export()), {
 			wordSize: "64",
-			autoLayout: false,
 			layout: "aligned",
 			mode: "binary",
 			version: "1.0.0",
 			endian: "le",
 			...f.cfg,
-		}),
+		}).plan,
 		null,
 		2,
 	);

@@ -59,7 +59,7 @@ const C_PRIMITIVES: Record<string, string> = {
 	boolean: "bool",
 };
 
-export function c(config: CConfig): ExporterPlugin<CConfig> {
+export function c(config: CConfig): ExporterPlugin<CConfig, string> {
 	const cfg: CConfig = {
 		fieldNaming: "snake_case",
 		typeNaming: "PascalCase",

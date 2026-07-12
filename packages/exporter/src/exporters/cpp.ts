@@ -37,7 +37,7 @@ const CPP_PRIMITIVES: Record<string, string> = {
 	boolean: "bool",
 };
 
-export function cpp(config: CppConfig): ExporterPlugin<CppConfig> {
+export function cpp(config: CppConfig): ExporterPlugin<CppConfig, string> {
 	const cfg: CppConfig = {
 		fieldNaming: "camelCase",
 		typeNaming: "PascalCase",

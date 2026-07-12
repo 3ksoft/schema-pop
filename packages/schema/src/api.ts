@@ -96,7 +96,10 @@ export type CommentStyle = typeof CommentStyle.infer;
 export type ExportStrategy = typeof ExportStrategy.infer;
 export type BaseConfig = typeof BaseConfig.infer;
 
-export interface ExporterPlugin<TConfig extends BaseConfig = BaseConfig> {
+export interface ExporterPlugin<
+	TConfig extends BaseConfig = BaseConfig,
+	TOut = string | Record<string, string>,
+> {
 	name: string;
 	config: TConfig;
 	/**
@@ -105,7 +108,7 @@ export interface ExporterPlugin<TConfig extends BaseConfig = BaseConfig> {
 	 * `dest` per target. Falls back to `name` when omitted.
 	 */
 	extension?: string;
-	generate: (plan: LayoutPlan) => string | Record<string, string>;
+	generate: (plan: LayoutPlan) => TOut;
 	wrapVersion?: (version: string | undefined, code: string) => string;
 	getFileHeader?: () => string;
 	getFileFooter?: () => string;

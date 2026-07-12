@@ -13,7 +13,7 @@ export interface RandomConfig extends BaseConfig {
 	errorRate?: number; // 0 to 1
 }
 
-export function random(config: RandomConfig): ExporterPlugin<RandomConfig> {
+export function random(config: RandomConfig): ExporterPlugin<RandomConfig, string> {
 	const cfg = {
 		count: 10,
 		injectErrors: false,

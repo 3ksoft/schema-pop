@@ -1,8 +1,11 @@
-import { type LayoutPlan, type ExporterPlugin } from "@schema-pop/schema";
+import {
+	type LayoutPlan,
+	type ExporterPlugin,
+	EXPORTER_REGISTRY,
+} from "@schema-pop/schema";
 
 import { c, type CConfig } from "./exporters/c";
 import { cpp, type CppConfig } from "./exporters/cpp";
-import { go, type GoConfig } from "./exporters/go";
 import { md, type MdConfig } from "./exporters/md";
 import { random, type RandomConfig } from "./exporters/random";
 import { rust, type RustConfig } from "./exporters/rust";
@@ -12,31 +15,22 @@ import { tsExports, type TsExportsConfig } from "./exporters/tsExports";
 import { tsWebgpu, type TsWebgpuConfig } from "./exporters/tsWebgpu";
 import { zig, type ZigConfig } from "./exporters/zig";
 import { brainfuck, type BrainfuckConfig } from "./exporters/bf";
-import { glsl, type GlslConfig } from "./exporters/glsl";
 import { html, type HtmlConfig } from "./exporters/html";
-import { jsonSchema, type JsonSchemaConfig } from "./exporters/jsonSchema";
 import { mermaid, type MermaidConfig } from "./exporters/mermaid";
-import { nuxtUi, type NuxtUiConfig } from "./exporters/vueNuxtUi";
-import { openapi, type OpenApiConfig } from "./exporters/openapi";
 import { svg, type SvgConfig } from "./exporters/svg";
 import { wgsl, type WgslConfig } from "./exporters/wgsl";
-import { zigMatcher, type ZigMatcherConfig } from "./exporters/zigMatcher";
 import { cppHarness } from "./exporters/cppHarness";
-import { goHarness } from "./exporters/goHarness";
 import { rustHarness } from "./exporters/rustHarness";
 import { zigHarness } from "./exporters/zigHarness";
 import { brainfuckHarness } from "./exporters/bfHarness";
 import { rustSerde, type RustSerdeConfig } from "./exporters";
 import {
 	gpuBindingsTs,
-	gpuBindingsWgsl,
 	type GpuBindingsTsConfig,
-	type GpuBindingsWgslConfig,
 } from "./exporters/gpuBindings";
 
 export { c, type CConfig };
 export { cpp, type CppConfig };
-export { go, type GoConfig };
 export { md, type MdConfig };
 export { random, type RandomConfig };
 export { rust, type RustConfig };
@@ -46,22 +40,12 @@ export { tsCodec, type TsCodecConfig };
 export { tsWebgpu, type TsWebgpuConfig };
 export { tsExports, type TsExportsConfig };
 export { zig, type ZigConfig };
-export { zigMatcher, type ZigMatcherConfig };
 export { brainfuck, type BrainfuckConfig };
-export { glsl, type GlslConfig };
 export { html, type HtmlConfig };
-export { jsonSchema, type JsonSchemaConfig };
 export { mermaid, type MermaidConfig };
-export { nuxtUi, type NuxtUiConfig };
-export { openapi, type OpenApiConfig };
 export { svg, type SvgConfig };
 export { wgsl, type WgslConfig };
-export {
-	gpuBindingsTs,
-	gpuBindingsWgsl,
-	type GpuBindingsTsConfig,
-	type GpuBindingsWgslConfig,
-};
+export { gpuBindingsTs, type GpuBindingsTsConfig };
 
 // ── Harness wrappers ──────────────────────────────────────────────────────────
 // Harness exporters take `LayoutPlan[]` (cross-version) and emit a multi-file
@@ -76,7 +60,7 @@ export interface HarnessConfig {
 function harnessPlugin(
 	name: string,
 	build: (plans: LayoutPlan[], cfg: HarnessConfig) => Record<string, string>,
-): (cfg?: HarnessConfig) => ExporterPlugin<any> {
+): (cfg?: HarnessConfig) => ExporterPlugin<any, Record<string, string>> {
 	return (cfg: HarnessConfig = {}) => ({
 		name,
 		config: cfg as any,
@@ -88,9 +72,6 @@ function harnessPlugin(
 export const cppHarnessExporter = harnessPlugin("cpp:harness", (plans) =>
 	cppHarness(plans),
 );
-export const goHarnessExporter = harnessPlugin("go:harness", (plans, cfg) =>
-	goHarness(plans, cfg.pkg ?? "harness", cfg.versionPrefixed ?? false),
-);
 export const rustHarnessExporter = harnessPlugin("rust:harness", (plans) =>
 	rustHarness(plans),
 );
@@ -101,148 +82,100 @@ export const bfHarnessExporter = harnessPlugin("bf:harness", () =>
 	brainfuckHarness(),
 );
 
-export type ExporterTarget =
-	| "c"
-	| "cpp"
-	| "go"
-	| "md"
-	| "random"
-	| "rust"
-	| "rust:serde"
-	| "ts"
-	| "ts:codec"
-	| "ts:exports"
-	| "ts:webgpu"
-	| "zig"
-	| "zig:matcher"
-	| "bf"
-	| "brainfuck"
-	| "glsl"
-	| "html"
-	| "json:schema"
-	| "mermaid"
-	| "nuxt:ui"
-	| "openapi"
-	| "svg"
-	| "wgsl"
-	| "cpp:harness"
-	| "go:harness"
-	| "rust:harness"
-	| "zig:harness"
-	| "bf:harness";
+/**
+ * The set of CLI-dispatchable exporter targets. Derived from
+ * `EXPORTER_REGISTRY` (the single source of truth in `@schema-pop/schema`) so
+ * the target list, config map, and factory table below can never silently
+ * drift — the compiler forces them to match.
+ *
+ * Structured-return exporters (`tsWebgpu`, `gpuBindingsTs`) are intentionally
+ * NOT here: they return `{ section: contents }` for imperative use and can't
+ * go through the string/path `exportPlan` pipeline — import and call those
+ * factories directly.
+ */
+export type ExporterTarget = keyof typeof EXPORTER_REGISTRY;
 
 export type ExporterConfigMap = {
 	c: CConfig;
 	cpp: CppConfig;
-	go: GoConfig;
-	md: MdConfig;
-	random: RandomConfig;
 	rust: RustConfig;
 	"rust:serde": RustSerdeConfig;
 	ts: TsConfig;
 	"ts:codec": TsCodecConfig;
 	"ts:exports": TsExportsConfig;
-	"ts:webgpu": TsWebgpuConfig;
 	zig: ZigConfig;
-	"zig:matcher": ZigMatcherConfig;
+	md: MdConfig;
+	random: RandomConfig;
 	bf: BrainfuckConfig;
-	brainfuck: BrainfuckConfig;
-	glsl: GlslConfig;
 	html: HtmlConfig;
-	"json:schema": JsonSchemaConfig;
-	mermaid: MermaidConfig;
-	"nuxt:ui": NuxtUiConfig;
-	openapi: OpenApiConfig;
 	svg: SvgConfig;
+	mermaid: MermaidConfig;
 	wgsl: WgslConfig;
 	"cpp:harness": HarnessConfig;
-	"go:harness": HarnessConfig;
 	"rust:harness": HarnessConfig;
 	"zig:harness": HarnessConfig;
 	"bf:harness": HarnessConfig;
+};
+
+// Compile-time guard: ExporterConfigMap must cover exactly ExporterTarget.
+// If a target is added to EXPORTER_REGISTRY without a config entry (or vice
+// versa) the assignment below stops type-checking.
+type _MissingConfig = Exclude<ExporterTarget, keyof ExporterConfigMap>;
+type _ExtraConfig = Exclude<keyof ExporterConfigMap, ExporterTarget>;
+const _configMapExhaustive: [_MissingConfig, _ExtraConfig] extends [never, never]
+	? true
+	: { missing: _MissingConfig; extra: _ExtraConfig } = true;
+
+// Factory table. The mapped type forces an entry for every ExporterTarget, so
+// a target added to EXPORTER_REGISTRY won't compile until it's wired here.
+const FACTORIES: {
+	[K in ExporterTarget]: (cfg: any) => ExporterPlugin<any>;
+} = {
+	c,
+	cpp,
+	rust,
+	"rust:serde": rustSerde,
+	ts,
+	"ts:codec": tsCodec,
+	"ts:exports": tsExports,
+	zig,
+	md,
+	random,
+	bf: brainfuck,
+	html,
+	svg,
+	mermaid,
+	wgsl,
+	"cpp:harness": cppHarnessExporter,
+	"rust:harness": rustHarnessExporter,
+	"zig:harness": zigHarnessExporter,
+	"bf:harness": bfHarnessExporter,
 };
 
 export function getExporter<T extends ExporterTarget>(
 	target: T,
 	config?: ExporterConfigMap[T],
 ): ExporterPlugin<any> {
-	const cfg: any = config || {};
-	switch (target) {
-		case "c":
-			return c(cfg);
-		case "cpp":
-			return cpp(cfg);
-		case "go":
-			return go(cfg);
-		case "md":
-			return md(cfg);
-		case "random":
-			return random(cfg);
-		case "rust":
-			return rust(cfg);
-		case "rust:serde":
-			return rustSerde(cfg);
-		case "ts":
-			return ts(cfg);
-		case "ts:codec":
-			return tsCodec(cfg);
-		case "ts:exports":
-			return tsExports(cfg);
-		case "ts:webgpu":
-			return tsWebgpu(cfg);
-		case "zig":
-			return zig(cfg);
-		case "zig:matcher":
-			return zigMatcher(cfg);
-		case "bf":
-		case "brainfuck":
-			return brainfuck(cfg);
-		case "glsl":
-			return glsl(cfg);
-		case "html":
-			return html(cfg);
-		case "json:schema":
-			return jsonSchema(cfg);
-		case "mermaid":
-			return mermaid(cfg);
-		case "nuxt:ui":
-			return nuxtUi(cfg);
-		case "openapi":
-			return openapi(cfg);
-		case "svg":
-			return svg(cfg);
-		case "wgsl":
-			return wgsl(cfg);
-		case "cpp:harness":
-			return cppHarnessExporter(cfg);
-		case "go:harness":
-			return goHarnessExporter(cfg);
-		case "rust:harness":
-			return rustHarnessExporter(cfg);
-		case "zig:harness":
-			return zigHarnessExporter(cfg);
-		case "bf:harness":
-			return bfHarnessExporter(cfg);
-		default:
-			throw new Error(`Unknown exporter target: ${target}`);
-	}
+	const factory = FACTORIES[target];
+	if (!factory) throw new Error(`Unknown exporter target: ${target}`);
+	return factory(config ?? {});
 }
 
-export interface ExportOptions<T extends ExporterTarget> {
-	target: T;
-	config?: ExporterConfigMap[T];
-	version?: string;
-	endian?: "le" | "be";
-	wordSize?: 32 | 64;
-	layoutType?: "aligned" | "packed" | "std140" | "std430";
-	mode?: "binary" | "rich";
-}
+// Multi-file targets (`svg` = one file per type, `*:harness` = a whole
+// project) return `Record<filename, contents>`; every other target returns a
+// single assembled string. Encoding that here lets `exportPlan(plan, "html")`
+// type as `string` so callers can `save(path, exportPlan(...))` without a cast.
+type ExportTargetOut<T extends ExporterTarget> = T extends
+	| "svg"
+	| `${string}:harness`
+	? Record<string, string>
+	: string;
 
 export function exportPlan<T extends ExporterTarget>(
 	plan: LayoutPlan,
 	target: T,
 	config?: ExporterConfigMap[T],
-): string | Record<string, string> {
+): ExportTargetOut<T> {
 	const plugin = getExporter(target, config);
 	const generated = plugin.generate(plan);
 
@@ -252,8 +185,8 @@ export function exportPlan<T extends ExporterTarget>(
 		const wrapped = plugin.wrapVersion
 			? plugin.wrapVersion(plan.version, generated)
 			: generated;
-		return header + wrapped + footer;
+		return (header + wrapped + footer) as ExportTargetOut<T>;
 	}
 
-	return generated;
+	return generated as ExportTargetOut<T>;
 }

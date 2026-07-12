@@ -1,10 +1,12 @@
 {
+  "schemaName": "Schema",
+  "endian": "le",
   "wordSize": "64",
-  "autoLayout": false,
+  "autoSort": false,
+  "autoPack": false,
   "layout": "aligned",
   "mode": "rich",
   "version": "1.0.0",
-  "endian": "le",
   "types": [
     {
       "kind": "struct",
@@ -16,45 +18,58 @@
         {
           "name": "name",
           "type": {
-            "kind": "primitive",
-            "name": "u32",
+            "type": "number",
+            "min": 0,
+            "max": 4294967295,
             "size": 4,
             "align": 4,
+            "description": "unsigned 32-bit integer",
+            "popKind": "binary",
+            "isBinary": true,
+            "binaryType": "u32",
+            "label": "name",
+            "required": true,
+            "kind": "primitive",
+            "name": "u32",
             "paddedSize": 4,
-            "bitSize": 32,
-            "popKind": "binary"
+            "bitSize": 32
           },
           "offset": 0,
           "bitOffset": 0,
           "bitSize": 32,
           "size": 4,
-          "paddingAfter": 0,
-          "description": "unsigned 32-bit integer"
+          "paddingAfter": 0
         },
         {
           "name": "age",
           "type": {
             "kind": "optional",
             "inner": {
-              "kind": "primitive",
-              "name": "u8",
+              "type": "number",
+              "min": 0,
+              "max": 255,
               "size": 1,
               "align": 1,
+              "description": "unsigned 8-bit integer",
+              "popKind": "binary",
+              "isBinary": true,
+              "binaryType": "u8",
+              "label": "age",
+              "required": false,
+              "kind": "primitive",
+              "name": "u8",
               "paddedSize": 1,
-              "bitSize": 8,
-              "popKind": "binary"
+              "bitSize": 8
             }
           },
           "offset": 4,
           "bitOffset": 0,
           "bitSize": 16,
           "size": 2,
-          "paddingAfter": 2,
-          "description": "unsigned 8-bit integer"
+          "paddingAfter": 2
         }
       ],
       "description": ""
     }
-  ],
-  "autoSort": false
+  ]
 }

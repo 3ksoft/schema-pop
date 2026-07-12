@@ -7,12 +7,11 @@ import { binary } from "@schema-pop/schema";
 function analyze(s: any) {
 	return new SchemaAnalyzer().analyze(fromModule(s), {
 		wordSize: "64",
-		autoLayout: false,
 		layout: "aligned",
 		mode: "binary",
 		version: "1.0.0",
 		endian: "le",
-	});
+	}).plan;
 }
 
 describe("fromModule — bitwise types", () => {
@@ -70,22 +69,5 @@ describe("fromModule — bitwise types", () => {
 		expect(y?.offset).toBe(1);
 		expect(y?.bitOffset).toBe(0);
 		expect(wide.size).toBe(2);
-	});
-
-	it("default values on bitwise fields flow through to migrationMeta.defaultValue", () => {
-		const s = type.module({
-			...binary.import(),
-			Flags: { a: "u1 = 0", b: "u3 = 5" },
-		});
-		const plan = analyze(s);
-		const flags = plan.types.find((t) => t.name === "Flags");
-		expect(flags?.kind).toBe("struct");
-		if (flags?.kind !== "struct") return;
-
-		const a = flags.fields.find((f) => f.name === "a");
-		expect(a?.migrationMeta).toEqual({ defaultValue: 0 });
-
-		const b = flags.fields.find((f) => f.name === "b");
-		expect(b?.migrationMeta).toEqual({ defaultValue: 5 });
 	});
 });

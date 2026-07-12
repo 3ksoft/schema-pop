@@ -30,9 +30,6 @@ export interface ExporterPlugin<TConfig extends BaseConfig = BaseConfig> {
     /** Per-output-file footer. Emitted once after the last version body. */
     getFileFooter?: () => string;
 
-    /** Emit migration-shape code between two consecutive versions. */
-    generateMigration?: (fromPlan: LayoutPlan, toPlan: LayoutPlan) => string;
-
     /** Emit auxiliary files alongside the main output — buildable
      *  harnesses, package.json, build scripts, anything. Receives all
      *  versioned plans for the schema. */
@@ -74,7 +71,7 @@ type LayoutPlan = {
     version: string;          // e.g. "test_schema_1_0" — already a safe identifier
     endian: "le" | "be";
     wordSize: 32 | 64;
-    autoLayout: boolean;
+    autoSort: boolean;
     types: TypePlan[];
 };
 
@@ -166,7 +163,7 @@ When users ship multiple versions of the same schema, the builder calls `generat
 wrapVersion: (version, code) => `pub mod ${version} {\n${indent(code)}\n}\n`,
 ```
 
-The `version` string is already a safe identifier (e.g. `test_schema_1_0`). If you skip `wrapVersion`, only the latest version is exported and the user gets a warning.
+The `version` string is already a safe identifier (e.g. `test_schema_1_0`).
 
 For single-file targets like HTML, you can instead emit per-version `<script>` data injections from `generate()` and let the runtime stitch them together.
 
@@ -180,11 +177,10 @@ The builder writes one file per `targetConfig.dest`. For each file it concatenat
 2. `getFileHeader()`
 3. `prependToFile`
 4. for each version: `wrapVersion(version, generate(plan))` (or just `generate(plan)` if no `wrapVersion`)
-5. for consecutive version pairs: `generateMigration(prev, curr)`
-6. `appendToFile`
-7. `getFileFooter()`
+5. `appendToFile`
+6. `getFileFooter()`
 
-`getHarness(plans)` is called **once per file** with all the versioned plans, and writes its returned files alongside the main output. Use it for buildable test harnesses (`Cargo.toml`, `package.json`, `main.rs`, etc.) — see `core-exporters/src/rust-harness.ts` for a reference implementation.
+`getHarness(plans)` is called **once per file** with all the versioned plans, and writes its returned files alongside the main output. Use it for buildable test harnesses (`Cargo.toml`, `package.json`, `main.rs`, etc.) — see `packages/exporter/src/exporters/rustHarness.ts` for a reference implementation.
 
 ---
 
@@ -202,14 +198,14 @@ For naming, indentation, namespace wrapping, primitive mapping — use the share
 ```ts
 import { ExporterTools } from "schema-pop";
 
-const { typeName, fieldName, INDENT, mapScalarField, wrapNamespace, indentBlock } =
+const { typeName, fieldName, indent, mapScalarField, wrapNamespace } =
     ExporterTools(cfg);
 ```
 
 - `typeName(name)` / `fieldName(name)` — pre-bound to `cfg.typeNaming` / `cfg.fieldNaming`
 - `mapScalarField(field, primitiveMap, refResolver, fallback?)` — resolves primitives + references; returns `undefined` for kinds your exporter must recurse into (array / optional / string / inlineStruct / unit)
 - `wrapNamespace(version, body, { open, close, indent? })` — convenience wrapper around `wrapVersion`
-- `indentBlock(code, indent)`, `INDENT(n)` — simple indentation helpers
+- `indent(n, code)` — indents every line of `code` by `n` tabs
 
 ---
 
@@ -253,36 +249,31 @@ export function jsonDump(config: JsonDumpConfig): ExporterPlugin<JsonDumpConfig>
 }
 ```
 
-Wire it into `pop.config.ts`:
+Use it like any built-in exporter — call the factory and write its output:
 
 ```ts
-import { defineConfig } from "schema-pop";
+import { fromModule, SchemaAnalyzer } from "@schema-pop/core";
 import { jsonDump } from "./my-exporter";
+import { $ } from "./telemetry.1"; // an ArkType module
 
-export default defineConfig({
-    schemas: [{
-        name: "telemetry",
-        versions: [{ version: "1.0", source: "./src/telemetry.ts" }],
-        targets: [
-            jsonDump({ dest: "./dist/telemetry.json" }),
-        ],
-    }],
-});
+const { plan } = new SchemaAnalyzer().analyze(fromModule($.export()), {});
+await Bun.write(
+    "./dist/telemetry.json",
+    jsonDump({ dest: "./dist/telemetry.json" }).generate(plan),
+);
 ```
-
-`bun run generate` and you get the file.
 
 ---
 
 ## 8. Reference exporters
 
-The code under `packages/core-exporters/src/` and `packages/extra-exporters/src/` is the canonical reference:
+The code under `packages/exporter/src/exporters/` is the canonical reference:
 
-- `rust.ts` / `rust-harness.ts` — full ABI-safe target, struct/enum/union/alias, opaque byte fallback, `#[deprecated]`, buildable harness via `getHarness`
-- `ts.ts` — JSDoc emit, `PopCodec` glue, `LAYOUT_PLAN` JSON dump
+- `rust.ts` / `rustHarness.ts` — full ABI-safe target, struct/enum/union/alias, opaque byte fallback, `#[deprecated]`, buildable harness
+- `ts.ts` / `tsCodec.ts` — JSDoc emit, binary codec glue, `LAYOUT_PLAN` JSON dump
 - `cpp.ts`, `zig.ts` — same shape as Rust, language-specific deprecation
 - `svg.ts` — `Record<string, string>` output mode (one SVG per type), CSS-var-driven theming
-- `html.ts` + `html-app.ts` — single self-contained docs site, composes with `svg` via the `viz` config
+- `html.ts` + `htmlApp.ts` — single self-contained docs site
 
 Read those when you need to see how something nontrivial is done.
 

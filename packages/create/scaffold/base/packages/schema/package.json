@@ -4,12 +4,13 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"generate": "bunx schema-pop pop.config.ts",
-		"build": "bun run generate && tsc"
+		"generate": "bun scripts/generate.ts",
+		"build": "bun run generate"
 	},
 	"devDependencies": {
 		"schema-pop": "latest",
 		"@schema-pop/schema": "latest",
+		"@schema-pop/core": "latest",
 		"@schema-pop/exporter": "latest",
 		"@types/node": "^25.6.0"
 	}

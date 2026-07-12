@@ -159,7 +159,6 @@ export namespace showcase {
 	export const LAYOUT_PLAN = {
 		"version": "showcase",
 		"endian": "le",
-		"autoLayout": true,
 		"wordSize": 64,
 		"types": [
 			{

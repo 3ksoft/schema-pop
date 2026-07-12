@@ -6,6 +6,7 @@ import type {
 	LayoutPlan,
 } from "@schema-pop/schema";
 import { ExporterTools, toCamelCase, toPascalCase } from "../exporterTools";
+import { hasAtomics, isGpuBindingPlan } from "./gpuShared";
 
 export interface TsWebgpuConfig extends BaseConfig {
 	limits?: Record<string, string>;
@@ -24,13 +25,9 @@ const STATIC_SIZES: Record<string, number> = {
 	vec4f: 16, vec4i: 16, vec4u: 16, "vec4<f32>": 16, "vec4<i32>": 16, "vec4<u32>": 16,
 };
 
-function isGpuBindingPlan(t: any): t is GpuBindingPlan {
-	return t.kind === "gpu-binding-layout";
-}
-
 export function tsWebgpu(
 	config: TsWebgpuConfig,
-): ExporterPlugin<TsWebgpuConfig> {
+): ExporterPlugin<TsWebgpuConfig, { code: string; metadata: string }> {
 	const cfg = {
 		fieldNaming: "original",
 		typeNaming: "original",
@@ -47,7 +44,10 @@ export function tsWebgpu(
 		generate: (plan: LayoutPlan) => {
 			const bindingPlan = plan.types.find(isGpuBindingPlan);
 			if (!bindingPlan) {
-				return `// No gpu-binding-layout found in schema to generate harness.`;
+				return {
+					code: `// No gpu-binding-layout found in schema to generate harness.`,
+					metadata: "",
+				};
 			}
 
 			const limitMap = cfg.limits || {};
@@ -61,48 +61,6 @@ export function tsWebgpu(
 
 			const typesMap = new Map<string, any>(plan.types.map(t => [t.name, t]));
 
-			const hasAtomics = (typePlan: any, visited = new Set<string>()): boolean => {
-				if (visited.has(typePlan.name)) return false;
-				visited.add(typePlan.name);
-
-				if (typePlan.kind === "struct") {
-					return typePlan.fields.some((f: any) => {
-						if ((f.type as any).atomic) return true;
-						if (f.type.kind === "reference") {
-							const ref = typesMap.get(f.type.name);
-							return ref ? hasAtomics(ref, visited) : false;
-						}
-						if (f.type.kind === "array") {
-							let item = f.type.item;
-							while (item.kind === "array") item = item.item;
-							if (item.kind === "reference") {
-								const ref = typesMap.get(item.name);
-								return ref ? hasAtomics(ref, visited) : false;
-							}
-							return !!(item as any).atomic;
-						}
-						return false;
-					});
-				}
-				if (typePlan.kind === "alias") {
-					if ((typePlan.type as any).atomic) return true;
-					if (typePlan.type.kind === "reference") {
-						const ref = typesMap.get(typePlan.type.name);
-						return ref ? hasAtomics(ref, visited) : false;
-					}
-					if (typePlan.type.kind === "array") {
-						let item = typePlan.type.item;
-						while (item.kind === "array") item = item.item;
-						if (item.kind === "reference") {
-							const ref = typesMap.get(item.name);
-							return ref ? hasAtomics(ref, visited) : false;
-						}
-						return !!(item as any).atomic;
-					}
-				}
-				return false;
-			};
-
 			const getRawWgslType = (name: string, typeNameConverter: (s: string) => string, usage: string): string => {
 				const t = typesMap.get(name);
 				if (!t) return name;
@@ -113,7 +71,7 @@ export function tsWebgpu(
 					return cleanName;
 				}
 
-				if (hasAtomics(t)) {
+				if (hasAtomics(t, typesMap)) {
 					return cleanName;
 				}
 

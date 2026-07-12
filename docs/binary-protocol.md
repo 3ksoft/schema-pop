@@ -4,7 +4,7 @@
 
 ## Memory layout
 
-- **Endianness**: configurable per build (`endian: "le" | "be"` in `pop.config.ts`). Default little-endian.
+- **Endianness**: configurable per build (`endian: "le" | "be"` in the analyzer settings). Default little-endian.
 - **Alignment**: each primitive is naturally aligned (a 4-byte type starts at offsets divisible by 4).
 - **Padding**: explicit padding bytes (`_pad_*`) are emitted by every exporter to maintain alignment across compilers. The analyzer pre-computes them; exporters render them.
 
@@ -19,7 +19,7 @@
 | `u128`, `i128`        | 16           | 8            |
 | `u1`–`u7` (bit-packed)| <1           | (in parent)  |
 
-Bit-packed primitives (`u1`–`u7`) are aggregated into byte-sized containers when `autoLayout` is on; the analyzer manages the bit offsets.
+Bit-packed primitives (`u1`–`u7`) are aggregated into byte-sized containers when `autoPack` is on; the analyzer manages the bit offsets.
 
 ## Composite types
 
@@ -47,7 +47,7 @@ Layout is identical to the underlying type. Native targets emit it as an opaque 
 
 ## Layout strategies
 
-The analyzer supports four layout modes (configurable via `layout` in `pop.config.ts`):
+The analyzer supports four layout modes (configurable via `layout` in the analyzer settings):
 
 | Strategy       | Use case                  | Notes                                                  |
 | -------------- | ------------------------- | ------------------------------------------------------ |
@@ -94,17 +94,18 @@ untrusted peer), the consumer is responsible for:
 2. **Length-prefix validation** — `SharedString<N>` / `SharedVec<T, N>`
    length must be `≤ N`. PopCodec clamps; Rust raw access doesn't.
 3. **Layout pinning** — bytes only round-trip when both sides use the
-   same `schema-pop` version + the same exporter config (`autoLayout`,
-   `versionNamespace`, `layout`). Use the `schema-pop layout`
-   subcommand to dump the analyzer's view; pair with
-   `core::mem::offset_of!` on the producer side to lock alignment.
+   same `schema-pop` version + the same analyzer settings
+   (`wordSize`, `layout`, `autoSort`, `autoPack`). Dump the analyzer's
+   `LayoutPlan` and pair with `core::mem::offset_of!` on the producer
+   side to lock alignment.
 
-### Helpful commands
+### Inspecting the layout
 
-- `schema-pop layout [config-path] [--type T]` — prints exact
-  field offsets / sizes the analyzer computed. Diff against
-  `core::mem::offset_of!` output to find drift across language
-  boundaries (see docs/requests.md P16).
+The analyzer's `LayoutPlan` (`SchemaAnalyzer.analyze(...).plan`) holds
+the exact field offsets / sizes it computed and is plain JSON — dump it
+and diff against `core::mem::offset_of!` output to find drift across
+language boundaries.
+
 - Generated `Type::as_str()` — schema variant name, useful for
   debug-logging unrecognised tags.
 
@@ -116,7 +117,7 @@ untrusted peer), the consumer is responsible for:
 - **No runtime type-checking on the codec output.** PopCodec returns
   whatever the bytes say. Combine with arktype's runtime validators
   on the TypeScript side if you need shape checks (see TS exporter
-  notes in [`exporters.md`](./exporters.md)).
+  notes in [`schema-exporters.md`](./exporters/schema-exporters.md)).
 
 
 

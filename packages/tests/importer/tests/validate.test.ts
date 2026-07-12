@@ -5,7 +5,7 @@ import { type } from "arktype";
 import { importFile } from "@schema-pop/importer";
 import { WalkResult } from "@schema-pop/importer";
 
-const fixturesDir = path.resolve(import.meta.dirname, "fixtures");
+const fixturesDir = path.resolve(import.meta.dirname, "..", "fixtures", "walk");
 
 describe("Validation of importer output against ArkType schema", () => {
 	const langs = [

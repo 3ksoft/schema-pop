@@ -1,10 +1,12 @@
 {
+  "schemaName": "Schema",
+  "endian": "le",
   "wordSize": "64",
-  "autoLayout": false,
+  "autoSort": false,
+  "autoPack": false,
   "layout": "aligned",
   "mode": "binary",
   "version": "1.0.0",
-  "endian": "le",
   "layoutType": "std140",
   "types": [
     {
@@ -17,33 +19,43 @@
         {
           "name": "a",
           "type": {
-            "kind": "primitive",
-            "name": "f32",
+            "type": "number",
             "size": 4,
             "align": 4,
+            "description": "32-bit float",
+            "popKind": "binary",
+            "isBinary": true,
+            "binaryType": "f32",
+            "label": "a",
+            "required": true,
+            "kind": "primitive",
+            "name": "f32",
             "paddedSize": 4,
-            "bitSize": 32,
-            "popKind": "binary"
+            "bitSize": 32
           },
           "offset": 0,
           "bitOffset": 0,
           "bitSize": 32,
           "size": 4,
-          "paddingAfter": 0,
-          "description": "32-bit float"
+          "paddingAfter": 0
         },
         {
           "name": "b",
           "type": {
             "kind": "array",
             "item": {
-              "kind": "primitive",
-              "name": "f32",
+              "type": "number",
               "size": 4,
               "align": 4,
+              "description": "32-bit float",
+              "popKind": "binary",
+              "isBinary": true,
+              "binaryType": "f32",
+              "label": "Item",
+              "kind": "primitive",
+              "name": "f32",
               "paddedSize": 4,
-              "bitSize": 32,
-              "popKind": "binary"
+              "bitSize": 32
             },
             "exactLength": 3
           },
@@ -56,6 +68,5 @@
       ],
       "description": ""
     }
-  ],
-  "autoSort": false
+  ]
 }

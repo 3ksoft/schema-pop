@@ -7,26 +7,24 @@
 1. **Schema definition (ArkType)** — high-level data modeling using standard TypeScript syntax. Constraints (numeric ranges, string literals, generics like `Binary<>` / `Bit<>` / `Obsolete<>`) describe both the logical type and binary metadata.
 2. **Schema analyzer** — a deterministic engine that translates logical types into a physical memory map. Picks the smallest fitting primitive for unconstrained `number`, infers `u8`–`u64` and bit-packed `u1`–`u7` from constraints, computes alignment and padding per layout strategy.
 3. **Linear Layout Plan (LLP)** — the intermediate representation. Contains exact byte and bit offsets, alignment, padding, tag offsets for unions, and metadata propagated from the schema (descriptions, deprecation flags). Exporters consume only the LLP.
-4. **Exporters** — stateless plugin functions that turn an LLP into source code or other artifacts. Built-ins cover Rust / C / C++ / Go / Zig / TypeScript / Markdown / GLSL / WGSL / HTML / SVG / Mermaid / OpenAPI / JSON Schema / Nuxt UI forms / random fixtures / Brainfuck. Each exporter is ~100–300 LoC; you can write your own ([guide](./exporters/writing_own_exporters.md)).
+4. **Exporters** — stateless plugin functions that turn an LLP into source code or other artifacts. Built-ins cover Rust (+ serde) / C / C++ / Zig / TypeScript (interfaces, binary codec, exports) / Markdown / WGSL / HTML / SVG / Mermaid / random fixtures / Brainfuck, plus WebGPU binding harnesses. Each exporter is ~100–300 LoC; you can write your own ([guide](./exporters/writing_own_exporters.md)).
 5. **PopCodec** — a zero-dependency TypeScript runtime that uses an embedded LLP to read/write binary buffers from JS without code generation.
 
 ## Pipeline
 
 ```
-pop.config.ts ──▶ schema source files
-                  │
-                  ▼
-            SchemaAnalyzer (per version)
-                  │
-                  ▼
-              LayoutPlan ─────▶ exporter₁ ─▶ artifact₁
-                       │
-                       ├──────▶ exporter₂ ─▶ artifact₂
-                       │
-                       └──────▶ exporter_N ─▶ artifact_N
+schema.ts (ArkType scope + markers)
+        │  fromModule(mod.export())
+        ▼
+   ExtractionContext ──▶ SchemaAnalyzer().analyze(ctx, settings)
+                              │
+                              ▼
+                         LayoutPlan ──▶ exporter₁ ─▶ artifact₁
+                                  ├────▶ exporter₂ ─▶ artifact₂
+                                  └────▶ exporter_N ─▶ artifact_N
 ```
 
-The `schema-pop` CLI (`bun run generate` in a scaffold project) loads `pop.config.ts`, runs the analyzer for each version of each schema, and dispatches to all configured exporters. There is no Vite plugin, no runtime registry, no compilation phase beyond generating files.
+The pipeline is driven imperatively from a small build script: `fromModule` extracts a schema from an ArkType module into an `ExtractionContext`, `SchemaAnalyzer().analyze(ctx, settings)` returns `{ plan, warnings, errors }`, and each exporter turns `plan` into an artifact — either `exportPlan(plan, target, config)` or the exporter factory directly (`ts({...}).generate(plan)`). The `schema-pop` CLI wraps the same pipeline for a single file (flags `-t` target, `-o` output, `-m` mode). There is no config file, no version registry, no Vite plugin, and no compilation phase beyond generating files.
 
 ## Data flow at runtime
 

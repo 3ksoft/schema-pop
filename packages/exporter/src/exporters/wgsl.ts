@@ -9,6 +9,7 @@ import type {
 } from "@schema-pop/schema";
 import { WGSL_PREDECLARED_ALIASES } from "@schema-pop/schema";
 import { ExporterTools, toSnakeCase } from "../exporterTools";
+import { hasAtomics } from "./gpuShared";
 
 export interface WgslConfig extends BaseConfig {
 	paddingStyle?: "size" | "fields";
@@ -23,7 +24,7 @@ interface FieldLayout {
 	wordsNeeded: number;
 }
 
-export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
+export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 	const cfg = {
 		fieldNaming: "original",
 		typeNaming: "original",
@@ -92,52 +93,6 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 					return `array<${itemType}, ${len}>`;
 				}
 				return "u32";
-			};
-
-			const hasAtomics = (t: TypePlan): boolean => {
-				const visited = new Set<string>();
-				const check = (typePlan: TypePlan): boolean => {
-					if (visited.has(typePlan.name)) return false;
-					visited.add(typePlan.name);
-
-					if (typePlan.kind === "struct") {
-						return typePlan.fields.some(f => {
-							if ((f.type as any).atomic) return true;
-							if (f.type.kind === "reference") {
-								const ref = typesMap.get(f.type.name);
-								return ref ? check(ref) : false;
-							}
-							if (f.type.kind === "array") {
-								let item = f.type.item;
-								while (item.kind === "array") item = item.item;
-								if (item.kind === "reference") {
-									const ref = typesMap.get(item.name);
-									return ref ? check(ref) : false;
-								}
-								return !!(item as any).atomic;
-							}
-							return false;
-						});
-					}
-					if (typePlan.kind === "alias") {
-						if ((typePlan.type as any).atomic) return true;
-						if (typePlan.type.kind === "reference") {
-							const ref = typesMap.get(typePlan.type.name);
-							return ref ? check(ref) : false;
-						}
-						if (typePlan.type.kind === "array") {
-							let item = typePlan.type.item;
-							while (item.kind === "array") item = item.item;
-							if (item.kind === "reference") {
-								const ref = typesMap.get(item.name);
-								return ref ? check(ref) : false;
-							}
-							return !!(item as any).atomic;
-						}
-					}
-					return false;
-				};
-				return check(t);
 			};
 
 			let typesCode = "";
@@ -306,7 +261,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig> {
 			for (const t of plan.types) {
 				if (isRichType(t)) continue;
 
-				if ((t.kind === "struct" || (t.kind === "alias" && !WGSL_PREDECLARED_ALIASES.has(t.name))) && !hasAtomics(t)) {
+				if ((t.kind === "struct" || (t.kind === "alias" && !WGSL_PREDECLARED_ALIASES.has(t.name))) && !hasAtomics(t, typesMap)) {
 					const cleanName = typeName(t.name);
 					const snakeName = toSnakeCase(t.name);
 					const words = getSizeInWords(t.paddedSize ?? t.size ?? 4);

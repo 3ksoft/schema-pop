@@ -9,19 +9,14 @@ const EMIT_PACKAGE_BY_TYPE: Record<string, "core" | "extra"> = {
 	cpp: "core",
 	ts: "core",
 	zig: "core",
-	go: "core",
 	random: "core",
 	md: "core",
 	tsCodec: "core",
 	html: "extra",
 	wgsl: "extra",
-	glsl: "extra",
 	svg: "extra",
-	openapi: "extra",
 	mermaid: "extra",
-	nuxtUi: "extra",
 	brainfuck: "extra",
-	jsonSchema: "extra",
 };
 
 const wasmHook = async (name: string) => {
@@ -33,7 +28,6 @@ const wasmHook = async (name: string) => {
 
 export interface AnalyzerConfig {
 	wordSize?: 32 | 64;
-	autoLayout?: boolean;
 	layoutType?:
 		| "aligned"
 		| "zero-padding"

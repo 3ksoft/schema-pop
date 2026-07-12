@@ -1,20 +1,21 @@
-import { $bridge } from "./vault/bridge.1.pop.ts";
+import { $bridge } from "./vault/bridge.1";
 import { fromModule, SchemaAnalyzer } from "@schema-pop/core";
 import { exportPlan } from "@schema-pop/exporter";
 
-const schema = fromModule($bridge.export());
+const ctx = fromModule($bridge.export());
 console.log("=== SCHEMA TYPES ===");
-for (const [k, v] of Object.entries(schema.types)) {
+for (const [k, v] of Object.entries(ctx.schema.types)) {
 	console.log(k, JSON.stringify(v));
 }
 
-const analyzer = new SchemaAnalyzer(schema, {
+const analyzer = new SchemaAnalyzer();
+const { plan } = analyzer.analyze(ctx, {
 	wordSize: "64",
-	autoLayout: false,
-	layoutType: "aligned",
+	layout: "aligned",
 	mode: "binary",
+	version: "1.0",
+	endian: "le",
 });
-const plan = analyzer.analyze("1.0", "le");
 console.log("\n=== PLAN TYPES ===");
 for (const t of plan.types) {
 	console.log(

@@ -5,9 +5,8 @@
 The 0.1.x line set the core foundation of Schema-Pop:
 * **ArkType** constraint-based binary inference.
 * Advanced layout strategies (`aligned`, `zero-padding`, `std140`, `std430`).
-* Universal Exporter API and multi-language support (Rust, C/C++, Go, Zig, TS, WGSL, GLSL).
+* Universal Exporter API and multi-language support (Rust, C/C++, Zig, TS, WGSL).
 * Bit-packing and tagged unions.
-* Auto-generated cross-language migrations (Rust, C++, Zig, Go).
 * Test harness scaffolding.
 * `INDENT` / `indentBlock` collapsed into a single `indent()` helper.
 

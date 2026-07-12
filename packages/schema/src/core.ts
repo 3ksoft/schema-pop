@@ -1,4 +1,5 @@
-import { generic, Hkt, scope, type Type, type } from "arktype";
+import { generic, Hkt, type Type, type } from "arktype";
+import { gui } from "./gui";
 
 export const ArkMeta = type({
 	"popKind?": "'rich' | 'bitwise' | 'binary' | 'reserved' | 'gpu-binding' | 'gpu-shader'",
@@ -14,7 +15,6 @@ export const ArkMeta = type({
 	"align?": "number",
 	"binaryType?": "string",
 	"scale?": "number",
-	"addr?": "number",
 	"isBinary?": "boolean",
 	"bitSize?": "number",
 	"unsigned?": "boolean",
@@ -32,7 +32,7 @@ export const ArkMeta = type({
 	"entryPoint?": "string",
 	"bindGroups?": "number[]",
 	"workGroupSize?": "number",
-});
+}).and(gui.export().BaseGuiMeta);
 
 export type ArkMeta = typeof ArkMeta.infer;
 
@@ -138,16 +138,6 @@ export const Reserved = generic(["t", "unknown"], ["size", "number"])(
 export const Scale = generic(["t", "unknown"], ["s", "number"])(
 	(args) => (args.t as Type).configure({ scale: (args.s as any).unit }),
 	class extends Hkt<[t: unknown, s: number]> {
-		declare body: this[0];
-	},
-);
-
-/**
- * Forces a specific memory offset for the field.
- */
-export const At = generic(["t", "unknown"], ["addr", "number"])(
-	(args) => (args.t as Type).configure({ addr: (args.addr as any).unit }),
-	class extends Hkt<[t: unknown, addr: number]> {
 		declare body: this[0];
 	},
 );
@@ -343,7 +333,3 @@ export const ConstrainedStep = generic(
 		declare body: this[0];
 	},
 );
-
-export const migrations: ReturnType<
-	typeof scope<{ Renamed: typeof Renamed; OriginalType: typeof OriginalType }>
-> = scope({ Renamed, OriginalType });

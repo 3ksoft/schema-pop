@@ -1,10 +1,12 @@
 {
+  "schemaName": "Schema",
+  "endian": "le",
   "wordSize": "64",
-  "autoLayout": false,
+  "autoSort": false,
+  "autoPack": false,
   "layout": "aligned",
   "mode": "rich",
   "version": "1.0.0",
-  "endian": "le",
   "types": [
     {
       "kind": "struct",
@@ -16,18 +18,16 @@
         {
           "name": "payload",
           "type": {
-            "kind": "any"
+            "kind": "unit"
           },
           "offset": 0,
           "bitOffset": 0,
           "bitSize": 0,
           "size": 0,
-          "paddingAfter": 0,
-          "description": "Could not resolve type"
+          "paddingAfter": 0
         }
       ],
       "description": ""
     }
-  ],
-  "autoSort": false
+  ]
 }

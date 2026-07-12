@@ -11,13 +11,14 @@ const outDir = join(__dirname, "..", "generated");
 mkdirSync(outDir, { recursive: true });
 
 function emit(scopeMod: any, outFile: string) {
-	const schema = fromModule(scopeMod.export());
-	const plan = new SchemaAnalyzer(schema, {
+	const ctx = fromModule(scopeMod.export());
+	const { plan } = new SchemaAnalyzer().analyze(ctx, {
 		wordSize: "64",
-		autoLayout: false,
-		layoutType: "aligned",
+		layout: "aligned",
 		mode: "binary",
-	}).analyze("v1", "le");
+		version: "1.0.0",
+		endian: "le",
+	});
 
 	const generated = exportPlan(plan, "ts:codec");
 	const code =

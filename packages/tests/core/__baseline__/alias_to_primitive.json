@@ -1,10 +1,12 @@
 {
+  "schemaName": "Schema",
+  "endian": "le",
   "wordSize": "64",
-  "autoLayout": false,
+  "autoSort": false,
+  "autoPack": false,
   "layout": "aligned",
   "mode": "binary",
   "version": "1.0.0",
-  "endian": "le",
   "types": [
     {
       "kind": "alias",
@@ -13,16 +15,22 @@
       "align": 4,
       "paddedSize": 4,
       "type": {
-        "kind": "primitive",
-        "name": "u32",
+        "type": "number",
+        "min": 0,
+        "max": 4294967295,
         "size": 4,
         "align": 4,
+        "description": "unsigned 32-bit integer",
+        "popKind": "binary",
+        "isBinary": true,
+        "binaryType": "u32",
+        "label": "Counter",
+        "kind": "primitive",
+        "name": "u32",
         "paddedSize": 4,
-        "bitSize": 32,
-        "popKind": "binary"
+        "bitSize": 32
       },
       "description": "unsigned 32-bit integer"
     }
-  ],
-  "autoSort": false
+  ]
 }

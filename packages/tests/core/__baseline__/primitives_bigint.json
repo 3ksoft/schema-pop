@@ -1,10 +1,12 @@
 {
+  "schemaName": "Schema",
+  "endian": "le",
   "wordSize": "64",
-  "autoLayout": false,
+  "autoSort": false,
+  "autoPack": false,
   "layout": "aligned",
   "mode": "binary",
   "version": "1.0.0",
-  "endian": "le",
   "types": [
     {
       "kind": "struct",
@@ -16,78 +18,103 @@
         {
           "name": "a",
           "type": {
-            "kind": "primitive",
-            "name": "u128",
+            "type": "number",
+            "min": 0,
+            "max": 3.402823669209385e+38,
             "size": 16,
             "align": 8,
+            "description": "unsigned 128-bit integer",
+            "popKind": "binary",
+            "isBinary": true,
+            "binaryType": "u128",
+            "label": "a",
+            "required": true,
+            "kind": "primitive",
+            "name": "u128",
             "paddedSize": 16,
-            "bitSize": 128,
-            "popKind": "binary"
+            "bitSize": 128
           },
           "offset": 0,
           "bitOffset": 0,
           "bitSize": 128,
           "size": 16,
-          "paddingAfter": 0,
-          "description": "unsigned 128-bit integer"
+          "paddingAfter": 0
         },
         {
           "name": "b",
           "type": {
-            "kind": "primitive",
-            "name": "i128",
+            "type": "number",
+            "min": -1.7014118346046923e+38,
+            "max": 1.7014118346046923e+38,
             "size": 16,
             "align": 8,
+            "description": "signed 128-bit integer",
+            "popKind": "binary",
+            "isBinary": true,
+            "binaryType": "i128",
+            "label": "b",
+            "required": true,
+            "kind": "primitive",
+            "name": "i128",
             "paddedSize": 16,
-            "bitSize": 128,
-            "popKind": "binary"
+            "bitSize": 128
           },
           "offset": 16,
           "bitOffset": 0,
           "bitSize": 128,
           "size": 16,
-          "paddingAfter": 0,
-          "description": "signed 128-bit integer"
+          "paddingAfter": 0
         },
         {
           "name": "c",
           "type": {
-            "kind": "primitive",
-            "name": "u64",
+            "type": "number",
+            "min": 0,
+            "max": 18446744073709552000,
             "size": 8,
             "align": 8,
+            "description": "unsigned 64-bit integer",
+            "popKind": "binary",
+            "isBinary": true,
+            "binaryType": "u64",
+            "label": "c",
+            "required": true,
+            "kind": "primitive",
+            "name": "u64",
             "paddedSize": 8,
-            "bitSize": 64,
-            "popKind": "binary"
+            "bitSize": 64
           },
           "offset": 32,
           "bitOffset": 0,
           "bitSize": 64,
           "size": 8,
-          "paddingAfter": 0,
-          "description": "unsigned 64-bit integer"
+          "paddingAfter": 0
         },
         {
           "name": "d",
           "type": {
-            "kind": "primitive",
-            "name": "f64",
+            "type": "number",
             "size": 8,
             "align": 8,
+            "description": "64-bit float",
+            "popKind": "binary",
+            "isBinary": true,
+            "binaryType": "f64",
+            "label": "d",
+            "required": true,
+            "kind": "primitive",
+            "name": "f64",
             "paddedSize": 8,
-            "bitSize": 64,
-            "popKind": "binary"
+            "bitSize": 64
           },
           "offset": 40,
           "bitOffset": 0,
           "bitSize": 64,
           "size": 8,
-          "paddingAfter": 0,
-          "description": "64-bit float"
+          "paddingAfter": 0
         }
       ],
       "description": ""
     }
-  ],
-  "autoSort": false
+  ]
 }

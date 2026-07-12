@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { type Lang, parseSource } from "./parser";
-import type { WalkResult } from "./toolkit";
+import { WalkResult } from "./toolkit";
 import {
 	walkCFile,
 	walkCppFile,
@@ -20,7 +20,8 @@ import {
 	walkTsFile,
 } from "./treesitter";
 
-export type { Lang, WalkResult };
+export type { Lang };
+export { WalkResult };
 
 interface LangConfig {
 	extensions: string[];

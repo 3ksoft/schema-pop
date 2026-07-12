@@ -13,30 +13,23 @@ To bridge language conventions (`snake_case` in Rust, `camelCase` in TypeScript,
 
 ## Configuration
 
-Per-target, set inside the schema file's `schemaPop({ targets: [...] }, scope)` wrap:
+Pass `fieldNaming` / `typeNaming` in each exporter's config:
 
 ```ts
-// telemetry.1.pop.ts
-import { schemaPop, scope } from "schema-pop";
-import { ts, rust } from "@schema-pop/exporter";
+import { fromModule, SchemaAnalyzer } from "@schema-pop/core";
+import { exportPlan } from "@schema-pop/exporter";
+import { $ } from "./telemetry.1"; // an ArkType module
 
-export const $ = schemaPop(
-    {
-        targets: [
-            ts({
-                dest: "./dist/telemetry.ts",
-                fieldNaming: "camelCase",
-                typeNaming: "PascalCase",
-            }),
-            rust({
-                dest: "./dist/telemetry.rs",
-                fieldNaming: "snake_case",
-                typeNaming: "PascalCase",
-            }),
-        ],
-    },
-    scope({ ...schemaPop, /* ... */ }),
-);
+const { plan } = new SchemaAnalyzer().analyze(fromModule($.export()), {});
+
+const tsCode = exportPlan(plan, "ts", {
+    fieldNaming: "camelCase",
+    typeNaming: "PascalCase",
+});
+const rustCode = exportPlan(plan, "rust", {
+    fieldNaming: "snake_case",
+    typeNaming: "PascalCase",
+});
 ```
 
 The same byte at offset `+4` will be reachable as `voltageLevel` from TypeScript and `voltage_level` from Rust — no manual mapping required.

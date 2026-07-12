@@ -24,7 +24,7 @@ export interface TsCodecConfig extends Omit<BaseConfig, "commentStyle"> {
 	generatePatches?: boolean;
 }
 
-export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig> {
+export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, string> {
 	const cfg = { fieldNaming: "original", typeNaming: "original", ...config };
 	const { typeName, fieldName } = ExporterTools(cfg as any);
 

@@ -32,7 +32,7 @@ const RUST_PRIMITIVES: Record<string, string> = {
 
 export function rustSerde(
 	config: RustSerdeConfig,
-): ExporterPlugin<RustSerdeConfig> {
+): ExporterPlugin<RustSerdeConfig, string> {
 	const cfg: RustSerdeConfig = {
 		fieldNaming: "snake_case",
 		typeNaming: "PascalCase",
@@ -75,7 +75,7 @@ export function rustSerde(
 			let code = "";
 			for (const t of plan.types) {
 				// In rich mode, we don't need synthetic binary-layout enums
-				if ((t as any).syntetic) continue;
+				if ((t as any).synthetic) continue;
 
 				const tn = typeName(t.name);
 				const tAny = t as any;
@@ -96,7 +96,7 @@ export function rustSerde(
 						// because Serde handles them via #[serde(tag = "...")] on the union enum
 						if (f.type.kind === "reference") {
 							const ref = plan.types.find((p) => p.name === (f.type as any).name);
-							if (ref && (ref as any).syntetic) continue;
+							if (ref && (ref as any).synthetic) continue;
 						}
 
 						const fn = fieldName(f.name);

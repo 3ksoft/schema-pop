@@ -10,10 +10,9 @@ function toSemver(v: string): string {
 export function analyze(s: any, version: string, layout: any = "aligned") {
 	return new SchemaAnalyzer().analyze(fromModule(s.export ? s.export() : s), {
 		wordSize: "64",
-		autoLayout: false,
 		layout,
 		mode: "binary",
 		version: toSemver(version),
 		endian: "le",
-	});
+	}).plan;
 }

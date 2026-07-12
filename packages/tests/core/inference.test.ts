@@ -6,7 +6,7 @@ import type {
 	StructPlan,
 	TypePlan,
 } from "@schema-pop/schema";
-import { $ } from "../vault/analyzer-test.1.pop";
+import { $ } from "../vault/analyzer-test.1";
 
 function getStruct(planTypes: TypePlan[], name: string): StructPlan {
 	const found = planTypes.find((t) => t.name === name);
@@ -35,9 +35,9 @@ function getPrimitiveField(
 }
 
 describe("SchemaAnalyzer Structural Inference", () => {
-	const schema = fromModule($);
+	const schema = fromModule($.export());
 	const analyzer = new SchemaAnalyzer();
-	const plan = analyzer.analyze(schema, { version: "1.0.0" });
+	const { plan } = analyzer.analyze(schema, { version: "1.0.0" });
 
 	it.skip("should infer correct primitives for SimpleUser", () => {
 		// TODO(0.2.x): structural inference regression — new analyzer infers

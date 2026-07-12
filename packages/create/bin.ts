@@ -30,9 +30,9 @@ const __dirname = import.meta.dirname;
 // ---------------------------------------------------------------------------
 
 /**
- * Schema templates use the canonical `<name>.<version>.pop.ts` naming
- * (config v2). For the picker we only show unique schema names —
- * picking one copies every version file matching `<name>.*.pop.ts`.
+ * Schema templates use the canonical `<name>.<version>.ts` naming. For the
+ * picker we only show unique schema names — picking one copies every version
+ * file matching `<name>.*.ts`.
  */
 function getAvailableSchemas(): string[] {
 	const schemasDir = join(__dirname, "schemas");
@@ -40,7 +40,7 @@ function getAvailableSchemas(): string[] {
 	const names = new Set<string>();
 	for (const f of readdirSync(schemasDir)) {
 		if (!statSync(join(schemasDir, f)).isFile()) continue;
-		const m = f.match(/^(.+?)\.[0-9][0-9.]*\.pop\.tsx?$/);
+		const m = f.match(/^(.+?)\.[0-9][0-9.]*\.tsx?$/);
 		if (m) names.add(m[1]!);
 	}
 	return [...names].sort();
@@ -55,7 +55,7 @@ function getAvailableHarnesses(): string[] {
 }
 
 /**
- * Parse a `<name>.<version>.pop.ts(x)` filename into its parts. Mirrors
+ * Parse a `<name>.<version>.ts(x)` filename into its parts. Mirrors
  * core's `parseSchemaFilename` but local to the scaffold so we don't
  * import schema-pop at scaffold-build time. Returns null when the
  * basename doesn't match the convention.
@@ -63,7 +63,7 @@ function getAvailableHarnesses(): string[] {
 function parsePopFilename(
 	file: string,
 ): { schemaName: string; version: string } | null {
-	const m = file.match(/^(.+?)\.([0-9][0-9.]*)\.pop\.tsx?$/);
+	const m = file.match(/^(.+?)\.([0-9][0-9.]*)\.tsx?$/);
 	if (!m) return null;
 	return { schemaName: m[1]!, version: m[2]! };
 }
@@ -83,149 +83,98 @@ function compareVersions(a: string, b: string): number {
 }
 
 /**
- * Build the target-import + target-instantiation lines that the schema
- * file's `schemaPop({...}, scope({...}))` wrap will reference. Shared
- * across every emitted schema since one project usually wants the same
- * exporter set for all of them.
- *
- * Returns: `{ targetImports }` is the list of `import {...} from ...`
- * lines; `{ targetLines }` is the body that goes inside the
- * `targets: [ ... ]` array, indented one level for inline embedding.
+ * Build the `TARGETS` array literal that gets spliced into the generated
+ * `scripts/generate.ts`. Each entry is `{ target, dest, config? }` consumed
+ * by `exportPlan(plan, target, config)`.
  */
-function computeTargetsBlock(
+function computeTargets(
 	pType: "monorepo" | "project" | "all",
 	harnesses: string[],
-): { targetImports: string[]; targetLines: string[] } {
-	const namesByModule = new Map<string, Set<string>>();
-	const addImport = (mod: string, ...names: string[]) => {
-		const set = namesByModule.get(mod) ?? new Set<string>();
-		for (const n of names) set.add(n);
-		namesByModule.set(mod, set);
-	};
-	const lines: string[] = [];
+): string {
+	const t: { target: string; dest: string; config?: string }[] = [];
 
 	if (pType === "monorepo" || pType === "all") {
+		// Each harness gets the schema struct (`<lang>`) plus the harness
+		// project (`<lang>:harness` → main + build files) so it compiles and
+		// can round-trip bytes over stdin/stdout in the ABI test.
 		if (harnesses.includes("ts")) {
-			addImport("@schema-pop/exporter", "ts");
-			lines.push(
-				`\t\t\tts({ dest: "../../packages/ts/src/schema.ts", exportJsonPlan: true }),`,
-			);
+			t.push({
+				target: "ts",
+				dest: "../../packages/ts/src/schema.ts",
+				config: "{ exportJsonPlan: true }",
+			});
+			// Codec (per-type serialize/deserialize) — the TS harness uses it to
+			// encode fixtures to bytes for the cross-language round-trip.
+			t.push({
+				target: "ts:codec",
+				dest: "../../packages/ts/src/codec.ts",
+				config: '{ importPath: "./schema" }',
+			});
+			// Deterministic fixtures for the round-trip driver.
+			t.push({
+				target: "random",
+				dest: "../../packages/ts/src/fixtures.json",
+				config: "{ count: 8, seed: 42 }",
+			});
 		}
 		if (harnesses.includes("rust")) {
-			addImport("@schema-pop/exporter", "rust");
-			lines.push(
-				`\t\t\trust({ dest: "../../packages/rust/src/schema.rs", harness: true }),`,
-			);
+			t.push({ target: "rust", dest: "../../packages/rust/src/schema.rs" });
+			t.push({ target: "rust:harness", dest: "../../packages/rust/src" });
 		}
 		if (harnesses.includes("cpp")) {
-			addImport("@schema-pop/exporter", "cpp", "c");
-			lines.push(
-				`\t\t\tcpp({ dest: "../../packages/cpp/src/schema.hpp", harness: true }),`,
-			);
-			lines.push(`\t\t\tc({ dest: "../../packages/cpp/src/schema.h" }),`);
+			t.push({ target: "cpp", dest: "../../packages/cpp/src/schema.hpp" });
+			t.push({ target: "c", dest: "../../packages/cpp/src/schema.h" });
+			t.push({ target: "cpp:harness", dest: "../../packages/cpp/src" });
 		}
 		if (harnesses.includes("zig")) {
-			addImport("@schema-pop/exporter", "zig");
-			lines.push(
-				`\t\t\tzig({ dest: "../../packages/zig/src/schema.zig", pub: true, harness: true }),`,
-			);
+			t.push({
+				target: "zig",
+				dest: "../../packages/zig/src/schema.zig",
+				config: "{ pub: true }",
+			});
+			t.push({ target: "zig:harness", dest: "../../packages/zig/src" });
 		}
 		if (pType === "all") {
-			addImport("@schema-pop/exporter", "random");
-			addImport(
-				"@schema-pop/exporter",
-				"brainfuck",
-				"glsl",
-				"html",
-				"nuxtUi",
-				"openapi",
-				"svg",
-				"wgsl",
-			);
-			lines.push(
-				`\t\t\tbrainfuck({ dest: "../../packages/bf/schema.bf", harness: true }),`,
-			);
-			lines.push(`\t\t\tglsl({}),`);
-			lines.push(`\t\t\thtml({}),`);
-			lines.push(`\t\t\tnuxtUi({}),`);
-			lines.push(`\t\t\topenapi({}),`);
-			lines.push(`\t\t\trandom({}),`);
-			lines.push(`\t\t\tsvg({}),`);
-			lines.push(`\t\t\twgsl({}),`);
+			if (harnesses.includes("bf")) {
+				t.push({ target: "bf", dest: "../../packages/bf/schema.bf" });
+				t.push({ target: "bf:harness", dest: "../../packages/bf" });
+			}
+			t.push({ target: "html", dest: "./dist/schema.html" });
+			t.push({ target: "svg", dest: "./dist/svg" });
+			t.push({ target: "wgsl", dest: "./dist/schema.wgsl" });
+			t.push({ target: "random", dest: "./dist/random.json" });
 		}
 	} else {
-		addImport("@schema-pop/exporter", "ts", "rust");
-		lines.push(`\t\t\tts({ dest: "./dist/schema.ts", exportJsonPlan: true }),`);
-		lines.push(`\t\t\trust({ dest: "./dist/schema.rs" }),`);
+		t.push({
+			target: "ts",
+			dest: "./dist/schema.ts",
+			config: "{ exportJsonPlan: true }",
+		});
+		t.push({ target: "rust", dest: "./dist/schema.rs" });
 	}
 
-	const targetImports = [...namesByModule.entries()].map(
-		([mod, names]) =>
-			`import { ${[...names].sort().join(", ")} } from "${mod}";`,
-	);
-	return { targetImports, targetLines: lines };
+	return t
+		.map(
+			(e) =>
+				`\t{ target: "${e.target}", dest: "${e.dest}"${e.config ? `, config: ${e.config}` : ""} },`,
+		)
+		.join("\n");
 }
 
 /**
- * For each schema name in `dir`, find the highest-version file and
- * inject a `schemaPop({ targets: [...] }, scope({...}))` wrap around
- * its existing `scope({...})` export. Older versions stay plain.
+ * Splice the computed target list into the scaffolded `scripts/generate.ts`,
+ * replacing the `/* __TARGETS__ *\/` placeholder. Schema sources stay plain
+ * arktype `scope({...})` exports — generation is driven imperatively by the
+ * script, not by a config-file builder.
  */
-function injectSchemaPopWraps(
-	dir: string,
-	targetImports: string[],
-	targetLines: string[],
-): void {
-	if (!existsSync(dir)) return;
-	const groups = new Map<string, { version: string; file: string }[]>();
-	for (const f of readdirSync(dir)) {
-		const parsed = parsePopFilename(f);
-		if (!parsed) continue;
-		const list = groups.get(parsed.schemaName) ?? [];
-		list.push({ version: parsed.version, file: f });
-		groups.set(parsed.schemaName, list);
-	}
-
-	for (const [, files] of groups) {
-		files.sort((a, b) => compareVersions(a.version, b.version));
-		const latest = files[files.length - 1]!;
-		const path = join(dir, latest.file);
-		const original = readFileSync(path, "utf-8");
-		if (/schemaPop\(\s*\{/.test(original)) continue;
-
-		const popImportRe =
-			/^import\s*\{\s*([^}]+?)\s*\}\s*from\s*["']@schema-pop\/schema["'];?/m;
-		const popMatch = original.match(popImportRe);
-		if (!popMatch) {
-			console.warn(
-				`  ⚠ skip wrap: ${latest.file} has no \`from "@schema-pop/schema"\` import`,
-			);
-			continue;
-		}
-		const existingNames = popMatch[1]!
-			.split(",")
-			.map((n) => n.trim())
-			.filter(Boolean);
-		const namesSet = new Set(existingNames);
-		namesSet.add("schemaPop");
-		namesSet.add("scope");
-		const fixedPopImport = `import { ${[...namesSet].sort().join(", ")} } from "@schema-pop/schema";`;
-		const importsBlock = targetImports.length
-			? `\n${targetImports.join("\n")}`
-			: "";
-
-		const targetsBody =
-			targetLines.length > 0 ? `\n${targetLines.join("\n")}\n\t\t` : "";
-
-		const wrapped = original
-			.replace(popImportRe, `${fixedPopImport}${importsBlock}`)
-			.replace(
-				/export const \$ = scope\(/,
-				`export const $ = schemaPop(\n\t{\n\t\ttargets: [${targetsBody}],\n\t},\n\tscope(`,
-			)
-			.replace(/\}\);(\s*)$/, "}),\n);$1");
-		writeFileSync(path, wrapped);
-	}
+function injectTargets(schemaPkgDir: string, targetsLiteral: string): void {
+	const scriptPath = join(schemaPkgDir, "scripts", "generate.ts");
+	if (!existsSync(scriptPath)) return;
+	const src = readFileSync(scriptPath, "utf-8");
+	writeFileSync(
+		scriptPath,
+		src.replace(/[\t ]*\/\* __TARGETS__ \*\//, targetsLiteral),
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -438,22 +387,6 @@ async function main() {
 						content = content.replace(/example-schema-pop/g, pName);
 						content = content.replace(/schema-pop-test/g, `${pName}-schema`);
 
-						if (filePath.endsWith("pop.config.ts")) {
-							content = `// schema-pop config (v2). The discovery glob defaults to
-// \`./**/*.pop.ts\` when omitted; per-schema targets and layout flags
-// live inside each \`<name>.<version>.pop.ts\` file via
-// \`schemaPop({...}, scope({...}))\`.
-//
-// Reference: https://github.com/3ksoft/schema-pop/blob/main/docs/config.md
-import { defineConfig } from "@schema-pop/schema";
-
-export default defineConfig({
-\tendian: "le",
-\twordSize: 64,
-});
-`;
-						}
-
 						if (filePath.endsWith("package.json")) {
 							try {
 								const pkg = JSON.parse(content);
@@ -527,7 +460,7 @@ export default defineConfig({
 							? join(targetDir, "packages", "schema", "src", "schema")
 							: join(targetDir, "src", "schema");
 
-					const { targetImports, targetLines } = computeTargetsBlock(
+					const targetsLiteral = computeTargets(
 						projectType,
 						selectedHarnesses,
 					);
@@ -552,12 +485,14 @@ export default defineConfig({
 							mkdirSync(schemaDestDir, { recursive: true });
 						}
 						writeFileSync(
-							join(schemaDestDir, "default.1.0.pop.ts"),
-							`import { schemaPop, scope } from "@schema-pop/schema";\n\nexport const $ = scope({\n\t...schemaPop,\n\thasSchema: "boolean",\n});\n`,
+							join(schemaDestDir, "default.1.0.ts"),
+							`import { binary, scope } from "@schema-pop/schema";\n\nexport const $ = scope({\n\t...binary.import(),\n\tTelemetry: {\n\t\tid: "u32",\n\t\tvalue: "f32",\n\t\tactive: "bool",\n\t},\n});\n`,
 						);
 					}
 
-					injectSchemaPopWraps(schemaDestDir, targetImports, targetLines);
+					// Schema package root = parent of `src/schema`.
+					const schemaPkgDir = join(schemaDestDir, "..", "..");
+					injectTargets(schemaPkgDir, targetsLiteral);
 
 					s.stop("Project structure created!");
 					if (isInteractive) {

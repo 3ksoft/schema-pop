@@ -185,7 +185,7 @@ pub trait PopAlloc: Sized {
 // END COMMON RUST RUNTIME
 `;
 
-export function rust(config: RustConfig): ExporterPlugin<RustConfig> {
+export function rust(config: RustConfig): ExporterPlugin<RustConfig, string> {
 	const cfg: RustConfig = {
 		fieldNaming: "snake_case",
 		typeNaming: "PascalCase",

@@ -16,20 +16,16 @@ import { $ } from "bun";
  * combinations and verifies the *static shape* of the emitted files:
  *
  *   1. exit code 0 from the scaffold step
- *   2. v2 conventions in the emitted files
- *      (defineConfig in pop.config.ts, no v1 `schemas: [{ versions:
- *       [...] }]` syntax, all schema files end in `.pop.ts`, latest
- *       version wraps with `schemaPop({ targets: [...] }, scope({...}))`)
- *   3. injected target imports cover every `<exporter>(...)` usage in
- *      the wrap — catches the regex-only injection bug where bundled
- *      schemas with non-canonical `import { scope, binary } from
- *      "schema-pop"` left `schemaPop` unimported.
- *   4. injected file is balanced (parens / braces / brackets) — cheap
- *      sanity check on the string-based wrap insertion.
- *   5. `bun install` + `bun run generate` are NOT exercised here —
- *      `bun add` against `file:` deps doesn't copy package contents
- *      reliably and the existing Verdaccio test in `create.test.ts`
- *      already covers the install / generate path end-to-end.
+ *   2. imperative conventions in the emitted files: NO `pop.config.ts`
+ *      (the config-file builder is gone), a `scripts/generate.ts` that
+ *      imports `@schema-pop/core` + `exportPlan` and has its
+ *      `/* __TARGETS__ *\/` placeholder spliced into a real TARGETS list,
+ *      schema files are plain `scope({...})` (no `schemaPop(...)` wrap)
+ *      and all parse via `Bun.Transpiler`.
+ *   3. `bun install` + `bun run generate` are NOT exercised here — the
+ *      Verdaccio test in `create.test.ts` covers publish / install /
+ *      generate / harness-compile end-to-end (workspace:* file: deps
+ *      don't resolve outside the monorepo, so a local install can't run).
  *
  * The matrix is deliberately broad: minimal project, monorepo with
  * subset of harnesses, full `--type all`. Each combination shares the
@@ -106,79 +102,52 @@ describe("create-schema-pop scaffold matrix", () => {
 				expect(scaffold.exitCode).toBe(0);
 				expect(existsSync(projectDir)).toBe(true);
 
-				// project type → flat layout (root pop.config.ts + src/schema/);
-				// monorepo / all → packages/schema/{pop.config.ts,src/schema}/
+				// project type → flat layout (schema pkg = project root);
+				// monorepo / all → packages/schema/
 				const schemaPkgDir =
 					combo.type === "project"
 						? projectDir
 						: join(projectDir, "packages/schema");
-				expect(existsSync(join(schemaPkgDir, "pop.config.ts"))).toBe(true);
 
-				// pop.config.ts must be v2: defineConfig, no `schemas: [{...versions:` field
-				const popCfgPath = join(schemaPkgDir, "pop.config.ts");
-				const popCfg = readFileSync(popCfgPath, "utf8");
-				expect(popCfg).toContain("defineConfig");
-				expect(popCfg).not.toMatch(/schemas\s*:\s*\[\s*\{[^}]*versions\s*:/);
+				// No config-file builder anymore: `pop.config.ts` is gone,
+				// generation is driven by an imperative `scripts/generate.ts`.
+				expect(existsSync(join(schemaPkgDir, "pop.config.ts"))).toBe(false);
 
-				// Syntactic parse-check via Bun.Transpiler — catches
-				// JSDoc-`*/`-collisions, mismatched quotes, etc. without
-				// needing dependencies installed.
-				expect(() =>
-					new Bun.Transpiler({ loader: "ts" }).transformSync(popCfg),
+				const genPath = join(schemaPkgDir, "scripts", "generate.ts");
+				expect(existsSync(genPath), "scripts/generate.ts missing").toBe(true);
+				const genSrc = readFileSync(genPath, "utf8");
+				expect(genSrc).toMatch(/from\s+["']@schema-pop\/core["']/);
+				expect(genSrc).toMatch(/exportPlan/);
+				// The `/* __TARGETS__ */` placeholder must have been spliced out
+				// and replaced with a real TARGETS list.
+				expect(genSrc).not.toContain("__TARGETS__");
+				expect(genSrc).toMatch(/const TARGETS[\s\S]*?target:\s*["']/);
+				expect(
+					() => new Bun.Transpiler({ loader: "ts" }).transformSync(genSrc),
+					"generate.ts doesn't parse",
 				).not.toThrow();
 
-				// Every schema file must end in `.pop.ts(x)`
+				// Schema files: plain arktype scopes ending in `.ts(x)`, no
+				// leftover `schemaPop(...)` builder wrap, and they parse.
 				const schemaSrcDir = join(schemaPkgDir, "src/schema");
 				const schemaFiles = existsSync(schemaSrcDir)
 					? readdirSync(schemaSrcDir)
 					: [];
+				expect(schemaFiles.length, "no schema files emitted").toBeGreaterThan(
+					0,
+				);
 				for (const f of schemaFiles) {
-					expect(f).toMatch(/\.pop\.tsx?$/);
-				}
-
-				// Latest version of each schema family must be wrapped with schemaPop({...})
-				const families = new Map<string, string[]>();
-				for (const f of schemaFiles) {
-					const m = f.match(/^(.+?)\.([0-9][0-9.]*)\.pop\.tsx?$/);
-					if (!m) continue;
-					const list = families.get(m[1]!) ?? [];
-					list.push(f);
-					families.set(m[1]!, list);
-				}
-				for (const [name, fs] of families) {
-					fs.sort();
-					const latest = fs[fs.length - 1]!;
-					const src = readFileSync(join(schemaSrcDir, latest), "utf8");
-					expect(src, `${name}: missing schemaPop wrap`).toMatch(
-						/schemaPop\(\s*\{/,
+					expect(f).toMatch(/\.tsx?$/);
+					const src = readFileSync(join(schemaSrcDir, f), "utf8");
+					expect(src, `${f}: leftover schemaPop wrap`).not.toMatch(
+						/schemaPop\s*\(/,
 					);
-					expect(src, `${name}: schemaPop not imported`).toMatch(
-						/import\s*\{[^}]*schemaPop[^}]*\}\s*from\s*["']@schema-pop\/schema["']/,
+					expect(src, `${f}: expected a scope(...) export`).toMatch(
+						/export const \$\s*=\s*scope\(/,
 					);
-
-					// Every exporter referenced in the wrap body must actually
-					// be imported. Catches the regex-only inject bug that left
-					// `ts(...)` / `rust(...)` / etc. dangling.
-					const wrapBody =
-						src.match(/schemaPop\(\s*\{[\s\S]*?\),?\s*scope\(/)?.[0] ?? "";
-					const callees = new Set<string>();
-					for (const m of wrapBody.matchAll(/\b([a-z][a-zA-Z0-9]*)\(\{?/g)) {
-						const fn = m[1]!;
-						if (fn !== "schemaPop") callees.add(fn);
-					}
-					for (const fn of callees) {
-						expect(src, `${name}: ${fn} called but not imported`).toMatch(
-							new RegExp(
-								`import\\s*\\{[^}]*\\b${fn}\\b[^}]*\\}\\s*from\\s*["']@schema-pop/`,
-							),
-						);
-					}
-
-					// Bun.Transpiler parse-check on the wrapped schema — final
-					// gatekeeper for the string-based wrap injection.
 					expect(
 						() => new Bun.Transpiler({ loader: "ts" }).transformSync(src),
-						`${name}: schema source doesn't parse`,
+						`${f}: schema source doesn't parse`,
 					).not.toThrow();
 				}
 

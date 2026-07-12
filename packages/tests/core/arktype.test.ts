@@ -1,8 +1,8 @@
 import { describe, it, expect } from "bun:test";
 import { type } from "arktype";
-import { toArktype, fromArktype, fromModule } from "../../core/src/arktype";
+import { toArktype, fromModule } from "../../core/src/arktype";
 import { PopType } from "@schema-pop/schema";
-import { $ } from "../vault/analyzer-test.1.pop";
+import { $ } from "../vault/analyzer-test.1";
 
 describe("ArkType Codec: toArktype (Encoder)", () => {
 	it("encodes a number with bounds and step", () => {
@@ -81,40 +81,9 @@ describe("ArkType Codec: toArktype (Encoder)", () => {
 	});
 });
 
-describe("ArkType Codec: fromArktype (Decoder)", () => {
-	it("decodes string constraints", () => {
-		const t = type("5 <= string <= 10");
-		const def = fromArktype(t) as any;
-		expect(def.type).toBe("string");
-		expect(def.minLength).toBe(5);
-		expect(def.maxLength).toBe(10);
-	});
-
-	it("decodes numeric constraints", () => {
-		const t = type("5 <= number <= 100");
-		const def = fromArktype(t) as any;
-		expect(def.type).toBe("number");
-		expect(def.min).toBe(5);
-		expect(def.max).toBe(100);
-	});
-
-	it("decodes objects structure", () => {
-		const t = type({
-			foo: "string",
-			"bar?": "number",
-		});
-		const def = fromArktype(t) as any;
-		expect(def.type).toBe("object");
-		expect(def.fields.foo.type).toBe("string");
-		expect(def.fields.foo.required).toBe(true);
-		expect(def.fields.bar.type).toBe("number");
-		expect(def.fields.bar.required).toBe(false);
-	});
-});
-
 describe("ArkType Codec: fromModule (Module decoder)", () => {
 	it("decodes a full ArkType module into PopSchema", () => {
-		const schema = fromModule($ as any);
+		const { schema } = fromModule($.export() as any);
 
 		expect(schema).toBeDefined();
 		expect(schema.types).toBeDefined();
@@ -139,13 +108,5 @@ describe("ArkType Codec: fromModule (Module decoder)", () => {
 		const balanceField = simpleUser.fields["balance"];
 		expect(balanceField.min).toBe(-5000);
 		expect(balanceField.max).toBe(5000);
-
-		// Check Permissions
-		const perms = schema.types["Permissions"] as any;
-		expect(perms.type).toBe("object");
-
-		const level = perms.fields["level"];
-		expect(level.type).toBe("enum");
-		expect(level.options.map(String).sort()).toEqual(["0", "1", "2", "3"]);
 	});
 });

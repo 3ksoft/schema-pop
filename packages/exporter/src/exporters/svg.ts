@@ -312,7 +312,9 @@ function renderAlias(t: any, cfg: SvgConfig): string {
 	return svgWrap(cfg.width!, totalH, body, `${t.name} alias`);
 }
 
-export function svg(config: SvgConfig = {}): ExporterPlugin<SvgConfig> {
+export function svg(
+	config: SvgConfig = {},
+): ExporterPlugin<SvgConfig, Record<string, string>> {
 	const cfg = {
 		width: 800,
 		rowHeight: 36,

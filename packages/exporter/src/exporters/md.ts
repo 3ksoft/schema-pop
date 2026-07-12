@@ -33,7 +33,7 @@ export interface MdConfig extends Omit<BaseConfig, "commentStyle"> {
  * enum, alias) followed by functions when present. Designed for
  * embedding in a docs site (mkdocs / docusaurus / GH Pages).
  */
-export function md(config: MdConfig = {}): ExporterPlugin<MdConfig> {
+export function md(config: MdConfig = {}): ExporterPlugin<MdConfig, string> {
 	const cfg: MdConfig = {
 		commentStyle: "none",
 		fieldNaming: "original",

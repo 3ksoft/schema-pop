@@ -120,7 +120,7 @@ cli
 
 					if (typeof importerFunc === "function") {
 						schema = await importerFunc({
-							name: filePath.replace(/\.pop\.(ts|json|tsx)$/, ""),
+							name: filePath.replace(/\.(ts|tsx|json)$/, ""),
 							contents: source,
 							config: null,
 						});
@@ -138,7 +138,7 @@ cli
 				}
 
 				const analyzer = new SchemaAnalyzer();
-				const plan = analyzer.analyze(schema);
+				const { plan } = analyzer.analyze(schema);
 
 				if (options.analyzer) {
 					console.log(jsonDump(schema, options.multiline));
@@ -180,7 +180,7 @@ cli
 				const content = generated;
 
 				const outName =
-					filePath.replace(/\.pop\.(ts|json|tsx)$/, "") + `.${targetType}`;
+					filePath.replace(/\.(ts|tsx|json)$/, "") + `.${targetType}`;
 				const outPath =
 					config.target.path === "stdout"
 						? null

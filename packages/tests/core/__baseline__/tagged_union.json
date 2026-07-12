@@ -1,10 +1,12 @@
 {
+  "schemaName": "Schema",
+  "endian": "le",
   "wordSize": "64",
-  "autoLayout": false,
+  "autoSort": false,
+  "autoPack": false,
   "layout": "aligned",
   "mode": "binary",
   "version": "1.0.0",
-  "endian": "le",
   "types": [
     {
       "kind": "enum",
@@ -25,7 +27,7 @@
         }
       ],
       "underlyingType": "u8",
-      "syntetic": true
+      "synthetic": true
     },
     {
       "kind": "struct",
@@ -37,20 +39,27 @@
         {
           "name": "x",
           "type": {
-            "kind": "primitive",
-            "name": "u8",
+            "type": "number",
+            "min": 0,
+            "max": 255,
             "size": 1,
             "align": 1,
+            "description": "unsigned 8-bit integer",
+            "popKind": "binary",
+            "isBinary": true,
+            "binaryType": "u8",
+            "label": "x",
+            "required": true,
+            "kind": "primitive",
+            "name": "u8",
             "paddedSize": 1,
-            "bitSize": 8,
-            "popKind": "binary"
+            "bitSize": 8
           },
           "offset": 0,
           "bitOffset": 0,
           "bitSize": 8,
           "size": 1,
-          "paddingAfter": 0,
-          "description": "unsigned 8-bit integer"
+          "paddingAfter": 0
         }
       ],
       "description": ""
@@ -65,20 +74,27 @@
         {
           "name": "y",
           "type": {
-            "kind": "primitive",
-            "name": "u16",
+            "type": "number",
+            "min": 0,
+            "max": 65535,
             "size": 2,
             "align": 2,
+            "description": "unsigned 16-bit integer",
+            "popKind": "binary",
+            "isBinary": true,
+            "binaryType": "u16",
+            "label": "y",
+            "required": true,
+            "kind": "primitive",
+            "name": "u16",
             "paddedSize": 2,
-            "bitSize": 16,
-            "popKind": "binary"
+            "bitSize": 16
           },
           "offset": 0,
           "bitOffset": 0,
           "bitSize": 16,
           "size": 2,
-          "paddingAfter": 0,
-          "description": "unsigned 16-bit integer"
+          "paddingAfter": 0
         }
       ],
       "description": ""
@@ -100,7 +116,8 @@
             "name": "A",
             "indirection": "inline",
             "isForward": false
-          }
+          },
+          "tag": 0
         },
         {
           "name": "B",
@@ -109,12 +126,12 @@
             "name": "B",
             "indirection": "inline",
             "isForward": false
-          }
+          },
+          "tag": 1
         }
       ],
       "discriminant": "kind",
       "description": ""
     }
-  ],
-  "autoSort": false
+  ]
 }

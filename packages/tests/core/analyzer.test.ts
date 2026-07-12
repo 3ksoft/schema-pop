@@ -2,13 +2,14 @@ import { describe, expect, it } from "bun:test";
 import { fromModule, SchemaAnalyzer } from "../../core/src";
 import {
 	AliasPlan,
+	binary,
 	Field,
 	PopSchema,
 	StructPlan,
 	UnionPlan,
 	wgsl
 } from "../../schema/src/";
-import { $ } from "../vault/analyzer-test.1.pop";
+import { $ } from "../vault/analyzer-test.1";
 import { type, scope } from "arktype";
 
 const testMod = $.export();
@@ -22,7 +23,7 @@ describe("SchemaAnalyzer", () => {
 		// Field reordering is now opt-in via autoSort (declaration order is
 		// the default since it preserves stable offsets across schema edits).
 		const analyzer = new SchemaAnalyzer();
-		const plan = analyzer.analyze(schema, { autoSort: true } as any);
+		const { plan } = analyzer.analyze(schema, { autoSort: true } as any);
 
 		const opt = plan.types.find((t) => t.name === "Optimized") as StructPlan;
 		expect(opt?.kind).toBe("struct");
@@ -41,12 +42,34 @@ describe("SchemaAnalyzer", () => {
 	it("should resolve fixed-size arrays without recursion loops", () => {
 		const schema = fromModule(testMod);
 		const analyzer = new SchemaAnalyzer();
-		const plan = analyzer.analyze(schema, { version: "1.0.0" });
+		const { plan } = analyzer.analyze(schema, { version: "1.0.0" });
 
 		const mac = plan.types.find((t) => t.name === "Mac") as AliasPlan;
 		expect(mac?.kind).toBe("alias");
 		expect(mac.type.kind).toBe("array");
 		expect(mac.size).toBe(6);
+	});
+
+	it("reused analyzer instance does not leak synthesized types across analyze() calls", () => {
+		// The vault schema has tagged unions, so analyzing it populates the
+		// analyzer's synthesized-enum caches. A second analyze() on a fresh,
+		// union-free schema must NOT carry those synthesized enums over.
+		const plainMod = scope({
+			...binary.import(),
+			Simple: { n: "u8" },
+		}).export();
+
+		const shared = new SchemaAnalyzer();
+		shared.analyze(fromModule(testMod), { version: "1.0.0" });
+		const reused = shared.analyze(fromModule(plainMod), { version: "1.0.0" }).plan;
+
+		const fresh = new SchemaAnalyzer().analyze(fromModule(plainMod), {
+			version: "1.0.0",
+		}).plan;
+
+		expect(reused.types.map((t) => t.name).sort()).toEqual(
+			fresh.types.map((t) => t.name).sort(),
+		);
 	});
 
 	it.skip("should calculate Union size correctly (1 + padding + max variant)", () => {
@@ -56,7 +79,7 @@ describe("SchemaAnalyzer", () => {
 		// union-tag alignment regressed in layout/analyzer.ts.
 		const schema = fromModule(testMod);
 		const analyzer = new SchemaAnalyzer();
-		const plan = analyzer.analyze(schema, { version: "1.0.0" });
+		const { plan } = analyzer.analyze(schema, { version: "1.0.0" });
 
 		const choice = plan.types.find((t) => t.name === "Choice") as UnionPlan;
 		expect(choice?.kind).toBe("union");
@@ -75,7 +98,7 @@ describe("SchemaAnalyzer", () => {
 		const mod = atomicScope.export();
 		const schema = fromModule(mod);
 		const analyzer = new SchemaAnalyzer();
-		const plan = analyzer.analyze(schema);
+		const { plan } = analyzer.analyze(schema);
 
 		// single_grid is a top-level alias type
 		const single_grid = plan.types.find(

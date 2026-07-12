@@ -3,8 +3,8 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"generate:ts": "bun ../../packages/cli/dist/cli.js .pop.ts -t ts",
-		"generate:js": "bun ../../packages/cli/dist/cli.js .pop.ts -t js",
-		"generate:wgsl": "bun ../../packages/cli/dist/cli.js .pop.ts -t wgsl"
+		"generate:ts": "bun ../../packages/cli/dist/cli.js .ts -t ts",
+		"generate:js": "bun ../../packages/cli/dist/cli.js .ts -t js",
+		"generate:wgsl": "bun ../../packages/cli/dist/cli.js .ts -t wgsl"
 	}
 }

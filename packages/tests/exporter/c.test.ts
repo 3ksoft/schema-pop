@@ -9,7 +9,6 @@ describe("c exporter — useOriginalType", () => {
 		return {
 			endian: "le",
 			wordSize: 64,
-			autoLayout: false,
 			version: "v1",
 			types: [
 				{

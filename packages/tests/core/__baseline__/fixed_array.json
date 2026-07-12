@@ -1,10 +1,12 @@
 {
+  "schemaName": "Schema",
+  "endian": "le",
   "wordSize": "64",
-  "autoLayout": false,
+  "autoSort": false,
+  "autoPack": false,
   "layout": "aligned",
   "mode": "binary",
   "version": "1.0.0",
-  "endian": "le",
   "types": [
     {
       "kind": "struct",
@@ -18,13 +20,20 @@
           "type": {
             "kind": "array",
             "item": {
-              "kind": "primitive",
-              "name": "u8",
+              "type": "number",
+              "min": 0,
+              "max": 255,
               "size": 1,
               "align": 1,
+              "description": "unsigned 8-bit integer",
+              "popKind": "binary",
+              "isBinary": true,
+              "binaryType": "u8",
+              "label": "Item",
+              "kind": "primitive",
+              "name": "u8",
               "paddedSize": 1,
-              "bitSize": 8,
-              "popKind": "binary"
+              "bitSize": 8
             },
             "exactLength": 16
           },
@@ -37,6 +46,5 @@
       ],
       "description": ""
     }
-  ],
-  "autoSort": false
+  ]
 }

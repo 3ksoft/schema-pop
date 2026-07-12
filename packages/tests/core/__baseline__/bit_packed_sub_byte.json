@@ -1,10 +1,12 @@
 {
+  "schemaName": "Schema",
+  "endian": "le",
   "wordSize": "64",
-  "autoLayout": false,
+  "autoSort": false,
+  "autoPack": false,
   "layout": "aligned",
   "mode": "binary",
   "version": "1.0.0",
-  "endian": "le",
   "types": [
     {
       "kind": "struct",
@@ -16,60 +18,80 @@
         {
           "name": "a",
           "type": {
+            "type": "number",
+            "min": 0,
+            "max": 1,
+            "size": 1,
+            "description": "u1 (boolean)",
+            "popKind": "bitwise",
+            "isBinary": true,
+            "binaryType": "u1",
+            "label": "a",
+            "required": true,
             "kind": "primitive",
             "name": "u1",
-            "size": 1,
             "align": 1,
             "paddedSize": 1,
-            "bitSize": 1,
-            "popKind": "bitwise"
+            "bitSize": 1
           },
           "offset": 0,
           "bitOffset": 0,
           "bitSize": 1,
           "size": 1,
-          "paddingAfter": 0,
-          "description": "u1 (boolean)"
+          "paddingAfter": 0
         },
         {
           "name": "b",
           "type": {
+            "type": "number",
+            "min": 0,
+            "max": 7,
+            "size": 1,
+            "description": "unsigned 3-bit integer",
+            "popKind": "bitwise",
+            "isBinary": true,
+            "binaryType": "u3",
+            "label": "b",
+            "required": true,
             "kind": "primitive",
             "name": "u3",
-            "size": 1,
             "align": 1,
             "paddedSize": 1,
-            "bitSize": 3,
-            "popKind": "bitwise"
+            "bitSize": 3
           },
           "offset": 0,
           "bitOffset": 1,
           "bitSize": 3,
           "size": 1,
-          "paddingAfter": 0,
-          "description": "unsigned 3-bit integer"
+          "paddingAfter": 0
         },
         {
           "name": "c",
           "type": {
+            "type": "number",
+            "min": 0,
+            "max": 15,
+            "size": 1,
+            "description": "unsigned 4-bit integer",
+            "popKind": "bitwise",
+            "isBinary": true,
+            "binaryType": "u4",
+            "label": "c",
+            "required": true,
             "kind": "primitive",
             "name": "u4",
-            "size": 1,
             "align": 1,
             "paddedSize": 1,
-            "bitSize": 4,
-            "popKind": "bitwise"
+            "bitSize": 4
           },
           "offset": 0,
           "bitOffset": 4,
           "bitSize": 4,
           "size": 1,
-          "paddingAfter": 0,
-          "description": "unsigned 4-bit integer"
+          "paddingAfter": 0
         }
       ],
       "description": ""
     }
-  ],
-  "autoSort": false
+  ]
 }

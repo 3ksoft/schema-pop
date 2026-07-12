@@ -1,0 +1,355 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`wgsl exporter — struct shape tagged union of differently-sized structs lowers to a word-array alias 1`] = `
+"alias GameObjectTag = u32;
+const GameObjectTag_Obstacle: GameObjectTag = 0u;
+const GameObjectTag_Zone: GameObjectTag = 1u;
+
+struct Zone {
+	bounds: vec4<f32>,
+};
+
+const ZONE_BOUNDS_LEN: u32 = 4u;
+
+struct Obstacle {
+	pos: vec2<f32>,
+	rotation: f32,
+	enabled: bool,
+	static: bool,
+	round: bool,
+};
+
+const OBSTACLE_POS_LEN: u32 = 2u;
+
+alias GameObject = array<u32, 5>;
+
+
+// ==========================================
+// MEMORY HELPERS (Storage Buffers interop)
+// ==========================================
+
+fn unpack_words_to_zone(raw: array<u32, 4>) -> Zone {
+	var out: Zone;
+	out.bounds = vec4<f32>(bitcast<f32>(raw[0u + 0u]), bitcast<f32>(raw[0u + 1u]), bitcast<f32>(raw[0u + 2u]), bitcast<f32>(raw[0u + 3u]));
+	return out;
+}
+
+fn unpack_zone(raw: array<u32, 4>) -> Zone {
+	return unpack_words_to_zone(raw);
+}
+
+fn pack_zone_to_words(unpacked: Zone) -> array<u32, 4> {
+	var out: array<u32, 4>;
+	out[0u + 0u] = bitcast<u32>(unpacked.bounds.x);
+		out[0u + 1u] = bitcast<u32>(unpacked.bounds.y);
+		out[0u + 2u] = bitcast<u32>(unpacked.bounds.z);
+		out[0u + 3u] = bitcast<u32>(unpacked.bounds.w);
+			return out;
+}
+
+fn pack_zone(unpacked: Zone) -> array<u32, 4> {
+	return pack_zone_to_words(unpacked);
+}
+
+fn unpack_words_to_obstacle(raw: array<u32, 4>) -> Obstacle {
+	var out: Obstacle;
+	out.pos = vec2<f32>(bitcast<f32>(raw[0u + 0u]), bitcast<f32>(raw[0u + 1u]));
+	out.rotation = bitcast<f32>(raw[2u]);
+	out.enabled = extractBits(raw[3u], 0u, 8u) != 0u;
+	out.static = extractBits(raw[3u], 8u, 8u) != 0u;
+	out.round = extractBits(raw[3u], 16u, 8u) != 0u;
+	return out;
+}
+
+fn unpack_obstacle(raw: array<u32, 4>) -> Obstacle {
+	return unpack_words_to_obstacle(raw);
+}
+
+fn pack_obstacle_to_words(unpacked: Obstacle) -> array<u32, 4> {
+	var out: array<u32, 4>;
+	out[0u + 0u] = bitcast<u32>(unpacked.pos.x);
+		out[0u + 1u] = bitcast<u32>(unpacked.pos.y);
+			out[2u] = bitcast<u32>(unpacked.rotation);
+	out[3u] = 0u;
+	out[3u] = insertBits(out[3u], select(0u, 1u, unpacked.enabled), 0u, 8u);
+	out[3u] = insertBits(out[3u], select(0u, 1u, unpacked.static), 8u, 8u);
+	out[3u] = insertBits(out[3u], select(0u, 1u, unpacked.round), 16u, 8u);
+	return out;
+}
+
+fn pack_obstacle(unpacked: Obstacle) -> array<u32, 4> {
+	return pack_obstacle_to_words(unpacked);
+}
+
+fn get_game_object_tag(val: array<u32, 5>) -> u32 {
+	return extractBits(val[0u], 0u, 8u);
+}
+
+fn unpack_game_object_as_obstacle(val: array<u32, 5>) -> Obstacle {
+	var tmp: array<u32, 4>;
+	for (var w = 0u; w < 4u; w++) {
+		tmp[w] = val[w + 1u];
+	}
+	return unpack_words_to_obstacle(tmp);
+}
+
+fn pack_game_object_from_obstacle(unpacked: Obstacle) -> array<u32, 5> {
+	var out: array<u32, 5>;
+	let tmp = pack_obstacle_to_words(unpacked);
+	for (var w = 0u; w < 4u; w++) {
+		out[w + 1u] = tmp[w];
+	}
+	out[0u] = insertBits(out[0u], 0u, 0u, 8u);
+	return out;
+}
+
+fn unpack_game_object_as_zone(val: array<u32, 5>) -> Zone {
+	var tmp: array<u32, 4>;
+	for (var w = 0u; w < 4u; w++) {
+		tmp[w] = val[w + 1u];
+	}
+	return unpack_words_to_zone(tmp);
+}
+
+fn pack_game_object_from_zone(unpacked: Zone) -> array<u32, 5> {
+	var out: array<u32, 5>;
+	let tmp = pack_zone_to_words(unpacked);
+	for (var w = 0u; w < 4u; w++) {
+		out[w + 1u] = tmp[w];
+	}
+	out[0u] = insertBits(out[0u], 1u, 0u, 8u);
+	return out;
+}
+
+"
+`;
+
+exports[`wgsl exporter — padding std430 struct with alignment gap emits the referenced type name 1`] = `
+"struct S {
+	tag: f32,
+	v: vec4<f32>,
+};
+
+const S_V_LEN: u32 = 4u;
+
+
+// ==========================================
+// MEMORY HELPERS (Storage Buffers interop)
+// ==========================================
+
+fn unpack_words_to_s(raw: array<u32, 8>) -> S {
+	var out: S;
+	out.tag = bitcast<f32>(raw[0u]);
+	out.v = vec4<f32>(bitcast<f32>(raw[4u + 0u]), bitcast<f32>(raw[4u + 1u]), bitcast<f32>(raw[4u + 2u]), bitcast<f32>(raw[4u + 3u]));
+	return out;
+}
+
+fn unpack_s(raw: array<u32, 8>) -> S {
+	return unpack_words_to_s(raw);
+}
+
+fn pack_s_to_words(unpacked: S) -> array<u32, 8> {
+	var out: array<u32, 8>;
+	out[0u] = bitcast<u32>(unpacked.tag);
+	out[4u + 0u] = bitcast<u32>(unpacked.v.x);
+		out[4u + 1u] = bitcast<u32>(unpacked.v.y);
+		out[4u + 2u] = bitcast<u32>(unpacked.v.z);
+		out[4u + 3u] = bitcast<u32>(unpacked.v.w);
+			return out;
+}
+
+fn pack_s(unpacked: S) -> array<u32, 8> {
+	return pack_s_to_words(unpacked);
+}
+
+"
+`;
+
+exports[`wgsl exporter — padding paddingStyle 'size' output is stable 1`] = `
+"struct S {
+	tag: f32,
+	v: vec4<f32>,
+};
+
+const S_V_LEN: u32 = 4u;
+
+
+// ==========================================
+// MEMORY HELPERS (Storage Buffers interop)
+// ==========================================
+
+fn unpack_words_to_s(raw: array<u32, 8>) -> S {
+	var out: S;
+	out.tag = bitcast<f32>(raw[0u]);
+	out.v = vec4<f32>(bitcast<f32>(raw[4u + 0u]), bitcast<f32>(raw[4u + 1u]), bitcast<f32>(raw[4u + 2u]), bitcast<f32>(raw[4u + 3u]));
+	return out;
+}
+
+fn unpack_s(raw: array<u32, 8>) -> S {
+	return unpack_words_to_s(raw);
+}
+
+fn pack_s_to_words(unpacked: S) -> array<u32, 8> {
+	var out: array<u32, 8>;
+	out[0u] = bitcast<u32>(unpacked.tag);
+	out[4u + 0u] = bitcast<u32>(unpacked.v.x);
+		out[4u + 1u] = bitcast<u32>(unpacked.v.y);
+		out[4u + 2u] = bitcast<u32>(unpacked.v.z);
+		out[4u + 3u] = bitcast<u32>(unpacked.v.w);
+			return out;
+}
+
+fn pack_s(unpacked: S) -> array<u32, 8> {
+	return pack_s_to_words(unpacked);
+}
+
+"
+`;
+
+exports[`wgsl exporter — f64 f64 degrades to u32 (no throw) 1`] = `
+"struct S {
+	x: u32,
+};
+
+
+
+// ==========================================
+// MEMORY HELPERS (Storage Buffers interop)
+// ==========================================
+
+fn unpack_words_to_s(raw: array<u32, 2>) -> S {
+	var out: S;
+	out.x = bitcast<u32>(raw[0u]);
+	return out;
+}
+
+fn unpack_s(raw: array<u32, 2>) -> S {
+	return unpack_words_to_s(raw);
+}
+
+fn pack_s_to_words(unpacked: S) -> array<u32, 2> {
+	var out: array<u32, 2>;
+	out[0u] = bitcast<u32>(unpacked.x);
+	return out;
+}
+
+fn pack_s(unpacked: S) -> array<u32, 2> {
+	return pack_s_to_words(unpacked);
+}
+
+"
+`;
+
+exports[`wgsl exporter — bool bool field stays bool in the logical struct, packed into a u32 word 1`] = `
+"struct S {
+	flag: bool,
+};
+
+
+
+// ==========================================
+// MEMORY HELPERS (Storage Buffers interop)
+// ==========================================
+
+fn unpack_words_to_s(raw: u32) -> S {
+	var out: S;
+	out.flag = extractBits(raw, 0u, 8u) != 0u;
+	return out;
+}
+
+fn unpack_s(raw: u32) -> S {
+	return unpack_words_to_s(raw);
+}
+
+fn pack_s_to_words(unpacked: S) -> u32 {
+	var out: u32;
+	out = 0u;
+	out = insertBits(out, select(0u, 1u, unpacked.flag), 0u, 8u);
+	return out;
+}
+
+fn pack_s(unpacked: S) -> u32 {
+	return pack_s_to_words(unpacked);
+}
+
+"
+`;
+
+exports[`wgsl exporter — bitfields sub-byte fields expand to u32 struct fields with word-packed helpers 1`] = `
+"struct Flags {
+	a: u32,
+	b: u32,
+	c: u32,
+};
+
+
+
+// ==========================================
+// MEMORY HELPERS (Storage Buffers interop)
+// ==========================================
+
+fn unpack_words_to_flags(raw: u32) -> Flags {
+	var out: Flags;
+	out.a = u32(extractBits(raw, 0u, 1u));
+	out.b = u32(extractBits(raw, 1u, 3u));
+	out.c = u32(extractBits(raw, 4u, 4u));
+	return out;
+}
+
+fn unpack_flags(raw: u32) -> Flags {
+	return unpack_words_to_flags(raw);
+}
+
+fn pack_flags_to_words(unpacked: Flags) -> u32 {
+	var out: u32;
+	out = 0u;
+	out = insertBits(out, u32(unpacked.a), 0u, 1u);
+	out = insertBits(out, u32(unpacked.b), 1u, 3u);
+	out = insertBits(out, u32(unpacked.c), 4u, 4u);
+	return out;
+}
+
+fn pack_flags(unpacked: Flags) -> u32 {
+	return pack_flags_to_words(unpacked);
+}
+
+"
+`;
+
+exports[`wgsl exporter — bitfields fields spanning two bytes still round-trip through pack/unpack helpers 1`] = `
+"struct Wide {
+	x: u32,
+	y: u32,
+};
+
+
+
+// ==========================================
+// MEMORY HELPERS (Storage Buffers interop)
+// ==========================================
+
+fn unpack_words_to_wide(raw: u32) -> Wide {
+	var out: Wide;
+	out.x = u32(extractBits(raw, 0u, 5u));
+	out.y = u32(extractBits(raw, 8u, 5u));
+	return out;
+}
+
+fn unpack_wide(raw: u32) -> Wide {
+	return unpack_words_to_wide(raw);
+}
+
+fn pack_wide_to_words(unpacked: Wide) -> u32 {
+	var out: u32;
+	out = 0u;
+	out = insertBits(out, u32(unpacked.x), 0u, 5u);
+	out = insertBits(out, u32(unpacked.y), 8u, 5u);
+	return out;
+}
+
+fn pack_wide(unpacked: Wide) -> u32 {
+	return pack_wide_to_words(unpacked);
+}
+
+"
+`;

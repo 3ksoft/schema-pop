@@ -8,7 +8,8 @@
 		"paths": {
 			"@schema-pop/schema": ["../schema/src/index.ts"],
 			"@schema-pop/exporter": ["../exporter/src/index.ts"],
-			"@schema-pop/importer": ["../importer/src/index.ts"]
+			"@schema-pop/importer": ["../importer/src/index.ts"],
+			"@schema-pop/core": ["../core/src/index.ts"]
 		}
 	},
 	"include": ["**/*.ts", "**/*.tsx"]

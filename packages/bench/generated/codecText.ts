@@ -3,113 +3,50 @@
 export type Message = any;
 export type ChatBatch = any;
 
-const __textDecoder =
-	typeof TextDecoder !== "undefined" ? new TextDecoder() : null;
-const __textEncoder =
-	typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
+const __textDecoder = typeof TextDecoder !== "undefined" ? new TextDecoder() : null;
+const __textEncoder = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
 
-export function deserializeMessage(
-	view: DataView,
-	offset: number,
-	outObj?: any,
-): Message {
+export const SIZEOF_Message = 304;
+export const SIZEOF_ChatBatch = 1220;
+export const CHAT_BATCH_MESSAGES_LEN = 4;
+
+export function deserializeMessage(view: DataView, offset: number, outObj?: any): Message {
 	if (!outObj) {
 		return {
-			body: ((o) => {
-				const l = view.getUint32(o, true);
-				return __textDecoder!.decode(
-					new Uint8Array(view.buffer, view.byteOffset + o + 4, l),
-				);
-			})(offset + 0),
-			flags: view.getUint8(offset + 260),
-			sender: ((o) => {
-				const l = view.getUint32(o, true);
-				return __textDecoder!.decode(
-					new Uint8Array(view.buffer, view.byteOffset + o + 4, l),
-				);
-			})(offset + 264),
-			timestamp: view.getUint32(offset + 300, true),
+			sender: ((o) => { const l = view.getUint32(o, true); return __textDecoder!.decode(new Uint8Array(view.buffer, view.byteOffset + o + 4, l)); })(offset + 0),
+			body: ((o) => { const l = view.getUint32(o, true); return __textDecoder!.decode(new Uint8Array(view.buffer, view.byteOffset + o + 4, l)); })(offset + 36),
+			timestamp: view.getUint32(offset + 296, true),
+			flags: view.getUint8(offset + 300),
 		} as any;
 	}
-	outObj.body = ((o) => {
-		const l = view.getUint32(o, true);
-		return __textDecoder!.decode(
-			new Uint8Array(view.buffer, view.byteOffset + o + 4, l),
-		);
-	})(offset + 0);
-	outObj.flags = view.getUint8(offset + 260);
-	outObj.sender = ((o) => {
-		const l = view.getUint32(o, true);
-		return __textDecoder!.decode(
-			new Uint8Array(view.buffer, view.byteOffset + o + 4, l),
-		);
-	})(offset + 264);
-	outObj.timestamp = view.getUint32(offset + 300, true);
+	outObj.sender = ((o) => { const l = view.getUint32(o, true); return __textDecoder!.decode(new Uint8Array(view.buffer, view.byteOffset + o + 4, l)); })(offset + 0);
+	outObj.body = ((o) => { const l = view.getUint32(o, true); return __textDecoder!.decode(new Uint8Array(view.buffer, view.byteOffset + o + 4, l)); })(offset + 36);
+	outObj.timestamp = view.getUint32(offset + 296, true);
+	outObj.flags = view.getUint8(offset + 300);
 	return outObj;
 }
 
-export function serializeMessage(
-	val: Message,
-	view: DataView,
-	offset: number,
-): void {
-	{
-		const bytes = __textEncoder!.encode(val.body);
-		const len = Math.min(bytes.length, 255);
-		view.setUint32(offset + 0, len, true);
-		new Uint8Array(view.buffer, view.byteOffset + offset + 0 + 4, 255).fill(0);
-		new Uint8Array(view.buffer, view.byteOffset + offset + 0 + 4, len).set(
-			bytes.subarray(0, len),
-		);
-	}
-	view.setUint8(offset + 260, val.flags);
-	{
-		const bytes = __textEncoder!.encode(val.sender);
-		const len = Math.min(bytes.length, 31);
-		view.setUint32(offset + 264, len, true);
-		new Uint8Array(view.buffer, view.byteOffset + offset + 264 + 4, 31).fill(0);
-		new Uint8Array(view.buffer, view.byteOffset + offset + 264 + 4, len).set(
-			bytes.subarray(0, len),
-		);
-	}
-	view.setUint32(offset + 300, val.timestamp, true);
+export function serializeMessage(val: Message, view: DataView, offset: number): void {
+	{ const bytes = __textEncoder!.encode(val.sender); const len = Math.min(bytes.length, 31); view.setUint32(offset + 0, len, true); new Uint8Array(view.buffer, view.byteOffset + offset + 0 + 4, 31).fill(0); new Uint8Array(view.buffer, view.byteOffset + offset + 0 + 4, len).set(bytes.subarray(0, len)); }
+	{ const bytes = __textEncoder!.encode(val.body); const len = Math.min(bytes.length, 255); view.setUint32(offset + 36, len, true); new Uint8Array(view.buffer, view.byteOffset + offset + 36 + 4, 255).fill(0); new Uint8Array(view.buffer, view.byteOffset + offset + 36 + 4, len).set(bytes.subarray(0, len)); }
+	view.setUint32(offset + 296, val.timestamp, true);
+	view.setUint8(offset + 300, val.flags);
 }
 
-export function deserializeChatBatch(
-	view: DataView,
-	offset: number,
-	outObj?: any,
-): ChatBatch {
+export function deserializeChatBatch(view: DataView, offset: number, outObj?: any): ChatBatch {
 	if (!outObj) {
 		return {
 			batchId: view.getUint32(offset + 0, true),
-			messages: ((o) => {
-				const a: any[] = [];
-				for (let i = 0; i < 4; i++)
-					a.push(deserializeMessage(view, o + i * 304));
-				return a;
-			})(offset + 4),
+			messages: ((o) => { const a: any[] = []; for(let i=0; i<4; i++) a.push(deserializeMessage(view, o + (i * 304))); return a; })(offset + 4),
 		} as any;
 	}
 	outObj.batchId = view.getUint32(offset + 0, true);
-	outObj.messages = ((o) => {
-		const a: any[] = [];
-		for (let i = 0; i < 4; i++) a.push(deserializeMessage(view, o + i * 304));
-		return a;
-	})(offset + 4);
+	outObj.messages = ((o) => { const a: any[] = []; for(let i=0; i<4; i++) a.push(deserializeMessage(view, o + (i * 304))); return a; })(offset + 4);
 	return outObj;
 }
 
-export function serializeChatBatch(
-	val: ChatBatch,
-	view: DataView,
-	offset: number,
-): void {
+export function serializeChatBatch(val: ChatBatch, view: DataView, offset: number): void {
 	view.setUint32(offset + 0, val.batchId, true);
-	{
-		const o = offset + 4;
-		for (let i = 0; i < 4; i++) {
-			serializeMessage(val.messages[i]!, view, o + i * 304);
-		}
-	}
+	{ const o = offset + 4; for(let i=0; i<4; i++) { serializeMessage(val.messages[i]!, view, o + (i * 304)); } }
 }
+

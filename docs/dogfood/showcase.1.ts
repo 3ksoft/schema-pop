@@ -7,32 +7,24 @@
 //   1. Primitive scalars     — u8..u128, i8..i128, f32/f64, bool
 //   2. String-literal unions — enums-by-shape
 //   3. Bitwise fields        — u1..u7 packed into one byte
-//   4. Wrappers              — Describe, Scale, Reserved, At, Obsolete, Renamed
+//   4. Wrappers              — Describe, Scale, Reserved, Obsolete, Renamed
 //   5. Arrays + nesting      — fixed, bounded, optional
 //   6. Discriminated union   — `A | B | C` of structs
 //
 // Every line is intentionally small enough to render as a single block
 // in the HTML viewer.
 
-import { type } from "arktype";
-import {
-	At,
-	binary,
-	Describe,
-	Obsolete,
-	Renamed,
-	Reserved,
-	Scale,
-} from "@schema-pop/schema";
+import { schemaPop, popExtensions,binary, scope } from "schema-pop";
+import { html } from "@schema-pop/exporter";
 
-export const $ = type.module({
+export const $ = schemaPop(
+	{
+		// Showcase HTML doubles as the dogfood landing page.
+		targets: [html({ dest: "./index.html" })],
+	},
+	type.module({
 	...binary.import(),
-	Describe: Describe,
-	At: At,
-	Scale: Scale,
-	Obsolete: Obsolete,
-	Reserved: Reserved,
-	Renamed: Renamed,
+	...popExtensions.export(),
 
 	// 1. PRIMITIVES — full coverage of fixed-width integer + float.
 	AllScalars: {
@@ -93,8 +85,7 @@ export const $ = type.module({
 		// `Obsolete<T, "reason">` keeps the field on the wire (so old
 		// readers don't break) but flags it as deprecated in language
 		// output (#[deprecated] in Rust, /** @deprecated */ in TS).
-		legacy_voltage:
-			"Obsolete<u16, 'use voltage instead — kept for v1 firmware'>",
+		legacy_voltage: "Obsolete<u16, 'use voltage instead — kept for v1 firmware'>",
 
 		// `Renamed<T, "oldName">` records that this field used to have
 		// a different name. Migration emitter uses it to generate impl
@@ -112,7 +103,7 @@ export const $ = type.module({
 		flags: "StatusFlags",
 
 		// Optional: codec emits a presence byte; "?" suffix at the key.
-		"note?": "string<255",
+		"note?": "string",
 	},
 
 	SampleBatch: {
@@ -126,14 +117,6 @@ export const $ = type.module({
 		checksum: "u8[] == 16",
 	},
 
-	// `At<T, addr>` pins a field to a literal byte offset within its
-	// struct. Useful for memory-mapped registers / driver headers; the
-	// analyzer adds explicit padding before each pinned field.
-	PinnedRegisters: {
-		ctrl: "At<u32, 64>",
-		status: "At<u32, 68>",
-		data: "At<u64, 72>",
-	},
 
 	// 6. DISCRIMINATED UNION — exporter generates a tagged variant in
 	//    target languages (Rust enum, C tagged struct + union, TS
@@ -146,4 +129,5 @@ export const $ = type.module({
 	},
 
 	Telemetry: "BatteryInfo | SampleBatch | PinnedRegisters | Heartbeat",
-});
+}),
+);

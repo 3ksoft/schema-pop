@@ -64,7 +64,7 @@ function dependencies(t: TypePlan): Set<string> {
 
 export function mermaid(
 	config: MermaidConfig = {},
-): ExporterPlugin<MermaidConfig> {
+): ExporterPlugin<MermaidConfig, string> {
 	const cfg: MermaidConfig = {
 		typeNaming: "original",
 		fieldNaming: "original",

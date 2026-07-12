@@ -34,7 +34,7 @@ const ZIG_PRIMITIVES: Record<string, string> = {
 	boolean: "bool",
 };
 
-export function zig(config: ZigConfig): ExporterPlugin<ZigConfig> {
+export function zig(config: ZigConfig): ExporterPlugin<ZigConfig, string> {
 	const cfg: ZigConfig = {
 		fieldNaming: "snake_case",
 		typeNaming: "PascalCase",

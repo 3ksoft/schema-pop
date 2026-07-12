@@ -28,7 +28,7 @@ export type BrainfuckConfig = typeof BrainfuckConfig.infer;
 
 export function brainfuck(
 	config: BrainfuckConfig,
-): ExporterPlugin<BrainfuckConfig> {
+): ExporterPlugin<BrainfuckConfig, string> {
 	const cfg = { commentStyle: "none", ...config } as BrainfuckConfig;
 	return {
 		name: "brainfuck",

@@ -14,7 +14,7 @@ export interface TsExportsConfig extends Omit<BaseConfig, "commentStyle"> {
 
 export function tsExports(
 	config: TsExportsConfig,
-): ExporterPlugin<TsExportsConfig> {
+): ExporterPlugin<TsExportsConfig, string> {
 	const cfg = {
 		fieldNaming: "original",
 		typeNaming: "original",
@@ -32,7 +32,7 @@ export function tsExports(
 				? `import { ${scopeVar} } from ${JSON.stringify(config.importFrom)};\n\n`
 				: "",
 		generate: (plan: LayoutPlan) => {
-			const visibleTypes = plan.types.filter((t) => !(t as any).syntetic);
+			const visibleTypes = plan.types.filter((t) => !(t as any).synthetic);
 			const unions = plan.types.filter(
 				(t) => t.kind === "union",
 			) as UnionPlan[];

@@ -143,7 +143,6 @@ export const $ = scope({
 		schemaName: "string",
 		endian: "'le' | 'be'",
 		wordSize: "'32' | '64'",
-		autoLayout: "boolean",
 		// When true, reorder struct fields by descending align (greedy pack)
 		// before assigning offsets. Default false: keep declaration order
 		// from the source schema so std140/std430 layouts are predictable
@@ -167,7 +166,6 @@ export const PopSchemaSettingsDefaults = {
 	schemaName: "Schema",
 	endian: "le",
 	wordSize: "32",
-	autoLayout: true,
 	autoSort: false,
 	autoPack: false,
 	layout: "aligned",

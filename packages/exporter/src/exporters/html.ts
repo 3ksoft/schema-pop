@@ -205,7 +205,7 @@ function jsonScript(payload: any): string {
 		.replace(/&/g, "\\u0026");
 }
 
-export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig> {
+export function html(config: HtmlConfig = {}): ExporterPlugin<HtmlConfig, string> {
 	const cfg: HtmlConfig = {
 		commentStyle: "none",
 		title: "schema-pop · report",

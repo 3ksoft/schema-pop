@@ -31,7 +31,7 @@
     },
     "packages/cli": {
       "name": "schema-pop",
-      "version": "0.1.42",
+      "version": "0.2.0",
       "bin": {
         "schema-pop": "./dist/cli.js",
       },
@@ -48,7 +48,7 @@
     },
     "packages/core": {
       "name": "@schema-pop/core",
-      "version": "0.1.43",
+      "version": "0.2.0",
       "dependencies": {
         "@ark/schema": "0.56.0",
         "@schema-pop/schema": "workspace:*",
@@ -62,7 +62,7 @@
     },
     "packages/create": {
       "name": "create-schema-pop",
-      "version": "0.1.42",
+      "version": "0.2.0",
       "bin": {
         "create-schema-pop": "bin.ts",
       },
@@ -80,7 +80,7 @@
     },
     "packages/exporter": {
       "name": "@schema-pop/exporter",
-      "version": "0.1.43",
+      "version": "0.2.0",
       "dependencies": {
         "@schema-pop/schema": "workspace:*",
       },
@@ -92,7 +92,7 @@
     },
     "packages/importer": {
       "name": "@schema-pop/importer",
-      "version": "0.1.42",
+      "version": "0.2.0",
       "dependencies": {
         "@schema-pop/schema": "workspace:*",
         "@types/xml2js": "^0.4.14",
@@ -102,7 +102,7 @@
     },
     "packages/schema": {
       "name": "@schema-pop/schema",
-      "version": "0.1.43",
+      "version": "0.2.0",
       "dependencies": {
         "@ark/schema": "0.56.0",
         "arkregex": "^0.0.5",

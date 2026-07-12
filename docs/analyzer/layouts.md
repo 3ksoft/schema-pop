@@ -21,17 +21,7 @@ Used when memory efficiency or exact byte-for-byte protocol matching is critical
 *   **Structs/Arrays/Unions:** Alignment is **always 1**.
 *   **Padding:** No padding bytes are ever inserted. Fields are strictly adjacent.
 
-## 3. `std140` (GPU - Uniform Buffer Objects)
-
-A strict OpenGL/Vulkan layout rule designed for safe cross-platform GPU memory mapping. It is notoriously inefficient with memory space due to aggressive padding requirements.
-
-*   **Scalars (N):** Align to their size (e.g., `float` = 4, `double` = 8).
-*   **2-Component Vectors (2N):** Align to 2 * base size (e.g., `vec2` = 8 bytes).
-*   **3/4-Component Vectors (3N/4N):** Align to 4 * base size (e.g., `vec3` and `vec4` both align to 16 bytes).
-*   **Arrays:** *Crucial rule* - The alignment of ANY array, even an array of `float`, is rounded up to the alignment of a `vec4` (16 bytes). The stride between elements is always a multiple of 16 bytes.
-*   **Structs:** The alignment of a struct is equal to the alignment of a `vec4` (16 bytes), and its size is padded to a multiple of 16 bytes.
-
-## 4. `std430` (GPU - Shader Storage Buffer Objects)
+## 3. `std430` (GPU - Shader Storage Buffer Objects)
 
 A newer, more memory-efficient layout for GPUs, used primarily for SSBOs.
 

@@ -35,7 +35,7 @@ const PRIMITIVE_TS: Record<string, string> = {
 	string: "string",
 };
 
-export function ts(config: TsConfig): ExporterPlugin<TsConfig> {
+export function ts(config: TsConfig): ExporterPlugin<TsConfig, string> {
 	const cfg: TsConfig = {
 		fieldNaming: "original",
 		typeNaming: "original",

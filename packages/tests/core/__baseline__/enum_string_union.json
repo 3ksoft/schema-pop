@@ -1,10 +1,12 @@
 {
+  "schemaName": "Schema",
+  "endian": "le",
   "wordSize": "64",
-  "autoLayout": false,
+  "autoSort": false,
+  "autoPack": false,
   "layout": "aligned",
   "mode": "binary",
   "version": "1.0.0",
-  "endian": "le",
   "types": [
     {
       "kind": "enum",
@@ -32,6 +34,5 @@
       "underlyingType": "u8",
       "description": ""
     }
-  ],
-  "autoSort": false
+  ]
 }

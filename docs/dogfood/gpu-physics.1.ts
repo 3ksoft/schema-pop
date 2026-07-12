@@ -16,7 +16,6 @@ import { html, wgsl } from "@schema-pop/exporter";
 export const $ = schemaPop(
 	{
 		layout: "std430",
-		autoLayout: false,
 		targets: [
 			cpp({ dest: "./gpu-physics.wgsl" }),
 			html({ dest: "./gpu-physics.html" }),

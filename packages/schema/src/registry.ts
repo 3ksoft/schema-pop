@@ -21,30 +21,31 @@ export const IMPORTER_REGISTRY = {
 	".m": "objc",
 };
 
+// Single source of truth for CLI-dispatchable exporter targets. The exporter
+// package derives `ExporterTarget` (and, through it, the config map + factory
+// table) from these keys, so a target added/removed here flows through the
+// whole dispatch path and the compiler forces the pieces to stay in sync.
+//
+// Structured-return exporters (tsWebgpu, gpuBindingsTs) are intentionally
+// absent: they return `{ section: contents }` for imperative use and don't go
+// through the string/path `exportPlan` pipeline.
 export const EXPORTER_REGISTRY = {
-	bf: "extra",
 	c: "core",
 	cpp: "core",
-	glsl: "extra",
-	go: "core",
-	html: "extra",
-	"json:random": "core",
-	"json:schema": "extra",
-	md: "core",
-	"md:mermaid": "extra",
 	rust: "core",
 	"rust:serde": "core",
-	svg: "extra",
+	ts: "core",
 	"ts:codec": "core",
 	"ts:exports": "core",
-	"ts:arktype": "core",
-	ts: "core",
-	"vue:nuxt": "extra",
-	wgsl: "extra",
-	"zig:matcher": "extra",
 	zig: "core",
+	md: "core",
+	random: "core",
+	bf: "extra",
+	html: "extra",
+	svg: "extra",
+	mermaid: "extra",
+	wgsl: "extra",
 	"cpp:harness": "extra",
-	"go:harness": "extra",
 	"rust:harness": "extra",
 	"zig:harness": "extra",
 	"bf:harness": "extra",

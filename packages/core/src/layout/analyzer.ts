@@ -21,6 +21,19 @@ interface TagContext {
 	enumName: string;
 }
 
+/**
+ * Result of `SchemaAnalyzer.analyze()`. `plan` is the layout plan exporters
+ * consume; `warnings` surfaces non-fatal diagnostics (lossy degradations,
+ * skipped types) that were previously only reachable via `getWarnings()`.
+ * `errors` is reserved for non-fatal errors — today hard errors still throw,
+ * so on a successful return it is empty.
+ */
+export interface AnalyzeResult {
+	plan: LayoutPlan;
+	warnings: string[];
+	errors: string[];
+}
+
 export class SchemaAnalyzer {
 	private schema!: PopSchema;
 	private scopeNames!: string[];
@@ -35,12 +48,26 @@ export class SchemaAnalyzer {
 	public analyze(
 		schema: PopSchema | ExtractionContext,
 		settings?: PopSchemaSettingsPartial,
-	): LayoutPlan {
+	): AnalyzeResult {
+		// Reset all per-run state so a reused analyzer instance can't leak
+		// caches / errors / synthesized-enum names across calls.
+		this.resolvedPlans = new Map();
+		this.visiting = new Set();
+		this.errors = [];
+		this.warnings = [];
+		this.synthEnumsByHash = new Map();
+		this.synthEnumNames = new Set();
+
 		const mergedSettings = { ...PopSchemaSettingsDefaults, ...settings };
 		this.config = settings ? PopSchemaSettings.assert(mergedSettings) : PopSchemaSettingsDefaults;
-		this.schema = Object.hasOwn(schema, "schema")
-			? (schema as any).schema
-			: schema;
+		// Accept either a bare PopSchema or a full ExtractionContext (the
+		// blessed input — `analyze(fromModule(mod), settings)`). When given a
+		// context, its extraction-phase diagnostics are merged into the result
+		// so callers get one warnings/errors channel instead of two.
+		const ctx = Object.hasOwn(schema, "schema")
+			? (schema as ExtractionContext)
+			: null;
+		this.schema = ctx ? ctx.schema : (schema as PopSchema);
 		this.scopeNames = Object.keys(this.schema.types);
 		const names = this.scopeNames.filter(
 			(n) => !this.getBuiltinPrimitive(n) && n !== "Binary" && n !== "Describe",
@@ -90,10 +117,15 @@ export class SchemaAnalyzer {
 			);
 		}
 
-		return LayoutPlan.assert({
+		const plan = LayoutPlan.assert({
 			...mergedSettings,
 			types: sorted,
 		});
+		return {
+			plan,
+			warnings: [...(ctx?.warnings ?? []), ...this.warnings],
+			errors: [...(ctx?.errors ?? []), ...this.errors],
+		};
 	}
 
 	private error(msg: string) {
@@ -142,7 +174,7 @@ export class SchemaAnalyzer {
 				return 0;
 			}).map((v, i) => ({ name: v, value: i, description: "" })),
 			underlyingType,
-			syntetic: true,
+			synthetic: true,
 		};
 		this.synthEnumsByHash.set(hash, plan);
 		this.synthEnumNames.add(unique);
@@ -564,6 +596,7 @@ export class SchemaAnalyzer {
 				isArray = true;
 				const item = ft.item;
 				if (item?.type === "link") dataTypeName = item.target;
+				else if (item?.binaryType) dataTypeName = item.binaryType;
 				else if (item?.type) dataTypeName = item.type;
 			} else if (ft.type === "link") {
 				dataTypeName = ft.target;
@@ -805,9 +838,6 @@ export class SchemaAnalyzer {
 					name: vName,
 					type: this.resolveFieldType(branch, undefined, `${name}_${vName}`),
 					...(discriminantValue != null ? { discriminantValue } : {}),
-					...(branch.renamedFrom
-						? { migrationMeta: { renamedFrom: branch.renamedFrom } }
-						: {}),
 				} as VariantPlan;
 			},
 		);
