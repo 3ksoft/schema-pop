@@ -54,7 +54,7 @@ export function tsWebgpu(
 
 			const usedDataTypes = new Set<string>();
 			for (const b of bindingPlan.bindings) {
-				if (b.usage !== "texture-2d" && !STATIC_SIZES[b.dataTypeName]) {
+				if (b.usage.split("+")[0] !== "texture-2d" && !STATIC_SIZES[b.dataTypeName]) {
 					usedDataTypes.add(b.dataTypeName);
 				}
 			}
@@ -97,7 +97,8 @@ export function tsWebgpu(
 
 			// === GENEROWANIE STAŁYCH OPISUJĄCYCH BUFORY GPU ===
 			for (const b of bindingPlan.bindings) {
-				if (b.usage === "texture-2d") continue;
+				const [bindingUsage, ...extraUsages] = b.usage.split("+");
+				if (bindingUsage === "texture-2d") continue;
 
 				const rawName = fieldName(b.name);
 				const camelName = toCamelCase(rawName);
@@ -115,10 +116,13 @@ export function tsWebgpu(
 					: `${limit} * SIZEOF_${b.dataTypeName}`;
 
 				let usageStr = "GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC";
-				if (b.usage === "storage-read") {
+				if (bindingUsage === "storage-read") {
 					usageStr = "GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST";
-				} else if (b.usage === "uniform") {
+				} else if (bindingUsage === "uniform") {
 					usageStr = "GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST";
+				}
+				for (const extra of extraUsages) {
+					if (extra === "indirect") usageStr += " | GPUBufferUsage.INDIRECT";
 				}
 
 				code += `export const ${camelName}Buffer = {\n`;
@@ -130,7 +134,7 @@ export function tsWebgpu(
 			}
 
 			// === GENEROWANIE INTERFEJSU I FUNKCJI INICJALIZACJI BUFORÓW NA GPU ===
-			const bufferBindings = bindingPlan.bindings.filter(b => b.usage !== "texture-2d");
+			const bufferBindings = bindingPlan.bindings.filter(b => b.usage.split("+")[0] !== "texture-2d");
 			if (bufferBindings.length > 0) {
 				code += `export interface GpuResources {\n`;
 				for (const b of bufferBindings) {
@@ -173,16 +177,17 @@ export function tsWebgpu(
 				code += `\t\tlabel: "bg${group}Layout",\n`;
 				code += `\t\tentries: [\n`;
 				for (const b of sortedBindings) {
+					const bindingUsage = b.usage.split("+")[0];
 					code += `\t\t\t{\n`;
 					code += `\t\t\t\tbinding: ${b.binding},\n`;
 					code += `\t\t\t\tvisibility: GPUShaderStage.COMPUTE,\n`;
-					if (b.usage === "texture-2d") {
+					if (bindingUsage === "texture-2d") {
 						code += `\t\t\t\ttexture: {},\n`;
 					} else {
 						let typeVal = "storage";
-						if (b.usage === "storage-read") {
+						if (bindingUsage === "storage-read") {
 							typeVal = "read-only-storage";
-						} else if (b.usage === "uniform") {
+						} else if (bindingUsage === "uniform") {
 							typeVal = "uniform";
 						}
 						code += `\t\t\t\tbuffer: { type: "${typeVal}" },\n`;

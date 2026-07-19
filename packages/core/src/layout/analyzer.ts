@@ -584,9 +584,24 @@ export class SchemaAnalyzer {
 			let dataTypeName = "unknown";
 			let isArray = false;
 			if (ft.popKind === "gpu-shader") {
+				const bindingSpec = ft.shaderBindings || "";
+				const shaderBindings = bindingSpec.split(";").filter(Boolean).flatMap((segment) => {
+					const [groupRaw, bindingsRaw] = segment.split(":");
+					const group = Number(groupRaw);
+					if (!Number.isInteger(group) || !bindingsRaw) {
+						throw new Error(`Invalid Shader binding segment '${segment}' in ${name}.${fieldName}`);
+					}
+					return bindingsRaw.split(",").filter(Boolean).map((bindingRaw) => {
+						const binding = Number(bindingRaw);
+						if (!Number.isInteger(binding)) {
+							throw new Error(`Invalid Shader binding '${bindingRaw}' in ${name}.${fieldName}`);
+						}
+						return { group, binding };
+					});
+				});
 				shaders.push({
 					name: fieldName,
-					bindGroups: ft.bindGroups || [],
+					bindings: shaderBindings,
 					entryPoint: ft.entryPoint || "",
 					workGroupSize: ft.workGroupSize || 0,
 				});
@@ -614,6 +629,14 @@ export class SchemaAnalyzer {
 				dataTypeName,
 				isArray,
 			});
+		}
+		const declared = new Set(bindings.map((binding) => `${binding.group}:${binding.binding}`));
+		for (const shader of shaders) {
+			for (const binding of shader.bindings) {
+				if (!declared.has(`${binding.group}:${binding.binding}`)) {
+					throw new Error(`Shader ${name}.${shader.name} references undeclared binding ${binding.group}:${binding.binding}`);
+				}
+			}
 		}
 		return {
 			kind: "gpu-binding-layout",

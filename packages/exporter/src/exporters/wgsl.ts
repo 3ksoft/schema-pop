@@ -95,6 +95,36 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 				return "u32";
 			};
 
+			// Typ członka structa host-shareable (struct z atomikami jest bindowany
+			// bezpośrednio jako storage — nie ma formy packed na poziomie bindingu).
+			// Referencje do zwykłych (pakowanych) structów/aliasów muszą być surowymi
+			// słowami: ich clean-forma może zawierać typy non-host-shareable (bool),
+			// a jej naturalny layout WGSL różni się od layoutu codeca.
+			const getStorageWgslType = (f: Field): string => {
+				if (f.kind === "reference") {
+					const ref = typesMap.get(f.name);
+					if (
+						ref
+						&& (ref.kind === "struct" || ref.kind === "alias")
+						&& !hasAtomics(ref, typesMap)
+					) {
+						const w = getTypeSizeInWords(f.name);
+						return w === 1 ? "u32" : `array<u32, ${w}>`;
+					}
+					// enum (alias u32), union (alias array<u32,N>) i structy z atomikami
+					// są host-shareable 1:1 z layoutem codeca.
+					return getCleanWgslType(f);
+				}
+				if (f.kind === "array") {
+					const len = f.exactLength || f.maxLength || 0;
+					// Wektor u8 codec pakuje do jednego słowa — vec<u32> miałby inny layout.
+					if (len >= 2 && len <= 4 && f.item.kind === "primitive" && f.item.name === "u8") return "u32";
+					if (len >= 2 && len <= 4 && f.item.kind === "primitive") return getCleanWgslType(f);
+					return `array<${getStorageWgslType(f.item)}, ${len}>`;
+				}
+				return getCleanWgslType(f);
+			};
+
 			let typesCode = "";
 			let helpersCode = "";
 
@@ -129,10 +159,20 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 
 				if (t.kind === "struct") {
 					const cleanName = typeName(t.name);
+					const storageNative = hasAtomics(t, typesMap);
+					const memberType = storageNative ? getStorageWgslType : getCleanWgslType;
 					typesCode += `struct ${cleanName} {\n`;
 					for (const f of t.fields) {
 						if (f.type.kind === "unit") continue;
-						typesCode += `\t${fieldName(f.name)}: ${getCleanWgslType(f.type)},\n`;
+						// Plan layoutu rezerwuje dla vec3 pełny 16-bajtowy slot, a naturalny
+						// size vec3 w WGSL to 12 B — bez @size(16) kolejne pole wylądowałoby
+						// na offset+12 i rozjechało się z codec/serializerami CPU.
+						const isVec3 = f.type.kind === "array"
+							&& f.type.item.kind === "primitive"
+							&& f.type.item.name !== "u8"
+							&& (f.type.exactLength || f.type.maxLength) === 3;
+						const attr = storageNative && isVec3 ? "@size(16) " : "";
+						typesCode += `\t${attr}${fieldName(f.name)}: ${memberType(f.type)},\n`;
 					}
 					typesCode += `};\n\n`;
 					for (const f of t.fields) {

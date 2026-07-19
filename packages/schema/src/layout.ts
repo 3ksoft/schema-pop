@@ -174,9 +174,14 @@ export const $layout = scope({
 		isArray: "boolean",
 	},
 
+	GpuShaderBinding: {
+		group: "number",
+		binding: "number",
+	},
+
 	GpuShader: {
 		name: "string",
-		bindGroups: "number[]",
+		bindings: "GpuShaderBinding[]",
 		entryPoint: "string",
 		workGroupSize: "number",
 	},

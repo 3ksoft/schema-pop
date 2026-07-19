@@ -30,7 +30,7 @@ export const ArkMeta = type({
 	"gpuUsage?": "string",
 	"atomic?": "boolean",
 	"entryPoint?": "string",
-	"bindGroups?": "number[]",
+	"shaderBindings?": "string",
 	"workGroupSize?": "number",
 }).and(gui.export().BaseGuiMeta);
 
@@ -212,7 +212,9 @@ export const OriginalType = generic(["t", "unknown"], ["name", "string"])(
  * WGSL `@group(G) @binding(B) var<...>` declarations.
  *
  * Usage: `"Binding<group, binding, usage, Type>"`
- * - `usage`: `'storage-write'` | `'storage-read'` | `'uniform'` | `'texture-2d'`
+ * - `usage`: `'storage-write'` | `'storage-read'` | `'uniform'` | `'texture-2d'`.
+ *   Buffer usages may add WebGPU creation flags with a `+` suffix, e.g.
+ *   `'storage-write+indirect'` for a storage buffer used by dispatchWorkgroupsIndirect.
  * - `Type`: data type for buffers (e.g. `Particle[]`), or format string for textures
  */
 export const Binding = generic(
@@ -238,8 +240,8 @@ export const Binding = generic(
 /**
  * Declares a GPU compute shader for WebGPU pipeline layout generation.
  *
- * Usage: `"Shader<entryPoint, bindGroups, workGroupSize>"`
- * Example: `"Shader<string, 'mpm', [0,1,2,3], 512>"`
+ * Usage: `"Shader<type, entryPoint, bindings, workGroupSize>"`
+ * Example: `"Shader<string, 'mpm', '0:0,1;2:0', 512>"`
  */
 export const Shader = generic(
 	["t", "unknown"],
@@ -248,15 +250,10 @@ export const Shader = generic(
 	["workGroupSize", "number"],
 )(
 	(args) => {
-		const bindGroupsRaw = (args.bindGroups as any).unit as string;
-
-		// Mapujemy string na rzeczywistą tablicę liczb w runtime
-		const bindGroups = bindGroupsRaw
-			? bindGroupsRaw.split(",").map(s => s.trim()).filter(Boolean).map(Number)
-			: [];
+		const shaderBindings = (args.bindGroups as any).unit as string;
 		return (args.t as Type).configure({
 			entryPoint: (args.entryPoint as any).unit,
-			bindGroups: bindGroups,
+			shaderBindings,
 			workGroupSize: (args.workGroupSize as any).unit,
 			popKind: "gpu-shader",
 		});

@@ -11,7 +11,8 @@ import { isGpuBindingPlan } from "./gpuShared";
 export interface GpuBindingsTsConfig extends Omit<BaseConfig, "commentStyle"> { }
 
 function webgpuResource(b: GpuBinding): string {
-	switch (b.usage) {
+	const bindingUsage = b.usage.split("+")[0];
+	switch (bindingUsage) {
 		case "storage-write":
 		case "storage-atomic":
 			return `buffer: { type: "storage" as const }`;
@@ -29,13 +30,6 @@ function webgpuResource(b: GpuBinding): string {
 function generatePipelineCompiler(t: GpuBindingPlan): string {
 	if (!t.shaders || t.shaders.length === 0) return "";
 
-	const declaredGroups = new Set<number>();
-	for (const b of t.bindings) {
-		declaredGroups.add(b.group);
-	}
-	const sortedDeclaredGroups = [...declaredGroups].sort((a, b) => a - b);
-	const layoutsType = `{ ${sortedDeclaredGroups.map(g => `bg${g}: GPUBindGroupLayout`).join("; ")} }`;
-
 	let code = `export interface ${t.name}Pipelines {\n`;
 	for (const s of t.shaders) {
 		code += `\t${s.entryPoint}: GPUComputePipeline;\n`;
@@ -44,48 +38,15 @@ function generatePipelineCompiler(t: GpuBindingPlan): string {
 
 	code += `export async function create${t.name}Pipelines(\n`;
 	code += `\tdevice: GPUDevice,\n`;
-	code += `\tlayouts: ${layoutsType},\n`;
+	code += `\tlayouts: Record<keyof ${t.name}Pipelines, GPUPipelineLayout>,\n`;
 	code += `\tshaderModule: (entryPoint:keyof ${t.name}Pipelines) => GPUShaderModule\n`;
 	code += `): Promise<${t.name}Pipelines> {\n`;
 
-	// Build contiguous layouts by filling gaps with empty bind group layouts
-	const layoutsCode: string[] = [];
-	const shaderToLayoutName = new Map<string, string>();
-	const layoutSet = new Set<string>();
-
-	for (const s of t.shaders) {
-		const sorted = [...s.bindGroups].sort((a, b) => a - b);
-
-		// Build contiguous array: include BG layout where group is used, empty layout for gaps
-		const maxGroup = sortedDeclaredGroups[sortedDeclaredGroups.length - 1];
-		const entries = [];
-		for (let g = 0; g <= maxGroup; g++) {
-			if (sorted.includes(g)) {
-				entries.push(`layouts.bg${g}`);
-			} else {
-				entries.push(`device.createBindGroupLayout({ entries: [] })`);
-			}
-		}
-		const key = sorted.join("-");
-		const layoutVarName = `l_${sorted.map((n: number) => `g${n}`).join("")}`;
-		if (!layoutSet.has(key)) {
-			layoutSet.add(key);
-			layoutsCode.push(`\tconst ${layoutVarName} = device.createPipelineLayout({ bindGroupLayouts: [${entries.join(", ")}] });`);
-		}
-		shaderToLayoutName.set(s.entryPoint, layoutVarName);
-	}
-
-	for (const line of layoutsCode) {
-		code += `${line}\n`;
-	}
-	code += `\n`;
-
 	code += `\treturn {\n`;
 	for (const s of t.shaders) {
-		const layoutVar = shaderToLayoutName.get(s.entryPoint);
 		code += `\t\t"${s.entryPoint}": await device.createComputePipelineAsync({\n`;
 		code += `\t\t\tlabel: "pipeline_${s.entryPoint}",\n`;
-		code += `\t\t\tlayout: ${layoutVar},\n`;
+		code += `\t\t\tlayout: layouts["${s.entryPoint}"],\n`;
 		code += `\t\t\tcompute: { module: shaderModule("${s.entryPoint}"), entryPoint: "${s.entryPoint}" }\n`;
 		code += `\t\t}),\n`;
 	}
@@ -98,13 +59,16 @@ function generatePipelineCompiler(t: GpuBindingPlan): string {
 function generatePipelineMetadata(t: GpuBindingPlan): string {
 	if (!t.shaders || t.shaders.length === 0) return "";
 
-	let code = `export const ${t.name.toUpperCase()}_PIPELINE_BIND_GROUPS: Record<string, number[]> = {\n`;
+	let code = `export const ${t.name.toUpperCase()}_PIPELINE_BINDINGS = {\n`;
 
 	for (const s of t.shaders) {
-		const sortedGroups = [...s.bindGroups].sort((a, b) => a - b);
-		code += `\t"${s.entryPoint}": [${sortedGroups.join(", ")}],\n`;
+		const sorted = [...s.bindings].sort((a, b) => a.group - b.group || a.binding - b.binding);
+		code += `\t"${s.entryPoint}": [${sorted.map(b => `[${b.group}, ${b.binding}]`).join(", ")}],\n`;
 	}
-	code += `} as const;\n\n`;
+	code += `} as const satisfies Record<string, readonly (readonly [number, number])[]>;\n\n`;
+	code += `export const ${t.name.toUpperCase()}_PIPELINE_BIND_GROUPS: Record<string, number[]> = Object.fromEntries(\n`;
+	code += `\tObject.entries(${t.name.toUpperCase()}_PIPELINE_BINDINGS).map(([name, bindings]) => [name, [...new Set(bindings.map(([group]) => group))]])\n`;
+	code += `);\n\n`;
 	return code;
 }
 

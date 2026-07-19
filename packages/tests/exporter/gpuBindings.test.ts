@@ -1,13 +1,13 @@
 /// <reference types="@types/bun" />
 import { describe, test, expect } from "bun:test";
 import { type } from "arktype";
-import { binary, Binding } from "@schema-pop/schema";
-import { gpuBindingsTs } from "@schema-pop/exporter";
+import { binary, Binding, Shader } from "@schema-pop/schema";
+import { gpuBindingsTs, tsWebgpu } from "@schema-pop/exporter";
 import { analyze } from "./utils";
 
 function mkPlan(schema: any) {
 	return analyze(
-		type.module({ ...binary.import(), Binding, ...schema }),
+		type.module({ ...binary.import(), Binding, Shader, ...schema }),
 		"v1",
 	);
 }
@@ -45,6 +45,17 @@ describe("gpuBindingsTs", () => {
 	test("storage-read maps to buffer type read-only-storage", () => {
 		const { bindings: out } = gpuBindingsTs({ dest: "out.ts" }).generate(physicsPlan) as { bindings: string };
 		expect(out).toContain('buffer: { type: "read-only-storage" as const }');
+	});
+
+	test("storage-write+indirect keeps storage binding and adds INDIRECT buffer usage", () => {
+		const plan = mkPlan({
+			Dispatch: { x: "u32", y: "u32", z: "u32" },
+			Gpu: { args: "Binding<0, 0, 'storage-write+indirect', Dispatch>" },
+		});
+		const { bindings } = gpuBindingsTs({ dest: "out.ts" }).generate(plan) as { bindings: string };
+		const { code } = tsWebgpu({ dest: "out.ts" }).generate(plan) as { code: string };
+		expect(bindings).toContain('buffer: { type: "storage" as const }');
+		expect(code).toContain("GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC | GPUBufferUsage.INDIRECT");
 	});
 
 	test("uniform maps to buffer type uniform", () => {
@@ -87,5 +98,30 @@ describe("gpuBindingsTs", () => {
 		const plan = mkPlan({ Particle: { x: "f32", y: "f32" } });
 		const { bindings: out } = gpuBindingsTs({ dest: "out.ts" }).generate(plan) as { bindings: string };
 		expect(out).toBe("");
+	});
+
+	test("shader metadata preserves exact group:binding selections", () => {
+		const plan = mkPlan({
+			Particle: { x: "f32" },
+			Gpu: {
+				a: "Binding<0, 0, 'storage-write', Particle[]>",
+				b: "Binding<0, 1, 'storage-write', Particle[]>",
+				c: "Binding<2, 3, 'storage-write', Particle[]>",
+				step: "Shader<string, 'step', '0:1;2:3', 64>",
+			},
+		});
+		const generated = gpuBindingsTs({ dest: "out.ts" }).generate(plan) as { metadata: string };
+		expect(generated.metadata).toContain('"step": [[0, 1], [2, 3]]');
+		expect(generated.metadata).not.toContain("[0, 0]");
+	});
+
+	test("rejects shader references to undeclared bindings", () => {
+		expect(() => mkPlan({
+			Particle: { x: "f32" },
+			Gpu: {
+				a: "Binding<0, 0, 'storage-write', Particle[]>",
+				step: "Shader<string, 'step', '0:1', 64>",
+			},
+		})).toThrow("undeclared binding 0:1");
 	});
 });
