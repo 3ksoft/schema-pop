@@ -11,8 +11,7 @@
 		"build:importer": "cd packages/importer && bun run build && bun link && cd ../..",
 		"build:cli": "cd packages/cli && bun run build && bun link && cd ../..",
 		"build:core": "cd packages/core && bun run build && bun link && cd ../..",
-		"build": "bun build:schema && bun run build:core && bun run build:cli && bun build:exporter && bun run build:importer && bun run docs:dogfood",
-		"docs:dogfood": "bun packages/cli/src/cli.ts docs/dogfood/pop.config.ts",
+		"build": "bun build:schema && bun run build:core && bun run build:cli && bun build:exporter && bun run build:importer",
 		"typecheck": "cd packages/schema && bun run typecheck && cd ../core && bun run typecheck && cd ../importer && bun run typecheck && cd ../exporter && bun run typecheck && cd ../create && bun run typecheck && cd ../cli && bun run typecheck && cd ../tests && bun run typecheck",
 		"test": "cd packages/core && bun test && cd ../create && bun test",
 		"format": "biome format --write",
@@ -23,8 +22,8 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.14",
-		"@types/node": "^25.6.0",
-		"arktype": "2.2.0",
+		"@types/node": "^25.7.0",
+		"arktype": "2.2.1",
 		"opentype.js": "^2.0.0",
 		"typescript": "~6.0.0",
 		"verdaccio": "^6.5.2"

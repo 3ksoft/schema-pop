@@ -26,9 +26,6 @@ export const IMPORTER_REGISTRY = {
 // table) from these keys, so a target added/removed here flows through the
 // whole dispatch path and the compiler forces the pieces to stay in sync.
 //
-// Structured-return exporters (tsWebgpu, gpuBindingsTs) are intentionally
-// absent: they return `{ section: contents }` for imperative use and don't go
-// through the string/path `exportPlan` pipeline.
 export const EXPORTER_REGISTRY = {
 	c: "core",
 	cpp: "core",

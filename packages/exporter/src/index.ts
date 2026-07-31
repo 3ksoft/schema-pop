@@ -12,7 +12,6 @@ import { rust, type RustConfig } from "./exporters/rust";
 import { ts, type TsConfig } from "./exporters/ts";
 import { tsCodec, type TsCodecConfig } from "./exporters/tsCodec";
 import { tsExports, type TsExportsConfig } from "./exporters/tsExports";
-import { tsWebgpu, type TsWebgpuConfig } from "./exporters/tsWebgpu";
 import { zig, type ZigConfig } from "./exporters/zig";
 import { brainfuck, type BrainfuckConfig } from "./exporters/bf";
 import { html, type HtmlConfig } from "./exporters/html";
@@ -24,10 +23,6 @@ import { rustHarness } from "./exporters/rustHarness";
 import { zigHarness } from "./exporters/zigHarness";
 import { brainfuckHarness } from "./exporters/bfHarness";
 import { rustSerde, type RustSerdeConfig } from "./exporters";
-import {
-	gpuBindingsTs,
-	type GpuBindingsTsConfig,
-} from "./exporters/gpuBindings";
 
 export { c, type CConfig };
 export { cpp, type CppConfig };
@@ -37,7 +32,6 @@ export { rust, type RustConfig };
 export { rustSerde, type RustSerdeConfig };
 export { ts, type TsConfig };
 export { tsCodec, type TsCodecConfig };
-export { tsWebgpu, type TsWebgpuConfig };
 export { tsExports, type TsExportsConfig };
 export { zig, type ZigConfig };
 export { brainfuck, type BrainfuckConfig };
@@ -45,7 +39,6 @@ export { html, type HtmlConfig };
 export { mermaid, type MermaidConfig };
 export { svg, type SvgConfig };
 export { wgsl, type WgslConfig };
-export { gpuBindingsTs, type GpuBindingsTsConfig };
 
 // ── Harness wrappers ──────────────────────────────────────────────────────────
 // Harness exporters take `LayoutPlan[]` (cross-version) and emit a multi-file
@@ -88,10 +81,6 @@ export const bfHarnessExporter = harnessPlugin("bf:harness", () =>
  * the target list, config map, and factory table below can never silently
  * drift — the compiler forces them to match.
  *
- * Structured-return exporters (`tsWebgpu`, `gpuBindingsTs`) are intentionally
- * NOT here: they return `{ section: contents }` for imperative use and can't
- * go through the string/path `exportPlan` pipeline — import and call those
- * factories directly.
  */
 export type ExporterTarget = keyof typeof EXPORTER_REGISTRY;
 

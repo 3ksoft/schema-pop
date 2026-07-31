@@ -52,11 +52,21 @@ export function fromModule(
 		}),
 	};
 
+	// Skip generic definitions (arktype `GenericRoot`, e.g. the `Renamed` /
+	// `Obsolete` / `Scale` markers a user adds to their scope so `"Renamed<...>"`
+	// resolves). They're resolvers, not data types — a Type always has a `.kind`,
+	// a generic never does. Without this they leak into the plan as bogus
+	// `undefined`-typed aliases and every exporter emits junk for them.
+	const isDataType = (exType: any): boolean =>
+		exType != null && exType.kind !== undefined;
+
 	for (const [name, exType] of Object.entries(module)) {
+		if (!isDataType(exType)) continue;
 		ctx.map.set(exType.expression, name);
 	}
 
 	for (const [name, exType] of Object.entries(module)) {
+		if (!isDataType(exType)) continue;
 		// arktype canonicalizes object propsByKey and union branches into
 		// alphabetical order, which destroys the field-declaration order
 		// the user wrote in `scope({...})`. The raw definition is preserved
@@ -99,21 +109,6 @@ function extractBaseRoot(
 ): PopType & ArkMeta {
 	if (!root.kind) return ANY;
 	const linkedName = ctx.map.get(root.expression);
-	if (linkedName && label !== linkedName) {
-		const meta = ArkMeta.assert(root.meta);
-		// Only propagate gpu-binding meta — other Base fields (like label) are
-		// not meaningful on link references and can corrupt union variant names.
-		const gpuMeta =
-			meta.popKind === "gpu-binding"
-				? {
-					popKind: meta.popKind,
-					gpuGroup: meta.gpuGroup,
-					gpuBinding: meta.gpuBinding,
-					gpuUsage: meta.gpuUsage,
-				}
-				: {};
-		return assertPopType({ type: "link", target: linkedName, ...gpuMeta }, ctx);
-	}
 
 	let popType: PopType | null = null;
 

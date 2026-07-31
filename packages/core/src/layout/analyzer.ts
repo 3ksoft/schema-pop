@@ -1,4 +1,4 @@
-import type { ExtractionContext, PopSchemaSettingsPartial } from "@schema-pop/schema";
+import type { EnumVariant, ExtractionContext, PopModule, PopSchemaSettingsPartial } from "@schema-pop/schema";
 import {
 	ArkMeta,
 	EnumPlan,
@@ -16,9 +16,26 @@ import {
 	VariantPlan,
 } from "@schema-pop/schema";
 import { type } from "arktype";
+import type { AnalyzableSchema } from "./helper";
+import { fromModule } from "../arktype";
 interface TagContext {
 	name: string;
 	enumName: string;
+}
+
+export function resolveInputToContext(
+	input: AnalyzableSchema): ExtractionContext | PopSchema {
+	if (input && typeof (input as any).export === "function") {
+		return fromModule((input as any).export());
+	}
+	if (input && typeof input === "object" && "schema" in input && "map" in input) {
+		return input as ExtractionContext;
+	}
+
+	if (input && typeof input === "object" && "types" in input && typeof (input as any).types === "object") {
+		return input as PopSchema;
+	}
+	return fromModule(input as PopModule);
 }
 
 /**
@@ -46,7 +63,7 @@ export class SchemaAnalyzer {
 	private synthEnumNames = new Set<string>();
 
 	public analyze(
-		schema: PopSchema | ExtractionContext,
+		input: AnalyzableSchema,
 		settings?: PopSchemaSettingsPartial,
 	): AnalyzeResult {
 		// Reset all per-run state so a reused analyzer instance can't leak
@@ -60,10 +77,8 @@ export class SchemaAnalyzer {
 
 		const mergedSettings = { ...PopSchemaSettingsDefaults, ...settings };
 		this.config = settings ? PopSchemaSettings.assert(mergedSettings) : PopSchemaSettingsDefaults;
-		// Accept either a bare PopSchema or a full ExtractionContext (the
-		// blessed input — `analyze(fromModule(mod), settings)`). When given a
-		// context, its extraction-phase diagnostics are merged into the result
-		// so callers get one warnings/errors channel instead of two.
+
+		const schema = resolveInputToContext(input);
 		const ctx = Object.hasOwn(schema, "schema")
 			? (schema as ExtractionContext)
 			: null;
@@ -76,6 +91,8 @@ export class SchemaAnalyzer {
 		for (const name of names) {
 			this.getPlan(name);
 		}
+
+		this.alignSubsetEnums();
 
 		const sorted: TypePlan[] = [];
 		const visited = new Set<string>();
@@ -180,6 +197,59 @@ export class SchemaAnalyzer {
 		this.synthEnumNames.add(unique);
 		this.resolvedPlans.set(unique, plan);
 		return unique;
+	}
+
+	// Subset-enum value alignment. When a declared enum's members are all a
+	// strict subset of another declared enum's members (by name), the same
+	// literal must carry the same numeric value in both — a symbol has one
+	// identity. This is the `MpmType: "GasType | FluidType"` case: arktype
+	// flattens the union into 11 alphabetically-numbered literals, so `steam`
+	// would be 4 in GasType but 9 in MpmType. Here each subset enum inherits
+	// its members' values from the LARGEST superset enum, so GasType_steam ==
+	// MpmType_steam everywhere. Both text (tsCodec) and binary (wgsl) exporters
+	// read variant.value straight from the plan, so this one fix keeps ts↔wgsl
+	// consistent. Synthetic tag enums (union discriminators) are left alone so
+	// union dispatch tags stay stable.
+	private alignSubsetEnums() {
+		const named = [...this.resolvedPlans.values()].filter(
+			(p): p is EnumPlan => p.kind === "enum" && !p.synthetic,
+		);
+		for (const sub of named) {
+			const subNames = new Set(sub.variants.map((v) => v.name));
+			// Pick the largest OTHER enum that strictly contains all of sub's
+			// names (transitively the top of any subset chain). Deterministic:
+			// break ties on variant count then name.
+			let best: EnumPlan | null = null;
+			for (const sup of named) {
+				if (sup === sub || sup.variants.length <= sub.variants.length) continue;
+				const supNames = new Set(sup.variants.map((v) => v.name));
+				if (![...subNames].every((n) => supNames.has(n))) continue;
+				if (
+					!best ||
+					sup.variants.length > best.variants.length ||
+					(sup.variants.length === best.variants.length &&
+						sup.name < best.name)
+				) {
+					best = sup;
+				}
+			}
+			if (!best) continue;
+			const valueByName = new Map(best.variants.map((v) => [v.name, v.value]));
+			for (const v of sub.variants) {
+				const aligned = valueByName.get(v.name);
+				if (aligned != null) v.value = aligned;
+			}
+			// Widen the byte size if aligned values now exceed the subset's own
+			// span (its size was computed from member count, not value range).
+			const maxVal = sub.variants.reduce((m, v) => Math.max(m, v.value), 0);
+			const size = maxVal <= 255 ? 1 : maxVal <= 65535 ? 2 : 4;
+			if (size > sub.size) {
+				sub.size = size;
+				sub.align = size;
+				sub.paddedSize = size;
+				sub.underlyingType = size === 1 ? "u8" : size === 2 ? "u16" : "i32";
+			}
+		}
 	}
 
 	public getErrors() {
@@ -500,6 +570,7 @@ export class SchemaAnalyzer {
 		const description = typeDef.description ?? "";
 		const obsolete = typeDef.obsolete;
 		const obsoleteReason = typeDef.obsoleteReason;
+		const renamedFrom = (typeDef as ArkMeta).renamedFrom;
 
 		if (typeDef.type === "union" || typeDef.type === "enum") {
 			const plan = this.analyzeUnion(name, typeDef);
@@ -508,22 +579,19 @@ export class SchemaAnalyzer {
 				plan.obsolete = true;
 				if (obsoleteReason) plan.obsoleteReason = obsoleteReason;
 			}
+			if (renamedFrom) plan.renamedFrom = renamedFrom;
 			return plan;
 		}
 
 		if (typeDef.type === "object") {
 			const fieldValues = Object.values(typeDef.fields || {});
-			const popKind = (fieldValues[0] as ArkMeta)?.popKind;
-			if (fieldValues.length > 0 && (popKind === "gpu-binding" || popKind === "gpu-shader")) {
-				return this.analyzeGpuBindingLayout(name, typeDef);
-			}
-
 			const plan = this.analyzeStruct(name, typeDef);
 			plan.description = description;
 			if (obsolete) {
 				plan.obsolete = true;
 				if (obsoleteReason) plan.obsoleteReason = obsoleteReason;
 			}
+			if (renamedFrom) plan.renamedFrom = renamedFrom;
 			return plan;
 		}
 
@@ -535,6 +603,7 @@ export class SchemaAnalyzer {
 			name,
 			type: field,
 			...(description ? { description } : {}),
+			...(renamedFrom ? { renamedFrom } : {}),
 		};
 	}
 
@@ -573,82 +642,6 @@ export class SchemaAnalyzer {
 		};
 	}
 
-	private analyzeGpuBindingLayout(
-		name: string,
-		typeDef: PopType & { type: "object" },
-	): any {
-		const bindings: any[] = [];
-		const shaders: any[] = [];
-		for (const [fieldName, fieldType] of Object.entries(typeDef.fields || {})) {
-			const ft = fieldType as PopType & ArkMeta;
-			let dataTypeName = "unknown";
-			let isArray = false;
-			if (ft.popKind === "gpu-shader") {
-				const bindingSpec = ft.shaderBindings || "";
-				const shaderBindings = bindingSpec.split(";").filter(Boolean).flatMap((segment) => {
-					const [groupRaw, bindingsRaw] = segment.split(":");
-					const group = Number(groupRaw);
-					if (!Number.isInteger(group) || !bindingsRaw) {
-						throw new Error(`Invalid Shader binding segment '${segment}' in ${name}.${fieldName}`);
-					}
-					return bindingsRaw.split(",").filter(Boolean).map((bindingRaw) => {
-						const binding = Number(bindingRaw);
-						if (!Number.isInteger(binding)) {
-							throw new Error(`Invalid Shader binding '${bindingRaw}' in ${name}.${fieldName}`);
-						}
-						return { group, binding };
-					});
-				});
-				shaders.push({
-					name: fieldName,
-					bindings: shaderBindings,
-					entryPoint: ft.entryPoint || "",
-					workGroupSize: ft.workGroupSize || 0,
-				});
-				continue;
-			}
-			if (ft.type === "array") {
-				isArray = true;
-				const item = ft.item;
-				if (item?.type === "link") dataTypeName = item.target;
-				else if (item?.binaryType) dataTypeName = item.binaryType;
-				else if (item?.type) dataTypeName = item.type;
-			} else if (ft.type === "link") {
-				dataTypeName = ft.target;
-			} else if (ft.type === "symbol") {
-				dataTypeName = String(ft.value ?? "");
-			} else if (ft.binaryType) {
-				dataTypeName = ft.binaryType;
-			}
-			bindings.push({
-				...ft,
-				name: fieldName,
-				group: ft.gpuGroup ?? 0,
-				binding: ft.gpuBinding ?? 0,
-				usage: ft.gpuUsage ?? "storage-write",
-				dataTypeName,
-				isArray,
-			});
-		}
-		const declared = new Set(bindings.map((binding) => `${binding.group}:${binding.binding}`));
-		for (const shader of shaders) {
-			for (const binding of shader.bindings) {
-				if (!declared.has(`${binding.group}:${binding.binding}`)) {
-					throw new Error(`Shader ${name}.${shader.name} references undeclared binding ${binding.group}:${binding.binding}`);
-				}
-			}
-		}
-		return {
-			kind: "gpu-binding-layout",
-			name,
-			size: 0,
-			align: 1,
-			paddedSize: 0,
-			bindings,
-			shaders
-		};
-	}
-
 	private analyzeFields(
 		fieldsDict: Record<string, PopType>,
 		parentName?: string,
@@ -684,6 +677,7 @@ export class SchemaAnalyzer {
 				paddedSize: layout.paddedSize,
 				defaultValue: hasDefault ? fieldType.default : undefined,
 				hasDefault,
+				renamedFrom: (fieldType as ArkMeta).renamedFrom,
 				fieldType,
 			};
 		});
@@ -747,6 +741,8 @@ export class SchemaAnalyzer {
 					bitSize: bitSize,
 					size: wordSize,
 					paddingAfter: 0,
+					...(meta.renamedFrom ? { renamedFrom: meta.renamedFrom } : {}),
+					...(meta.hasDefault ? { defaultValue: meta.defaultValue } : {}),
 				});
 				currentBitOffset += bitSize;
 			} else {
@@ -766,8 +762,10 @@ export class SchemaAnalyzer {
 					bitSize: meta.size * 8,
 					size: meta.size,
 					paddingAfter: 0,
+					...(meta.renamedFrom ? { renamedFrom: meta.renamedFrom } : {}),
+					...(meta.hasDefault ? { defaultValue: meta.defaultValue } : {}),
 				});
-				currentOffset += meta.paddedSize;
+				currentOffset += meta.size;
 			}
 		}
 		if (currentBitOffset > 0) {
@@ -796,7 +794,7 @@ export class SchemaAnalyzer {
 				f.paddingAfter = j === i + 1 ? nextOffset - (f.offset + 1) : 0;
 			} else {
 				nextOffset = i < fields.length - 1 ? fields[i + 1]!.offset : nextOffset;
-				f.paddingAfter = nextOffset - (f.offset + fieldLayout.paddedSize);
+				f.paddingAfter = nextOffset - (f.offset + fieldLayout.size);
 			}
 		}
 
@@ -861,6 +859,7 @@ export class SchemaAnalyzer {
 					name: vName,
 					type: this.resolveFieldType(branch, undefined, `${name}_${vName}`),
 					...(discriminantValue != null ? { discriminantValue } : {}),
+					...(branch.renamedFrom ? { renamedFrom: branch.renamedFrom } : {}),
 				} as VariantPlan;
 			},
 		);
@@ -880,7 +879,7 @@ export class SchemaAnalyzer {
 
 		// Attach the correct tag value from the tagEnum to each variant
 		const tagByVariantName = new Map(
-			tagEnum.variants.map((v) => [v.name, v.value] as const),
+			tagEnum.variants.map((v: EnumVariant) => [v.name, v.value] as const),
 		);
 		for (const v of variants) {
 			(v as any).tag = tagByVariantName.get(v.name) ?? 0;

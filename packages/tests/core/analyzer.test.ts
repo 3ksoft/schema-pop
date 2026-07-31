@@ -72,6 +72,82 @@ describe("SchemaAnalyzer", () => {
 		);
 	});
 
+	it("propagates Renamed marker + ArkType defaults into the plan (migration metadata)", () => {
+		const { Renamed } = require("../../schema/src");
+		const mod = scope({
+			...binary.import(),
+			Renamed,
+			Base: { a: "u8" },
+			// type-level rename
+			RenStruct: "Renamed<Base, 'OldBase'>",
+			// field-level rename + ArkType default on a new field
+			Battery: {
+				voltage: "Renamed<u32, 'voltage_mv'>",
+				current: "i32",
+				firmware: "u16 = 7",
+			},
+		}).export();
+
+		const { plan } = new SchemaAnalyzer().analyze(fromModule(mod), {
+			version: "2.0.0",
+		});
+
+		const renStruct = plan.types.find((t) => t.name === "RenStruct");
+		expect((renStruct as any)?.renamedFrom).toBe("OldBase");
+
+		const battery = plan.types.find(
+			(t) => t.name === "Battery",
+		) as StructPlan;
+		const voltage = battery.fields.find((f) => f.name === "voltage");
+		const firmware = battery.fields.find((f) => f.name === "firmware");
+		expect((voltage as any)?.renamedFrom).toBe("voltage_mv");
+		expect((firmware as any)?.defaultValue).toBe(7);
+		// Untouched fields carry no migration metadata (keeps plans/baselines clean).
+		const current = battery.fields.find((f) => f.name === "current");
+		expect((current as any)?.renamedFrom).toBeUndefined();
+		expect((current as any)?.defaultValue).toBeUndefined();
+	});
+
+	it("aligns subset-enum member values to their superset enum", () => {
+		// `MpmType: "GasType | FluidType"` — arktype flattens the union into one
+		// alphabetically-numbered enum, so a shared literal (`steam`) would get a
+		// different value in GasType (its own 0..N) than in MpmType. The analyzer
+		// realigns each subset enum's members to the largest superset so a symbol
+		// has one identity everywhere (keeps ts↔wgsl codecs consistent).
+		const mod = scope({
+			...binary.import(),
+			GasType: "'methane' | 'co' | 'steam'",
+			FluidType: "'oil' | 'water'",
+			MpmType: "GasType | FluidType",
+		}).export();
+
+		const { plan } = new SchemaAnalyzer().analyze(fromModule(mod), {
+			version: "1.0.0",
+		});
+
+		const enumOf = (name: string) =>
+			plan.types.find((t) => t.name === name && t.kind === "enum") as
+				| { variants: { name: string; value: number }[] }
+				| undefined;
+		const valueOf = (e: ReturnType<typeof enumOf>, member: string) =>
+			e?.variants.find((v) => v.name === member)?.value;
+
+		const mpm = enumOf("MpmType");
+		const gas = enumOf("GasType");
+		const fluid = enumOf("FluidType");
+		expect(mpm && gas && fluid).toBeTruthy();
+
+		// Every subset member equals its value in the superset.
+		for (const m of ["methane", "co", "steam"]) {
+			expect(valueOf(gas, m)).toBe(valueOf(mpm, m));
+		}
+		for (const m of ["oil", "water"]) {
+			expect(valueOf(fluid, m)).toBe(valueOf(mpm, m));
+		}
+		// Superset itself keeps a stable canonical numbering (untouched).
+		expect(valueOf(mpm, "co")).toBe(0);
+	});
+
 	it.skip("should calculate Union size correctly (1 + padding + max variant)", () => {
 		// TODO(0.2.x): post-refactor analyzer reports Choice size 16 (align 8)
 		// instead of 12 (align 4). Need to confirm whether the new value is

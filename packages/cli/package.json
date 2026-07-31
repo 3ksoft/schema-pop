@@ -23,8 +23,16 @@
 	"bin": {
 		"schema-pop": "./dist/cli.js"
 	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
 	"scripts": {
-		"build": "rm -rf dist && bun build ./src/cli.ts --outdir ./dist --target node --packages external",
+		"build:cli": "bun build ./src/cli.ts --outdir ./dist --target node --packages external",
+		"build:lib": "bun build ./src/index.ts --outdir ./dist --target node --packages external && tsgo --declaration --emitDeclarationOnly --outDir dist --noEmit false",
+		"build": "rm -rf dist && bun run build:cli && bun run build:lib",
 		"typecheck": "tsgo --noEmit",
 		"test": "bun test"
 	},
@@ -32,11 +40,12 @@
 		"@ark/schema": "0.56.0",
 		"@schema-pop/schema": "workspace:*",
 		"@schema-pop/core": "workspace:*",
+		"@schema-pop/exporter": "workspace:*",
 		"cac": "^7.0.0"
 	},
 	"devDependencies": {
 		"@types/node": "^25.6.2",
-		"typescript": "6.0.3"
+		"typescript": "7.0.2"
 	},
 	"files": [
 		"dist",

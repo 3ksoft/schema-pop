@@ -16,11 +16,8 @@ import {
 const isInteractive = process.stdout.isTTY === true;
 
 const cli = cac("schema-pop");
-const E_INFO = 1;
-const E_DEBUG = 3;
-const E_ERROR = 5;
 var _log = "";
-const log = (text: string, error_level: number = E_DEBUG) => {
+const log = (text: string) => {
 	if (isInteractive) console.log(text);
 	_log += text += "\n";
 };
@@ -90,12 +87,13 @@ cli
 									typeof (ex as any).export === "function"
 										? (ex as any).export()
 										: ex;
-								const settings: PopSchemaSettings = {
+								const settings: PopSchemaSettings = PopSchemaSettings.assert({
+									schemaName: basename,
 									mode: config.mode,
-								};
+								});
 								const result = fromModule(mod, settings);
 								if (result.errors.length > 0) {
-									for (const err in result.errors) log(err, E_ERROR);
+									for (const err in result.errors) log(err);
 									return;
 								}
 								for (const warn in result.warnings) {
@@ -106,7 +104,7 @@ cli
 								break;
 							}
 						}
-					} catch {}
+					} catch { }
 				}
 
 				// 2. KROK STANDARDOWY: IMPORTER (jeśli skróty nie zadziałały)
@@ -225,7 +223,7 @@ async function smartResolve(
 				log(`✅ Using ${moduleName} at ${baseDir}`);
 				return await import(resolved);
 			}
-		} catch {}
+		} catch { }
 	}
 	log(`👁️  Checking global paths`);
 
@@ -250,7 +248,7 @@ async function smartResolve(
 
 	throw new Error(
 		`Module "${moduleName}" not found. ` +
-			`Please install it locally in your project or globally via 'bun install -g ${moduleName}'.`,
+		`Please install it locally in your project or globally via 'bun install -g ${moduleName}'.`,
 	);
 }
 

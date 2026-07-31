@@ -2,8 +2,9 @@
 export { scope, type } from "arktype";
 export * from "./api";
 export * from "./binary";
+export * from "./meta";
 export * from "./wgsl";
-export * from "./core";
 export * from "./layout";
 export * from "./registry";
 export * from "./schema";
+export * from "./helpers"

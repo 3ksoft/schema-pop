@@ -1,7 +1,7 @@
 import { regex } from "arkregex";
 import type { Module, Type } from "arktype";
 import { scope, type } from "arktype";
-import type { ArkMeta } from "./core";
+import type { ArkMeta } from "./meta";
 
 export type PopModule = Module<Record<string, Type<unknown>>>;
 
@@ -17,18 +17,13 @@ export const SemVer = regex(
 	"^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
 );
 
-export const $ = scope({
-	VersionNumber: type("string").pipe((v) => {
-		let slug = v.replace(/[.-]/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
-		if (/^[0-9]/.test(slug)) {
-			slug = `v${slug}`;
-		}
-		return slug;
-	}),
-	Base: {
-		// Field kind
-	},
-
+// Shared field-variant definitions. Recursive references intentionally target
+// the OPEN aliases "Field" (the variant union) and "Base" (shared per-field
+// props), neither of which is defined here — a consumer spreads these defs
+// into its own scope, supplies its own Base, adds domain variants and closes
+// its own Field union. The scope below does exactly that for schema-pop
+// (Field ≡ PopType); pira composes the same defs with its editor variants.
+export const fieldVariantDefs = {
 	String: {
 		"...": "Base",
 		type: "'string'",
@@ -83,7 +78,7 @@ export const $ = scope({
 	Array: {
 		"...": "Base",
 		type: "'array'",
-		item: "PopType",
+		item: "Field",
 		"default?": "unknown.any[]",
 		"minLength?": "number",
 		"exactLength?": "number",
@@ -96,7 +91,7 @@ export const $ = scope({
 		"...": "Base",
 		"default?": "unknown.any",
 		type: "'object'",
-		fields: { "[string]": "PopType" },
+		fields: { "[string]": "Field" },
 		"additionalProperties?": "boolean",
 	},
 
@@ -116,7 +111,7 @@ export const $ = scope({
 	Union: {
 		"...": "Base",
 		type: "'union'",
-		variants: "PopType[]",
+		variants: "Field[]",
 		"discriminant?": "string",
 	},
 
@@ -124,6 +119,26 @@ export const $ = scope({
 		"...": "Base",
 		type: "'unit'",
 	},
+} as const;
+
+export const $ = scope({
+	VersionNumber: type("string").pipe((v) => {
+		let slug = v.replace(/[.-]/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
+		if (/^[0-9]/.test(slug)) {
+			slug = `v${slug}`;
+		}
+		return slug;
+	}),
+	Base: {
+		// Field kind
+	},
+
+	...fieldVariantDefs,
+
+	// Private (#) so `schema.import()` consumers (layout.ts) can keep their own
+	// public Field alias; the defs above resolve "Field" to this union here.
+	"#Field":
+		"String | Symbol | Number | Boolean | Enum | Array | Object | Any | Link | Union | Unit",
 
 	PopFunction: {
 		type: "'function'",
@@ -158,8 +173,7 @@ export const $ = scope({
 		types: "Record<string, PopType>",
 		functions: "Record<string, PopFunction>",
 	},
-	PopType:
-		"String | Symbol | Number | Boolean | Enum | Array | Object | Any | Link | Union | Unit",
+	PopType: "Field",
 });
 
 export const PopSchemaSettingsDefaults = {

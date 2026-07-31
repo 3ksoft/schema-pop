@@ -9,7 +9,53 @@ import type {
 } from "@schema-pop/schema";
 import { WGSL_PREDECLARED_ALIASES } from "@schema-pop/schema";
 import { ExporterTools, toSnakeCase } from "../exporterTools";
-import { hasAtomics } from "./gpuShared";
+
+export function hasAtomics(
+	t: TypePlan,
+	typesMap: Map<string, TypePlan>,
+	visited: Set<string> = new Set(),
+): boolean {
+	if (visited.has(t.name)) return false;
+	visited.add(t.name);
+
+	if (t.kind === "struct") {
+		return t.fields.some((f) => {
+			if ((f.type as any).atomic) return true;
+			if (f.type.kind === "reference") {
+				const ref = typesMap.get(f.type.name);
+				return ref ? hasAtomics(ref, typesMap, visited) : false;
+			}
+			if (f.type.kind === "array") {
+				let item = f.type.item;
+				while (item.kind === "array") item = item.item;
+				if (item.kind === "reference") {
+					const ref = typesMap.get(item.name);
+					return ref ? hasAtomics(ref, typesMap, visited) : false;
+				}
+				return !!(item as any).atomic;
+			}
+			return false;
+		});
+	}
+	if (t.kind === "alias") {
+		if ((t.type as any).atomic) return true;
+		if (t.type.kind === "reference") {
+			const ref = typesMap.get(t.type.name);
+			return ref ? hasAtomics(ref, typesMap, visited) : false;
+		}
+		if (t.type.kind === "array") {
+			let item = t.type.item;
+			while (item.kind === "array") item = item.item;
+			if (item.kind === "reference") {
+				const ref = typesMap.get(item.name);
+				return ref ? hasAtomics(ref, typesMap, visited) : false;
+			}
+			return !!(item as any).atomic;
+		}
+	}
+	return false;
+}
+
 
 export interface WgslConfig extends BaseConfig {
 	paddingStyle?: "size" | "fields";
@@ -447,8 +493,8 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 						} else {
 							helpersCode += `\tlet tmp = pack_${snakeVarName}_to_words(unpacked);\n`;
 							helpersCode += `\tfor (var w = 0u; w < ${vWords}u; w++) {\n`;
-										helpersCode += `\t\t${rawWords === 1 ? "out" : `out[w${pOff}]`} = tmp[w];\n`;
-										helpersCode += `\t}\n`;
+							helpersCode += `\t\t${rawWords === 1 ? "out" : `out[w${pOff}]`} = tmp[w];\n`;
+							helpersCode += `\t}\n`;
 						}
 						helpersCode += `\t${rawWords === 1 ? "out" : `out[${tagWord}u]`} = insertBits(${rawWords === 1 ? "out" : `out[${tagWord}u]`}, ${tagVal}u, ${tagShift}u, ${tagSize}u);\n`;
 						helpersCode += `\treturn out;\n}\n\n`;

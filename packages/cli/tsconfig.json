@@ -5,8 +5,13 @@
 		"rootDir": "./src",
 		"tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo" // Ważne przy composite
 	},
-	"include": ["src/**/*"],
-	"exclude": ["node_modules", "dist"],
+	"include": [
+		"src/**/*"
+	],
+	"exclude": [
+		"node_modules",
+		"dist"
+	],
 	"references": [
 		{
 			"path": "../exporter"

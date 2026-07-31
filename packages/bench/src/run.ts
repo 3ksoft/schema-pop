@@ -1,18 +1,23 @@
 import { bench, group, run, summary, do_not_optimize } from "mitata";
 import { Packr } from "msgpackr";
+import {
+	createInterpretedCodec,
+	createRuntimeCodec,
+} from "@schema-pop/core";
+
 import { makeFixture, type GameTickLit } from "./schema.ts";
-import { deserializeGameTick, serializeGameTick } from "../generated/codec.ts";
+import { deserializeGameTick, serializeGameTick } from "../generated/data_codec.ts";
+import { plan } from "../generated/data_plan.ts";
 import { handEncode, handDecode, HAND_SIZE } from "./handcoded.ts";
 import { GameTick as BebopGameTick } from "../bebop/generated.ts";
+import { LayoutPlan } from "@schema-pop/schema";
 
 const packr = new Packr({ useRecords: false });
 const packrR = new Packr({ useRecords: true });
 
 const fixture = makeFixture(42);
 
-// bebop naturally shapes Vec3 as { x, y, z }, not [x, y, z]. Pre-convert once
-// so that the bench measures bebop's encode/decode work, not array→object
-// reshape work that wouldn't be charged to other libraries.
+// Pre-konwersja fixture pod uklad Bebopa ({x,y,z})
 const bebopFixture = {
 	tick: fixture.tick,
 	dt: fixture.dt,
@@ -27,26 +32,33 @@ const bebopFixture = {
 	})),
 };
 
-// ── pre-allocate codec buffers (codec produces fixed-size payload) ──────────
+// ── Inicjalizacja kodeków z @schema-pop/core ─────────────────────────────────
+const jitSuite = createRuntimeCodec(LayoutPlan.assert(plan));
+const interpSuite = createInterpretedCodec(LayoutPlan.assert(plan));
+
+const jitGameTick = jitSuite.get<GameTickLit>("GameTick");
+const interpGameTick = interpSuite.get<GameTickLit>("GameTick");
+
+// ── Pre-alokacja buforów ──────────────────────────────────────────────────────
 const CODEC_SIZE = 332;
 const codecBuf = new ArrayBuffer(CODEC_SIZE);
 const codecView = new DataView(codecBuf);
 const handBuf = new ArrayBuffer(HAND_SIZE);
 const handView = new DataView(handBuf);
 
-// ── pre-encode for decode benches ───────────────────────────────────────────
+// ── Pre-encode do testów dekodowania ──────────────────────────────────────────
 serializeGameTick(fixture, codecView, 0);
 handEncode(fixture, handView, 0);
 const jsonStr = JSON.stringify(fixture);
 const jsonBytes = new TextEncoder().encode(jsonStr);
 const msgpackBytes = packr.pack(fixture);
 const msgpackRecBytes = packrR.pack(fixture);
-// re-pack a few times for record schema to stabilize
+
 for (let i = 0; i < 4; i++) packrR.pack(fixture);
 const msgpackRecBytesFinal = packrR.pack(fixture);
 const bebopBytes = BebopGameTick.encode(bebopFixture as any);
 
-// ── correctness sanity ──────────────────────────────────────────────────────
+// ── Weryfikacja poprawności ──────────────────────────────────────────────────
 function approxEq(a: any, b: any, tol = 1e-3): boolean {
 	if (typeof a === "number" && typeof b === "number") {
 		return Math.abs(a - b) <= tol * Math.max(1, Math.abs(a));
@@ -68,16 +80,20 @@ function approxEq(a: any, b: any, tol = 1e-3): boolean {
 	}
 	return a === b;
 }
+
 const decodedCodec = deserializeGameTick(codecView, 0);
+const decodedJit = jitGameTick.deserialize(codecView, 0);
+const decodedInterp = interpGameTick.deserialize(codecView, 0);
 const decodedHand = handDecode(handView, 0);
 const decodedJson = JSON.parse(jsonStr);
 const decodedMsgpack = packr.unpack(msgpackBytes);
 const decodedMsgpackRec = packrR.unpack(msgpackRecBytesFinal);
 const decodedBebop = BebopGameTick.decode(bebopBytes);
-// bebop fixture has Vec3 as {x,y,z} — compare against that shape.
-void decodedBebop;
+
 console.log("correctness:", {
-	codec: approxEq(fixture, decodedCodec),
+	codecAOT: approxEq(fixture, decodedCodec),
+	codecJIT: approxEq(fixture, decodedJit),
+	codecInterp: approxEq(fixture, decodedInterp),
 	hand: approxEq(fixture, decodedHand),
 	json: approxEq(fixture, decodedJson),
 	msgpack: approxEq(fixture, decodedMsgpack),
@@ -94,12 +110,20 @@ console.log(`  msgpackr     ${msgpackBytes.length}`);
 console.log(`  JSON         ${jsonBytes.length}`);
 console.log("");
 
-// ── benches ─────────────────────────────────────────────────────────────────
+// ── Bencze ───────────────────────────────────────────────────────────────────
 
 summary(() => {
 	group("encode", () => {
-		bench("ts:codec", () => {
+		bench("ts:codec (AOT generated)", () => {
 			serializeGameTick(fixture, codecView, 0);
+			do_not_optimize(codecBuf);
+		});
+		bench("ts:codec (Runtime JIT)", () => {
+			jitGameTick.serialize(fixture, codecView, 0);
+			do_not_optimize(codecBuf);
+		});
+		bench("ts:codec (Interpreted)", () => {
+			interpGameTick.serialize(fixture, codecView, 0);
 			do_not_optimize(codecBuf);
 		});
 		bench("hand-DataView", () => {
@@ -121,8 +145,14 @@ summary(() => {
 	});
 
 	group("decode", () => {
-		bench("ts:codec", () => {
+		bench("ts:codec (AOT generated)", () => {
 			do_not_optimize(deserializeGameTick(codecView, 0));
+		});
+		bench("ts:codec (Runtime JIT)", () => {
+			do_not_optimize(jitGameTick.deserialize(codecView, 0));
+		});
+		bench("ts:codec (Interpreted)", () => {
+			do_not_optimize(interpGameTick.deserialize(codecView, 0));
 		});
 		bench("hand-DataView", () => {
 			do_not_optimize(handDecode(handView, 0));
@@ -142,9 +172,17 @@ summary(() => {
 	});
 
 	group("roundtrip", () => {
-		bench("ts:codec", () => {
+		bench("ts:codec (AOT generated)", () => {
 			serializeGameTick(fixture, codecView, 0);
 			do_not_optimize(deserializeGameTick(codecView, 0));
+		});
+		bench("ts:codec (Runtime JIT)", () => {
+			jitGameTick.serialize(fixture, codecView, 0);
+			do_not_optimize(jitGameTick.deserialize(codecView, 0));
+		});
+		bench("ts:codec (Interpreted)", () => {
+			interpGameTick.serialize(fixture, codecView, 0);
+			do_not_optimize(interpGameTick.deserialize(codecView, 0));
 		});
 		bench("hand-DataView", () => {
 			handEncode(fixture, handView, 0);
