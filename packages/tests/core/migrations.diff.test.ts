@@ -1,8 +1,8 @@
 /// <reference types="@types/bun" />
 import { describe, expect, test } from "bun:test";
 import { scope } from "arktype";
-import { binary, Renamed, type LayoutPlan } from "../../schema/src";
 import { diffPlans, fromModule, SchemaAnalyzer } from "../../core/src";
+import { binary, type LayoutPlan, Renamed } from "../../schema/src";
 
 // Each call gets a fresh analyzer so per-run state never leaks between plans.
 function analyze(s: any): LayoutPlan {
@@ -33,8 +33,11 @@ describe("diffPlans", () => {
 			}),
 		);
 		const diff = diffPlans(v1, v2);
-		const battery = diff.types.find((t) => "to" in t && t.to.name === "Battery");
-		if (!battery || battery.kind !== "changed") throw new Error("expected changed");
+		const battery = diff.types.find(
+			(t) => "to" in t && t.to.name === "Battery",
+		);
+		if (!battery || battery.kind !== "changed")
+			throw new Error("expected changed");
 		expect(battery.status).toBe("auto");
 		const firmware = battery.fieldChanges[0]!;
 		expect(firmware.kind).toBe("added");
@@ -70,9 +73,7 @@ describe("diffPlans", () => {
 	});
 
 	test("field renamed via Renamed marker → auto", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { voltage_mv: "u32" } }),
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { voltage_mv: "u32" } }));
 		const v2 = analyze(
 			scope({
 				...binary.import(),
@@ -92,9 +93,7 @@ describe("diffPlans", () => {
 	});
 
 	test("rename without marker is reported as (removed, added)", () => {
-		const v1 = analyze(
-			scope({ ...binary.import(), B: { voltage_mv: "u32" } }),
-		);
+		const v1 = analyze(scope({ ...binary.import(), B: { voltage_mv: "u32" } }));
 		const v2 = analyze(scope({ ...binary.import(), B: { voltage: "u32" } }));
 		const diff = diffPlans(v1, v2);
 		const b = diff.types.find((t) => "to" in t && t.to.name === "B");
@@ -197,7 +196,8 @@ describe("diffPlans", () => {
 		);
 		const diff = diffPlans(v1, v2);
 		const status = diff.types.find((t) => "to" in t && t.to.name === "Status");
-		if (!status || status.kind !== "changed") throw new Error("expected changed");
+		if (!status || status.kind !== "changed")
+			throw new Error("expected changed");
 		const added = status.variantChanges.filter((c) => c.kind === "added");
 		expect(added).toHaveLength(1);
 		expect(status.status).toBe("auto");
@@ -236,6 +236,46 @@ describe("diffPlans", () => {
 		expect(diff.status).toBe("user-supplied");
 	});
 
+	test("string exactLength changes are not classified as unchanged", () => {
+		const field = (exactLength: number) => ({
+			name: "s",
+			type: { kind: "string", exactLength },
+			offset: 0,
+			bitOffset: 0,
+			bitSize: 0,
+			size: exactLength,
+			paddingAfter: 0,
+		});
+		const plan = (exactLength: number) =>
+			({
+				types: [
+					{
+						kind: "struct",
+						name: "B",
+						fields: [field(exactLength)],
+						size: exactLength,
+						align: 1,
+						paddedSize: exactLength,
+					},
+				],
+			}) as LayoutPlan;
+		const v1 = plan(4);
+		const v2 = plan(8);
+		const diff = diffPlans(v1, v2);
+		const b = diff.types.find((t) => "to" in t && t.to.name === "B");
+		expect(b?.kind).toBe("changed");
+		expect(diff.status).toBe("user-supplied");
+	});
+
+	test("removing an array maxLength is widening", () => {
+		const v1 = analyze(scope({ ...binary.import(), B: { xs: "u8[] <= 10" } }));
+		const v2 = analyze(scope({ ...binary.import(), B: { xs: "u8[]" } }));
+		const diff = diffPlans(v1, v2);
+		const b = diff.types.find((t) => "to" in t && t.to.name === "B");
+		if (!b || b.kind !== "changed") throw new Error("expected changed");
+		expect(b.fieldChanges.some((c) => c.kind === "type-widened")).toBe(true);
+	});
+
 	// TODO(Phase 0 follow-up): the analyzer builds enum variants from the union's
 	// string-literal options, a path that does not yet propagate the `renamedFrom`
 	// marker (only tagged-union branches and struct fields/types do). Once enum
@@ -257,9 +297,11 @@ describe("diffPlans", () => {
 		);
 		const diff = diffPlans(v1, v2);
 		const status = diff.types.find((t) => "to" in t && t.to.name === "Status");
-		if (!status || status.kind !== "changed") throw new Error("expected changed");
+		if (!status || status.kind !== "changed")
+			throw new Error("expected changed");
 		const renamed = status.variantChanges.find((c) => c.kind === "renamed");
-		if (!renamed || renamed.kind !== "renamed") throw new Error("expected renamed");
+		if (!renamed || renamed.kind !== "renamed")
+			throw new Error("expected renamed");
 		expect(renamed.oldName).toBe("Suspended");
 	});
 });

@@ -41,6 +41,47 @@ function ident(name: string): string {
 	return name.replace(/[^a-zA-Z0-9_]/g, "_");
 }
 
+function property(key: string): string {
+	return /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
+}
+
+function access(base: string, key: string): string {
+	return /^[A-Za-z_$][\w$]*$/.test(key)
+		? `${base}.${key}`
+		: `${base}[${JSON.stringify(key)}]`;
+}
+
+function emitTsLiteral(value: unknown): string {
+	if (value === undefined) return "undefined";
+	if (typeof value === "bigint") return `${value}n`;
+	if (typeof value === "number") {
+		if (Number.isNaN(value)) return "Number.NaN";
+		if (value === Number.POSITIVE_INFINITY) return "Number.POSITIVE_INFINITY";
+		if (value === Number.NEGATIVE_INFINITY) return "Number.NEGATIVE_INFINITY";
+		if (Object.is(value, -0)) return "-0";
+		return String(value);
+	}
+	if (
+		typeof value === "string" ||
+		typeof value === "boolean" ||
+		value === null
+	) {
+		return JSON.stringify(value);
+	}
+	if (Array.isArray(value)) return `[${value.map(emitTsLiteral).join(", ")}]`;
+	if (
+		typeof value === "object" &&
+		Object.getPrototypeOf(value) === Object.prototype
+	) {
+		return `{ ${Object.entries(value)
+			.map(([k, v]) => `${property(k)}: ${emitTsLiteral(v)}`)
+			.join(", ")} }`;
+	}
+	throw new Error(
+		`Cannot emit TypeScript literal for default value of type ${typeof value}`,
+	);
+}
+
 /** Zero value literal for an auto-added field with no explicit default. */
 function zeroValue(field: Field): string {
 	switch (field.kind) {
@@ -78,7 +119,9 @@ function isFixedSize(t: TypePlan, plan: LayoutPlan): boolean {
 				return false; // length-prefixed, variable
 			case "array":
 				// Fixed only when the length is compile-time known.
-				return (f as any).exactLength !== undefined && fieldFixed((f as any).item);
+				return (
+					(f as any).exactLength !== undefined && fieldFixed((f as any).item)
+				);
 			case "optional":
 				return false; // presence byte + variable payload
 			case "map":
@@ -112,11 +155,11 @@ function isFixedSize(t: TypePlan, plan: LayoutPlan): boolean {
 function opExpr(op: Exclude<FieldOp, { kind: "hookField" }>): string {
 	switch (op.kind) {
 		case "copy":
-			return `v1.${op.from}`;
+			return access("v1", op.from);
 		case "copyTransformed":
-			return `transform${ident(op.refType)}(v1.${op.from} as any)`;
+			return `transform${ident(op.refType)}(${access("v1", op.from)} as any)`;
 		case "defaultLiteral":
-			return JSON.stringify(op.value);
+			return emitTsLiteral(op.value);
 		case "defaultZero":
 			return zeroValue(op.field.type);
 	}
@@ -131,6 +174,11 @@ export function emitTsMigration(
 	const hooksExport = config.hooksExport ?? "migrationHooks";
 	const hooksRef = config.hooksImport ? hooksExport : null;
 	const emitBytes = config.emitByteWrappers ?? true;
+	if (plan.hookedTypes.length > 0 && !config.hooksImport) {
+		throw new Error(
+			"Cannot emit migration with user hooks: config.hooksImport is required",
+		);
+	}
 
 	const toByName = new Map(plan.to.types.map((t) => [t.name, t]));
 
@@ -160,7 +208,7 @@ export function emitTsMigration(
 		if (tm.kind === "wholeHook") {
 			return (
 				`${sig} {\n` +
-				`\treturn (${hooksRef}!.${ident(toName)} as (v1: any) => any)(v1);\n}\n\n`
+				`\treturn (${access(hooksRef!, toName)} as (v1: any) => any)(v1);\n}\n\n`
 			);
 		}
 		// fields
@@ -168,9 +216,9 @@ export function emitTsMigration(
 		for (const op of tm.ops) {
 			const expr =
 				op.kind === "hookField"
-					? `(${hooksRef}!.${ident(toName)} as any).${op.to}(v1)`
+					? `${access(`(${access(hooksRef!, toName)} as any)`, op.to)}(v1)`
 					: opExpr(op);
-			fn += `\t\t${op.to}: ${expr},\n`;
+			fn += `\t\t${property(op.to)}: ${expr},\n`;
 		}
 		fn += `\t} as ${v2}.${ident(toName)};\n}\n\n`;
 		return fn;

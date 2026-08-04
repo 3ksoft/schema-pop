@@ -81,6 +81,12 @@ export type VariantChange =
 			to: VariantPlan | EnumVariant;
 			oldName: string;
 			status: DiffStatus;
+	  }
+	| {
+			kind: "changed";
+			from: VariantPlan | EnumVariant;
+			to: VariantPlan | EnumVariant;
+			status: DiffStatus;
 	  };
 
 export type TypeDiff =
@@ -178,32 +184,19 @@ function compareFields(
 		case "string": {
 			const f = from as any;
 			const t = to as any;
-			if (f.maxLength === t.maxLength) return "equal";
-			if (
-				f.maxLength !== undefined &&
-				t.maxLength !== undefined &&
-				t.maxLength > f.maxLength
-			) {
-				return "widened";
-			}
-			return "narrowed";
+			return compareLengthRange(f, t);
 		}
 		case "array": {
 			const f = from as any;
 			const t = to as any;
 			const itemCmp = compareFields(f.item, t.item);
 			if (itemCmp === "changed") return "changed";
-			if (f.exactLength !== t.exactLength) return "changed";
-			if (f.maxLength === t.maxLength && itemCmp === "equal") return "equal";
-			if (
-				f.maxLength !== undefined &&
-				t.maxLength !== undefined &&
-				t.maxLength >= f.maxLength &&
-				itemCmp !== "narrowed"
-			) {
-				return "widened";
-			}
-			return "narrowed";
+			const lengthCmp = compareLengthRange(f, t);
+			if (lengthCmp === "changed") return "changed";
+			if (itemCmp === "equal") return lengthCmp;
+			if (lengthCmp === "equal") return itemCmp;
+			if (itemCmp === lengthCmp) return itemCmp;
+			return "changed";
 		}
 		case "optional": {
 			const f = from as any;
@@ -233,11 +226,27 @@ function compareFields(
 	}
 }
 
+function compareLengthRange(
+	from: { maxLength?: number; exactLength?: number },
+	to: { maxLength?: number; exactLength?: number },
+): "equal" | "widened" | "narrowed" | "changed" {
+	const range = (v: { maxLength?: number; exactLength?: number }) =>
+		v.exactLength !== undefined
+			? { min: v.exactLength, max: v.exactLength }
+			: { min: 0, max: v.maxLength ?? Number.POSITIVE_INFINITY };
+	const f = range(from);
+	const t = range(to);
+	if (f.min === t.min && f.max === t.max) return "equal";
+	if (t.min <= f.min && t.max >= f.max) return "widened";
+	if (t.min >= f.min && t.max <= f.max) return "narrowed";
+	return "changed";
+}
+
 function classifyAddedField(field: FieldPlan): {
 	default: AddedFieldDefault;
 	status: DiffStatus;
 } {
-	if (field.defaultValue !== undefined) {
+	if ("defaultValue" in field) {
 		return {
 			default: { kind: "literal", value: field.defaultValue },
 			status: "auto",
@@ -248,7 +257,10 @@ function classifyAddedField(field: FieldPlan): {
 	if (field.type.kind === "primitive") {
 		return { default: { kind: "language-default" }, status: "auto" };
 	}
-	if (field.type.kind === "string" || field.type.kind === "array") {
+	if (
+		(field.type.kind === "string" || field.type.kind === "array") &&
+		field.type.exactLength === undefined
+	) {
 		return { default: { kind: "language-default" }, status: "auto" };
 	}
 	// Reference / inline struct / map / any → can't safely default without
@@ -401,6 +413,19 @@ function diffUnionVariants(from: UnionPlan, to: UnionPlan): VariantChange[] {
 			continue;
 		}
 		usedFromNames.add(oldName);
+		if (
+			compareFields(fv.type, tv.type) !== "equal" ||
+			(fv as any).tag !== (tv as any).tag ||
+			(fv as any).discriminantValue !== (tv as any).discriminantValue
+		) {
+			changes.push({
+				kind: "changed",
+				from: fv,
+				to: tv,
+				status: "user-supplied",
+			});
+			continue;
+		}
 		changes.push({
 			kind: "renamed",
 			from: fv,
@@ -419,6 +444,18 @@ function diffUnionVariants(from: UnionPlan, to: UnionPlan): VariantChange[] {
 			continue;
 		}
 		usedFromNames.add(tv.name);
+		if (
+			compareFields(fv.type, tv.type) !== "equal" ||
+			(fv as any).tag !== (tv as any).tag ||
+			(fv as any).discriminantValue !== (tv as any).discriminantValue
+		) {
+			changes.push({
+				kind: "changed",
+				from: fv,
+				to: tv,
+				status: "user-supplied",
+			});
+		}
 	}
 
 	// Pass 3: removed variants (lossy until OnRemoval ships).
@@ -521,6 +558,17 @@ function diffMatchedTypes(
 		fieldChanges = diffStructFields(from as StructPlan, to as StructPlan);
 	} else if (from.kind === "union") {
 		variantChanges = diffUnionVariants(from as UnionPlan, to as UnionPlan);
+		if ((from as UnionPlan).discriminant !== (to as UnionPlan).discriminant) {
+			const fv = (from as UnionPlan).variants[0];
+			const tv = (to as UnionPlan).variants[0];
+			if (fv && tv)
+				variantChanges.push({
+					kind: "changed",
+					from: fv,
+					to: tv,
+					status: "user-supplied",
+				});
+		}
 	} else if (from.kind === "enum") {
 		variantChanges = diffEnumVariants(from as EnumPlan, to as EnumPlan);
 	} else if (from.kind === "alias") {

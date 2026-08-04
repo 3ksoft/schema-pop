@@ -109,6 +109,9 @@ function extractBaseRoot(
 ): PopType & ArkMeta {
 	if (!root.kind) return ANY;
 	const linkedName = ctx.map.get(root.expression);
+	if (linkedName && label !== linkedName) {
+		return assertPopType({ type: "link", target: linkedName }, ctx);
+	}
 
 	let popType: PopType | null = null;
 

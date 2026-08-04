@@ -56,13 +56,13 @@ export function deserializeGameTick(view: DataView, offset: number, outObj?: any
 			tick: view.getUint32(offset + 0, true),
 			dt: view.getFloat32(offset + 4, true),
 			flags: view.getUint8(offset + 8),
-			players: ((o) => { const a: any[] = []; for(let i=0; i<8; i++) a.push(deserializePlayer(view, o + (i * 40))); return a; })(offset + 12),
+			players: ((o) => { const a: any[] = []; for (let i = 0; i < 8; i++) a.push(deserializePlayer(view, o + (i * 40))); return a; })(offset + 12),
 		} as any;
 	}
 	outObj.tick = view.getUint32(offset + 0, true);
 	outObj.dt = view.getFloat32(offset + 4, true);
 	outObj.flags = view.getUint8(offset + 8);
-	outObj.players = ((o) => { const a: any[] = []; for(let i=0; i<8; i++) a.push(deserializePlayer(view, o + (i * 40))); return a; })(offset + 12);
+	outObj.players = ((o) => { const a: any[] = []; for (let i = 0; i < 8; i++) a.push(deserializePlayer(view, o + (i * 40))); return a; })(offset + 12);
 	return outObj;
 }
 
@@ -70,6 +70,6 @@ export function serializeGameTick(val: GameTick, view: DataView, offset: number)
 	view.setUint32(offset + 0, val.tick, true);
 	view.setFloat32(offset + 4, val.dt, true);
 	view.setUint8(offset + 8, val.flags);
-	{ const o = offset + 12; for(let i=0; i<8; i++) { serializePlayer(val.players[i]!, view, o + (i * 40)); } }
+	{ const o = offset + 12; for (let i = 0; i < 8; i++) { serializePlayer(val.players[i]!, view, o + (i * 40)); } }
 }
 

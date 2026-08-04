@@ -1,17 +1,17 @@
 /// <reference types="@types/bun" />
 import { describe, expect, test } from "bun:test";
 import { scope } from "arktype";
-import { binary, Renamed, type LayoutPlan } from "../../schema/src";
 import {
 	defineMigration,
 	diffPlans,
 	fromModule,
 	MigrationError,
+	type MigrationHooks,
 	resolveMigration,
 	SchemaAnalyzer,
-	type MigrationHooks,
 	type TypeMigration,
 } from "../../core/src";
+import { binary, type LayoutPlan, Renamed } from "../../schema/src";
 
 function analyze(s: any): LayoutPlan {
 	return new SchemaAnalyzer().analyze(fromModule(s.export()), {
@@ -25,7 +25,9 @@ function resolve(v1: any, v2: any, hooks?: MigrationHooks) {
 
 function typeMig(plan: { types: TypeMigration[] }, toName: string) {
 	return plan.types.find(
-		(t) => ("toName" in t && t.toName === toName) || ("name" in t && t.name === toName),
+		(t) =>
+			("toName" in t && t.toName === toName) ||
+			("name" in t && t.name === toName),
 	);
 }
 
@@ -40,7 +42,10 @@ describe("resolveMigration", () => {
 
 	test("field added with ArkType default → defaultLiteral op", () => {
 		const v1 = scope({ ...binary.import(), B: { x: "u32" } });
-		const v2 = scope({ ...binary.import(), B: { x: "u32", firmware: "u16 = 5" } });
+		const v2 = scope({
+			...binary.import(),
+			B: { x: "u32", firmware: "u16 = 5" },
+		});
 		const plan = resolve(v1, v2);
 		const b = typeMig(plan, "B");
 		if (b?.kind !== "fields") throw new Error("expected fields");
@@ -148,7 +153,8 @@ describe("resolveMigration", () => {
 		expect(inner?.kind).toBe("fields");
 
 		const outer = typeMig(plan, "Outer");
-		if (outer?.kind !== "fields") throw new Error("expected Outer fields (dirty by reference)");
+		if (outer?.kind !== "fields")
+			throw new Error("expected Outer fields (dirty by reference)");
 		expect(outer.ops).toContainEqual({
 			kind: "copyTransformed",
 			to: "inner",
@@ -176,5 +182,26 @@ describe("resolveMigration", () => {
 		}
 		expect(err).toBeInstanceOf(MigrationError);
 		expect(err!.gaps.length).toBeGreaterThanOrEqual(2);
+	});
+
+	test("reorder cannot hide a narrowing on the same field", () => {
+		const v1 = scope({ ...binary.import(), B: { a: "u32", b: "u32" } });
+		const v2 = scope({ ...binary.import(), B: { b: "u32", a: "u8" } });
+		expect(() => resolve(v1, v2)).toThrow(MigrationError);
+	});
+
+	test("non-struct to struct requires a whole-type hook", () => {
+		const from = analyze(scope({ ...binary.import(), S: "u32" }));
+		const to = analyze(scope({ ...binary.import(), S: { x: "u32" } }));
+		expect(() => resolveMigration(diffPlans(from, to))).toThrow(MigrationError);
+	});
+
+	test("exact-length array without default requires a field hook", () => {
+		const v1 = scope({ ...binary.import(), B: { x: "u8" } });
+		const v2 = scope({
+			...binary.import(),
+			B: { x: "u8", samples: "u32[] == 4" },
+		});
+		expect(() => resolve(v1, v2)).toThrow(MigrationError);
 	});
 });

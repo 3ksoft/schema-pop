@@ -1,258 +1,97 @@
-### Blokery
+Kod jest napisany **wyjątkowo czysto, czytelnie i dojrzałe** – świetnie podzielone odpowiedzialności między klasyfikator (`diff`), resolver (`resolve`), runtime i emitory (`emitTs`). Widać dużą dbałość o brzegowe przypadki (np. bezpieczne cytowanie właściwości, zapobieganie niepoprawnym defaultom czy weryfikacja typów stałorozmiarowych).
 
-**1. Zmiana `non-struct → struct` omija wymagany hook**
+Przejrzałem cały zestaw plików pod kątem potencjalnych bugów, wycieków typów i edge-case'ów. Oto kilka rzeczy, na które warto zwrócić uwagę:
 
-`diffMatchedTypes()` poprawnie oznacza zmianę rodzaju jako `user-supplied`, ale resolver patrzy wyłącznie na `td.to.kind`. Gdy typ docelowy jest strukturą, wchodzi w automatyczną migrację pól, nawet jeśli źródłem był alias, enum albo union.
+---
 
-Przykład `alias S = u32 → struct S { x: u32 }` dał mi plan:
+### 1. Niespójność w `isFixedSize` dla Enumów (`migrations/emitTs.ts`)
 
-```ts
-{
-  kind: "fields",
-  ops: [{ kind: "copy", to: "x", from: "x" }]
+W `emitTs.ts` funkcja `isFixedSize` zaczyna się od:
+```typescript
+function isFixedSize(t: TypePlan, plan: LayoutPlan): boolean {
+	if (t.kind === "enum") return false; // <--- TUTAJ
+	const sz = (t as any).paddedSize ?? (t as any).size ?? 0;
+    ...
+```
+Ale kilkanaście linijek niżej w pomocniczym `typeFixed` masz:
+```typescript
+	const typeFixed = (tp: TypePlan): boolean => {
+		if (tp.kind === "struct")
+			return (tp as any).fields.every((f: any) => fieldFixed(f.type));
+		if (tp.kind === "alias") return fieldFixed((tp as any).type);
+		if (tp.kind === "union" || tp.kind === "enum") return true; // <--- I TUTAJ
+		return false;
+	};
+```
+**Efekt:**
+- Jeśli wywołasz `isFixedSize(MyEnum)`, funkcja zwróci `false` (przez pierwszą linijkę) i nie wygeneruje wrappera bajtowego `migrateMyEnum`.
+- Jeśli wywołasz `isFixedSize(MyStruct)` gdzie `MyStruct` zawiera pole typu `MyEnum`, funkcja przejdzie do `typeFixed` i uzna to pole za fixed (`true`).
+
+**Sugerowana zmiana:**
+Ostatecznie zależy to od tego, czy enum ma przypisany `paddedSize`/`size` w `TypePlan`. Jeśli tak, to w pętli głównej enum powinien przechodzić przez `typeFixed` tak samo jak inne typy, zamiast być odrzucanym na samym wejściu.
+
+---
+
+### 2. Złożoność $O(N^2)$ w Pass 1 `diffStructFields` (`migrations/diff.ts`)
+
+W `diffStructFields` w Pass 1 (dla jawnych renamów) używasz `indexOf`:
+```typescript
+// Pass 1: explicit renames (to.renamedFrom)
+for (let ti = 0; ti < to.fields.length; ti++) {
+    ...
+    shared.push({
+        ffIdx: from.fields.indexOf(ff), // <--- O(N) wewnątrz pętli
+        tfIdx: ti,
+        ff,
+        tf,
+    });
 }
+
+// Pass 2: name-matched fields
+const fromIndex = new Map(from.fields.map((f, i) => [f.name, i])); // <--- Map tworzona dopiero w Pass 2
 ```
 
-czyli generator później wyemituje `x: v1.x`, mimo że `v1` jest liczbą. Tu przed ścieżką struktury potrzebny jest warunek:
-
-```ts
-if (td.from.kind !== td.to.kind) {
-  requireWholeTypeHook();
-}
-```
-
-albo osobny rodzaj diffu `kind-changed`, którego resolver nie może przypadkiem potraktować jak zwykłego `changed struct`.  
+**Sugerowana zmiana:**
+Przenieś `const fromIndex = new Map(...)` na sam początek `diffStructFields` i w Pass 1 użyj `fromIndex.get(oldName)!`. Zredukuje to złożoność Pass 1 z $O(N^2)$ do $O(N)$ przy dużych strukturach.
 
 ---
 
-**2. `reordered` może nadpisać `type-narrowed` albo `type-changed`**
+### 3. Ryzyko Shadowingu w `emitTsMigration` (`migrations/emitTs.ts`)
 
-`diffStructFields()` może wygenerować dla jednego pola dwa wpisy, na przykład:
+W `emitTs.ts` generujesz nagłówek i sygnaturę funkcji:
+```typescript
+import type * as V1 from "v1";
 
-```ts
-type-narrowed(a)
-reordered(a)
+export function transformFoo(v1: V1.Foo): V2.Foo { ... }
 ```
+Jeśli użytkownik poda w konfiguracji `v1Alias: "v1"` (małą literą), wygenerowany kod przybierze postać:
+```typescript
+import type * as v1 from "v1";
 
-Następnie `fieldChangesByToName()` wkłada je do `Map<string, FieldChange>`. Ponieważ `reordered` jest dodawany później, nadpisuje narrowing.
-
-Potwierdzony przypadek:
-
-```ts
-// v1
-{ a: u32, b: u32 }
-
-// v2
-{ b: u32, a: u8 }
+export function transformFoo(v1: v1.Foo): V2.Foo { ... }
+//                            ^^ Nazwa parametru przesłania nazwę importu!
 ```
-
-Resolver nie zgłasza brakującego hooka i generuje zwykłe:
-
-```ts
-{ a: v1.a }
-```
-
-Najprościej w ogóle nie przekazywać `reordered` do resolvera — na poziomie transformacji obiektowej kolejność pól nie wymaga żadnej operacji. Alternatywnie mapa musiałaby przechowywać tablicę zmian albo mieć priorytet `type-changed > narrowed > renamed > widened > reordered`.  
+**Sugerowana zmiana:**
+Nazwij parametr funkcji np. `__v1` lub `v1Input` zamiast `v1`, aby uniknąć potencjalnego kolidowania z wartością `config.v1Alias`.
 
 ---
 
-**3. Zmiany payloadu istniejącego wariantu union są niewidoczne**
+### 4. Podwójny wpis w `changes` dla zmienionego i przestawionego pola (`migrations/diff.ts`)
 
-`diffUnionVariants()` porównuje wyłącznie nazwy wariantów oraz `renamedFrom`. Nie porównuje:
+W `diffStructFields`:
+1. W Pass 2 dla pola ze zmianą typu (np. `type-widened`) dodajesz zmianę do `changes`, ale **i tak dodajesz pole do `shared`**:
+   ```typescript
+   shared.push({ ffIdx: fromIndex.get(tf.name)!, tfIdx: ti, ff, tf });
+   ```
+2. Następnie w Pass 4 spradzasz kolejność w `shared`. Jeśli to samo pole zostało też przesunięte w strukturze, w `changes` znajdzie się zarówno zmiana `type-widened` jak i `reordered`.
 
-* `variant.type`,
-* `discriminant`,
-* `discriminantValue`,
-* tagów, jeśli mają znaczenie dla reprezentacji obiektowej.
-
-Przykład:
-
-```ts
-U = A<u8>  →  U = A<u32>
-```
-
-został sklasyfikowany jako `unchanged`, a resolver utworzył `identity`.
-
-Dodatkowo `computeDirty()` propaguje zmiany tylko przez struktury. Nie przechodzi przez aliasy ani payloady unionów. Zatem także:
-
-```ts
-Child zmieniony
-Alias = Child
-Parent { value: Alias }
-```
-
-może zakończyć się `identity` dla `Alias` i `Parent`.
-
-Potrzebny jest ogólny graf zależności dla każdego `TypePlan`:
-
-* struct → pola,
-* alias → `type`,
-* union → typy wariantów,
-* wrappers → array/optional/inline/map.
-
-Dopiero po takim fixpoincie można wiarygodnie ustalać `dirty`.  
+Co prawda `resolve.ts` filtruje `reordered` w `fieldChangesByToName`, ale surowy `PlanDiff` będzie zawierał dwa obiekty `FieldChange` dla tego samego pola docelowego. Jeśli to zamierzone w celach audytowych – jest OK, ale warto o tym pamiętać przy konsumowaniu `PlanDiff` w innych miejscach.
 
 ---
 
-**4. Ograniczenia stringów są porównywane błędnie**
+### Podsumowanie
 
-Dla stringa porównywane jest tylko `maxLength`. `exactLength` jest całkowicie pomijane.
-
-Potwierdzony przypadek:
-
-```ts
-string exactLength 4 → exactLength 8
-```
-
-został uznany za `unchanged`.
-
-Podobne problemy dotyczą tablic:
-
-* stała tablica `u8[4] → u16[4]` jest uznawana za narrowing zamiast widening,
-* `maxLength: 10 → brak limitu` wychodzi jako narrowing, choć jest wideningiem,
-* exact i max powinny być analizowane wspólnie, a nie jako niezależne opcjonalne liczby.
-
-Dobrze byłoby najpierw normalizować constraints do modelu:
-
-```ts
-{ minLength, maxLength, exact }
-```
-
-i dopiero porównywać zakres akceptowanych wartości. 
-
----
-
-**5. „Language default” nie zawsze jest poprawną wartością schemy**
-
-Każdy nowy string i każda nowa tablica bez jawnego defaultu są klasyfikowane jako `auto`. Emitter generuje odpowiednio `""` oraz `[]`.
-
-To jest niepoprawne dla:
-
-```ts
-name: string exactLength 8
-samples: u32[4]
-```
-
-Wygenerowane wartości nie spełniają v2 już w chwili utworzenia.
-
-Bezpieczna zasada:
-
-* string bez `exactLength` → `""`,
-* dynamiczna tablica → `[]`,
-* exact string/array o długości większej od zera → jawny default albo hook,
-* ewentualnie tablicę można wypełniać rekurencyjnym zerem, ale to już świadoma semantyka, nie zwykły language default.
-
-To jest bezpośrednio sprzeczne z hard-error stance opisanym w planie.  
-
-### Ważne problemy
-
-**6. Rename typów nie jest uwzględniany w referencjach**
-
-Gdy `Old` zostaje przemianowany na `New`, pole:
-
-```ts
-child: Old → child: New
-```
-
-jest klasyfikowane jako strukturalna zmiana referencji i wymaga hooka. Resolver powinien znać mapę:
-
-```ts
-Old -> New
-```
-
-i traktować taką referencję jako zgodną oraz generować `transformNew(v1.child)`.
-
-Czysty rename enuma, unionu albo aliasu również nie przechodzi automatycznie: `computeDirty()` uznaje każdy `renamed` za dirty, po czym resolver wymaga whole-type hooka dla każdego non-structa. Potwierdzony czysty rename enuma z identycznymi wariantami zakończył się błędem resolvera, mimo że `PlanDiff.status` wynosił `"auto"`.
-
-Brakuje też kontroli jednoznaczności. Obecnie jedno pole lub typ źródłowy może zostać równocześnie:
-
-* zachowany pod starą nazwą,
-* użyty jako źródło `renamedFrom` dla nowego elementu.
-
-Generator potraktuje to jak legalne kopiowanie jednego źródła do dwóch celów. Semantycznie `Renamed` powinien raczej wymuszać parowanie jeden-do-jednego.  
-
----
-
-**7. Emitter może wygenerować jawnie uszkodzony kod hooków**
-
-Jeżeli `MigrationPlan` używa hooków, ale `hooksImport` nie został podany, powstaje:
-
-```ts
-return (null!.S as (v1: any) => any)(v1);
-```
-
-Emitter powinien od razu rzucić:
-
-```ts
-if (plan.hookedTypes.length && !config.hooksImport) {
-  throw new Error(...)
-}
-```
-
-Dodatkowo nazwy pól są emitowane bez escaping:
-
-```ts
-foo-bar: v1.old-name
-```
-
-ArkType pozwala na klucze niebędące identyfikatorami, więc wszędzie powinien być wspólny helper:
-
-```ts
-const access = (base: string, key: string) =>
-  isIdentifier(key) ? `${base}.${key}` : `${base}[${JSON.stringify(key)}]`;
-```
-
-Analogicznie hook registry powinien używać `migrationHooks["Type"]["field"]`, a klucze obiektu powinny być cytowane. 
-
----
-
-**8. `JSON.stringify()` nie jest serializerem literałów TypeScript**
-
-`defaultLiteral` jest emitowany przez `JSON.stringify()`. Potwierdzony `1n` kończy się wyjątkiem:
-
-```text
-TypeError: Do not know how to serialize a BigInt
-```
-
-Problematyczne są także:
-
-* `NaN` i `Infinity` → `null`,
-* `undefined`,
-* obiekty niestandardowe,
-* potencjalnie `-0`.
-
-Tu potrzebny jest mały, jawny `emitTsLiteral()`, który albo obsłuży dozwolony zestaw wartości, albo odmówi generowania i zażąda hooka. 
-
----
-
-**9. Widening został zgubiony w IR**
-
-Plan architektoniczny mówi o osobnej operacji `widen`, ale bieżący `FieldOp` redukuje widening do zwykłego `copy`. 
-
-To działa dla `u8 → u16`, jeśli oba są w TS reprezentowane jako `number`, ale przestaje być neutralne językowo. W szczególności `u32 → u64` może wymagać `BigInt(v1.x)`, a przyszły emitter Rust/C również potrzebuje jawnej konwersji.
-
-IR powinien zachować informację:
-
-```ts
-{
-  kind: "convertPrimitive",
-  from: "u32",
-  to: "u64",
-  source: "field"
-}
-```
-
-zamiast zakładać, że widening zawsze jest identycznością wartości na poziomie języka.
-
-### Mniejsze rzeczy
-
-* `PlanDiff.status` nie oznacza obecnie tego, co mówi komentarz. Może być `"auto"`, a `resolveMigration()` i tak wymagać whole-type hooka, na przykład przy czystym rename enuma albo dodaniu wariantu union.
-* `isFixedSize()` jest wewnętrznie niespójne: enum jest odrzucony na wejściu, mimo że wewnętrzne `typeFixed()` uznaje enum za fixed. Stringi i optionale są zawsze traktowane jako variable, choć analizator wylicza dla nich fizyczny `paddedSize`; to zależy jeszcze od dokładnego kontraktu codeców. 
-* `defaultValue !== undefined` nie rozróżnia „brak defaultu” od jawnego defaultu `undefined`. Analizator zna chwilowo `hasDefault`, ale nie przenosi tej informacji do `FieldPlan`. 
-* `runtime.ts` jest przyjemnie mały i czytelny, a publiczny `index.ts` nie przecieka nadmiernie implementacją.  
-
-## Kolejność napraw
-
-Najpierw poprawiłbym trzy rzeczy: guard na zmianę rodzaju typu, usunięcie `reordered` z mapowania operacji oraz pełny dependency graph obejmujący aliasy i uniony. Następnie constraints string/array i politykę defaultów. Dopiero potem utwardzanie emittera.
-
-Do rozstrzygnięcia dwóch warunkowych punktów przydałyby się jeszcze emitter typów TS oraz `tsCodec` — głównie reprezentacja `i64/u64` i kontrakt `SIZEOF_*` dla stringów, optionals i tablic z `maxLength`.
+Poza tymi kilkoma drobnymi szczegółami kod reprezentuje bardzo wysoki poziom:
+* Obsługa `compareLengthRange` i łagodnego/ostrego przesuwania zakresów długości tablic i stringów jest super przemyślana.
+* Pętla utrwalania `dirty` w `computeDirty` (fixpoint algorithm) do propagacji zmian w strukturach zagnieżdżonych działa wzorowo.
+* Serializer literałów `emitTsLiteral` bezpiecznie obsługuje `BigInt`, `NaN` i `-0`, co często jest pomijane w emitorach TS.

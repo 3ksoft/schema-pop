@@ -21,3 +21,4 @@ corpus-uart*
 **/*.wasm
 **/tsconfig.tsbuildinfo
 **/dist
+flake.lock

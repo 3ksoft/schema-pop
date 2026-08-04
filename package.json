@@ -20,12 +20,5 @@
 		"deploy:pages": "scripts/deploy-gh-pages.sh",
 		"node:cleanup": "rm -rf $(fd --no-ignore tsconfig.tsbuildinfo) && rm -rf $(fd --no-ignore bun.lock) && rm -rf $(fd --no-ignore node_modules) && bun pm cache rm && bun i"
 	},
-	"devDependencies": {
-		"@biomejs/biome": "2.4.14",
-		"@types/node": "^25.7.0",
-		"arktype": "2.2.1",
-		"opentype.js": "^2.0.0",
-		"typescript": "~6.0.0",
-		"verdaccio": "^6.5.2"
-	}
+	"devDependencies": {}
 }

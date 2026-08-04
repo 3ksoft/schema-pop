@@ -1,9 +1,14 @@
-import type { Field, FieldPlan, LayoutPlan, TypePlan } from "@schema-pop/schema";
+import type {
+	Field,
+	FieldPlan,
+	LayoutPlan,
+	TypePlan,
+} from "@schema-pop/schema";
 import type { FieldChange, PlanDiff, TypeDiff } from "./diff";
 import {
+	isWholeMapper,
 	type Migration,
 	type MigrationHooks,
-	isWholeMapper,
 	mapperFieldKeys,
 } from "./runtime";
 
@@ -83,8 +88,7 @@ function referencedTypeNames(field: Field, out: Set<string>): void {
 			referencedTypeNames((field as any).item, out);
 			break;
 		case "inlineStruct":
-			for (const f of (field as any).fields)
-				referencedTypeNames(f.type, out);
+			for (const f of (field as any).fields) referencedTypeNames(f.type, out);
 			break;
 		default:
 			break;
@@ -120,16 +124,22 @@ function computeDirty(diff: PlanDiff): Set<string> {
 	}
 
 	// Fixpoint: a type referencing a dirty type becomes dirty.
-	const byName = new Map(diff.to.types.map((t) => [t.name, t]));
 	let changed = true;
 	while (changed) {
 		changed = false;
 		for (const t of diff.to.types) {
 			if (dirty.has(t.name)) continue;
-			if (t.kind !== "struct") continue;
-			for (const f of t.fields) {
+			const fields: Field[] =
+				t.kind === "struct"
+					? t.fields.map((f) => f.type)
+					: t.kind === "alias"
+						? [t.type]
+						: t.kind === "union"
+							? t.variants.map((v) => v.type)
+							: [];
+			for (const field of fields) {
 				const refs = new Set<string>();
-				referencedTypeNames(f.type, refs);
+				referencedTypeNames(field, refs);
 				if ([...refs].some((r) => dirty.has(r))) {
 					dirty.add(t.name);
 					changed = true;
@@ -138,7 +148,6 @@ function computeDirty(diff: PlanDiff): Set<string> {
 			}
 		}
 	}
-	void byName;
 	return dirty;
 }
 
@@ -148,12 +157,12 @@ function fieldChangesByToName(
 ): Map<string, FieldChange> {
 	const m = new Map<string, FieldChange>();
 	for (const c of changes) {
+		if (c.kind === "reordered") continue;
 		switch (c.kind) {
 			case "added":
 				m.set(c.field.name, c);
 				break;
 			case "renamed":
-			case "reordered":
 			case "type-widened":
 			case "type-narrowed":
 			case "type-changed":
@@ -216,6 +225,14 @@ export function resolveMigration(
 			continue;
 		}
 
+		if (td.from.kind !== td.to.kind) {
+			gaps.push({
+				type: toName,
+				detail: `type kind changed from ${td.from.kind} to ${td.to.kind} — provide a whole-type defineMigration<...>((v1) => ...)`,
+			});
+			continue;
+		}
+
 		// Unchanged and not dirty-by-reference → identity shallow copy.
 		if (td.kind === "unchanged" && !dirty.has(toName)) {
 			types.push({ kind: "identity", name: fromName, toName });
@@ -254,7 +271,10 @@ export function resolveMigration(
 				ops.push({ kind: "hookField", to: fieldName });
 				return true;
 			}
-			gaps.push({ type: toName, detail: `${detail} — add "${fieldName}" to defineMigration` });
+			gaps.push({
+				type: toName,
+				detail: `${detail} — add "${fieldName}" to defineMigration`,
+			});
 			return false;
 		};
 
@@ -335,10 +355,7 @@ export function resolveMigration(
 					break;
 				}
 				case "type-changed": {
-					requireHook(
-						tf.name,
-						`field '${tf.name}' changed type structurally`,
-					);
+					requireHook(tf.name, `field '${tf.name}' changed type structurally`);
 					break;
 				}
 			}

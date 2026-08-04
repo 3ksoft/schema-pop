@@ -1,8 +1,7 @@
 import { type } from "arktype";
-import { GuiMeta } from "./gui";
 
 export const ArkMeta = type({
-	"popKind?": "'rich' | 'bitwise' | 'binary' | 'reserved' | 'gpu-binding' | 'gpu-shader'",
+	"popKind?": "'rich' | 'bitwise' | 'binary' | 'reserved'",
 	"description?": "string",
 	"category?": "string",
 	"min?": "number",
@@ -26,7 +25,7 @@ export const ArkMeta = type({
 	"obsoleteReason?": "string",
 	"renamedFrom?": "string",
 	"originalType?": "string",
-}).and(GuiMeta);
+});
 
 export type ArkMeta = typeof ArkMeta.infer;
 
