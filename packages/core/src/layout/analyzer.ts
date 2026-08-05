@@ -1077,6 +1077,35 @@ export class SchemaAnalyzer {
 						...(o.symbol !== undefined ? { symbol: o.symbol } : {}),
 					},
 			);
+			// A field that inlines a union identical to a DECLARED scope enum is
+			// that enum, not a new type. Reuse the canonical name so codecs/WGSL
+			// reference `MaterialPhase` instead of a synthetic duplicate named
+			// after the field (`phase: "MaterialPhase"` → `MpmMaterialPhase`),
+			// whose type would never be exported by tsExports.
+			const names = values.map((v) => v.name);
+			const nameSet = new Set(names);
+			let canonical: string | undefined;
+			let matches = 0;
+			for (const [candidate, def] of Object.entries(this.schema.types)) {
+				if (!def || def.type !== "enum" || !Array.isArray(def.options)) continue;
+				if (def.options.length !== names.length) continue;
+				const allMatch = def.options.every((opt: any) => {
+					const n = typeof opt === "string" ? opt : (opt.label ?? String(opt.value));
+					return nameSet.has(n);
+				});
+				if (allMatch) {
+					canonical = candidate;
+					matches++;
+				}
+			}
+			if (matches === 1) {
+				return this.assertField({
+					kind: "reference",
+					name: canonical!,
+					indirection: "inline",
+					isForward: false,
+				});
+			}
 			const synthName = this.synthesizeEnum(values, pathHint || "AnonEnum");
 			return this.assertField({
 				kind: "reference",
