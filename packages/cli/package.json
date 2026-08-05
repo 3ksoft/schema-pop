@@ -38,9 +38,10 @@
 	},
 	"dependencies": {
 		"@ark/schema": "0.56.0",
-		"@schema-pop/schema": "workspace:*",
 		"@schema-pop/core": "workspace:*",
 		"@schema-pop/exporter": "workspace:*",
+		"@schema-pop/schema": "workspace:*",
+		"arktype": "^2.2.3",
 		"cac": "^7.0.0"
 	},
 	"devDependencies": {

@@ -89,6 +89,77 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 		generate: (plan: LayoutPlan) => {
 			const typesMap = new Map<string, TypePlan>(plan.types.map(t => [t.name, t]));
 
+			// Literal symbols have plan-global identity in WGSL. The analyzer only
+			// preserves provenance (`symbol`); this exporter owns target-specific
+			// dedupe/indexing so other exporters keep their enum-local ordinals.
+			const symbolNames: string[] = [];
+			const seenSymbols = new Set<string>();
+			const addSymbol = (symbol?: string) => {
+				if (symbol === undefined || seenSymbols.has(symbol)) return;
+				seenSymbols.add(symbol);
+				symbolNames.push(symbol);
+			};
+			const symbolOf = (value: unknown): string | undefined => {
+				const symbol = (value as { symbol?: unknown } | null)?.symbol;
+				return typeof symbol === "string" ? symbol : undefined;
+			};
+			const collectFieldSymbols = (field: Field): void => {
+				if (field.kind === "reference") {
+					const ref = typesMap.get(field.name);
+					if (ref?.kind === "enum") {
+						for (const variant of ref.variants) addSymbol(symbolOf(variant));
+					}
+					return;
+				}
+				if (field.kind === "array") collectFieldSymbols(field.item);
+				else if (field.kind === "optional") collectFieldSymbols(field.inner);
+				else if (field.kind === "inlineStruct") {
+					for (const nested of field.fields) collectFieldSymbols(nested.type);
+				}
+			};
+
+			// Prefer semantic/user-visible types for encounter order; synthesized
+			// enums are dependencies and may be topologically placed before them.
+			for (const t of plan.types) {
+				if (t.kind === "enum" && t.synthetic) continue;
+				if (t.kind === "enum") {
+					for (const variant of t.variants) addSymbol(symbolOf(variant));
+				} else if (t.kind === "struct") {
+					for (const field of t.fields) collectFieldSymbols(field.type);
+				} else if (t.kind === "union") {
+					for (const variant of t.variants) addSymbol(symbolOf(variant));
+				} else if (t.kind === "alias") {
+					collectFieldSymbols(t.type);
+				}
+			}
+			// Defensive fallback for a synthesized symbol enum not reachable from a
+			// user-visible field/type.
+			for (const t of plan.types) {
+				if (t.kind !== "enum" || !t.synthetic) continue;
+				for (const variant of t.variants) addSymbol(symbolOf(variant));
+			}
+			if (plan.autoSort) symbolNames.sort((a, b) => a.localeCompare(b));
+			if (symbolNames.length > 256) {
+				throw new Error(
+					`WGSL global symbol registry has ${symbolNames.length} entries; ` +
+						"current symbol fields are u8-backed and support at most 256 symbols",
+				);
+			}
+
+			const symbolIds = new Map(symbolNames.map((name, id) => [name, id] as const));
+			const symbolConstNames = new Map<string, string>();
+			const usedSymbolConstNames = new Set<string>();
+			for (const symbol of symbolNames) {
+				let suffix = symbol.replace(/[^a-zA-Z0-9_]/g, "_");
+				if (!suffix) suffix = "symbol";
+				let constName = `SMB_${suffix}`;
+				if (usedSymbolConstNames.has(constName)) {
+					constName = `${constName}_${symbolIds.get(symbol)}`;
+				}
+				usedSymbolConstNames.add(constName);
+				symbolConstNames.set(symbol, constName);
+			}
+
 			const getSizeInWords = (paddedSize: number) => Math.max(1, Math.ceil(paddedSize / 4));
 
 			const getTypeSizeInWords = (name: string): number => {
@@ -172,6 +243,12 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 			};
 
 			let typesCode = "";
+			if (symbolNames.length > 0) {
+				for (const symbol of symbolNames) {
+					typesCode += `const ${symbolConstNames.get(symbol)}: u32 = ${symbolIds.get(symbol)}u;\n`;
+				}
+				typesCode += "\n";
+			}
 			let helpersCode = "";
 
 			// ====================================================================
@@ -186,7 +263,13 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 					const suffix = underlying === "u32" ? "u" : "";
 					typesCode += `alias ${name} = ${underlying};\n`;
 					for (const v of t.variants) {
-						typesCode += `const ${name}_${v.name}: ${name} = ${v.value}${suffix};\n`;
+						const symbolConst = symbolOf(v) !== undefined
+							? symbolConstNames.get(symbolOf(v)!)
+							: undefined;
+						const valueExpr = symbolConst
+							? underlying === "u32" ? symbolConst : `i32(${symbolConst})`
+							: `${v.value}${suffix}`;
+						typesCode += `const ${name}_${v.name}: ${name} = ${valueExpr};\n`;
 					}
 					typesCode += `\n`;
 				}
@@ -485,7 +568,11 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 						helpersCode += `}\n\n`;
 
 						// Pack variant
-						const tagVal = v.tag !== undefined ? v.tag : (v as any).tag ?? (i + 1);
+						const localTagVal = v.tag !== undefined ? v.tag : (v as any).tag ?? (i + 1);
+						const tagVal =
+							symbolOf(v) !== undefined && symbolIds.has(symbolOf(v)!)
+								? symbolIds.get(symbolOf(v)!)!
+								: localTagVal;
 						helpersCode += `fn pack_${snakeName}_from_${snakeVarName}(unpacked: ${cleanVarName}) -> ${rawType} {\n`;
 						helpersCode += `\tvar out: ${rawType};\n`;
 						if (vWords === 1) {

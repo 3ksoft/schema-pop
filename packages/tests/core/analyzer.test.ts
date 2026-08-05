@@ -134,6 +134,46 @@ describe("SchemaAnalyzer", () => {
 		expect((current as any)?.defaultValue).toBeUndefined();
 	});
 
+	it("preserves literal-symbol provenance in enum and discriminated-union plans", () => {
+		const mod = scope({
+			...wgsl.import(),
+			String: { kind: "'string'", encoding: "'utf-8' | 'ascii'" },
+			Array: { kind: "'array'", maxItems: "u16" },
+			TelemetryTypes: "'string' | 'array'",
+			DecodeTelemetry: "String | Array",
+		}).export();
+
+		const extracted = fromModule(mod);
+		const telemetryTypes = extracted.schema.types.TelemetryTypes as any;
+		expect(telemetryTypes.options).toEqual([
+			{ label: "string", value: "string", symbol: "string" },
+			{ label: "array", value: "array", symbol: "array" },
+		]);
+
+		const { plan } = new SchemaAnalyzer().analyze(extracted, {
+			layout: "std430",
+			mode: "binary",
+		});
+		const enumVariant = (typeName: string, variantName: string) => {
+			const e = plan.types.find((t) => t.name === typeName && t.kind === "enum") as any;
+			return e?.variants.find((v: any) => v.name === variantName);
+		};
+
+		expect(enumVariant("StringKind", "string")?.symbol).toBe("string");
+		expect(enumVariant("StringEncoding", "utf-8")?.symbol).toBe("utf-8");
+		expect(enumVariant("TelemetryTypes", "string")?.symbol).toBe("string");
+
+		const decode = plan.types.find(
+			(t) => t.name === "DecodeTelemetry" && t.kind === "union",
+		) as UnionPlan;
+		const stringVariant = decode.variants.find((v) => v.name === "String") as any;
+		const arrayVariant = decode.variants.find((v) => v.name === "Array") as any;
+		expect(stringVariant.symbol).toBe("string");
+		expect(arrayVariant.symbol).toBe("array");
+		expect(enumVariant("DecodeTelemetryTag", "String")?.symbol).toBe("string");
+		expect(enumVariant("DecodeTelemetryTag", "Array")?.symbol).toBe("array");
+	});
+
 	it("aligns subset-enum member values to their superset enum", () => {
 		// `MpmType: "GasType | FluidType"` — arktype flattens the union into one
 		// alphabetically-numbered enum, so a shared literal (`steam`) would get a

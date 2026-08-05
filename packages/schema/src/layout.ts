@@ -116,6 +116,8 @@ export const $layout = scope({
 		type: "Field",
 		"tag?": "number",
 		"renamedFrom?": "string",
+		// Original literal discriminant, when this variant is symbol-backed.
+		"symbol?": "string",
 	},
 
 	/** Top-level type definitions */
@@ -150,6 +152,8 @@ export const $layout = scope({
 		value: "number",
 		description: "string?",
 		"renamedFrom?": "string",
+		// Original literal symbol identity; `value` remains the enum-local ordinal.
+		"symbol?": "string",
 	},
 
 	EnumPlan: {

@@ -62,7 +62,7 @@ export function fromModule(
 
 	for (const [name, exType] of Object.entries(module)) {
 		if (!isDataType(exType)) continue;
-		ctx.map.set(exType.expression, name);
+		ctx.map.set(exType.internal, name);
 	}
 
 	for (const [name, exType] of Object.entries(module)) {
@@ -108,9 +108,22 @@ function extractBaseRoot(
 	rawDef?: unknown,
 ): PopType & ArkMeta {
 	if (!root.kind) return ANY;
-	const linkedName = ctx.map.get(root.expression);
-	if (linkedName && label !== linkedName) {
-		return assertPopType({ type: "link", target: linkedName }, ctx);
+	const linkedName = ctx.map.get(root);
+
+	// ArkType preserves named references by reusing the exported type's internal
+	// node object inside fields/union branches. Keep that identity as a link
+	// instead of flattening the referenced object into an anonymous inline type.
+	// Comparing node identity avoids false links between structurally-equal types.
+	if (linkedName && linkedName !== label) {
+		return assertPopType(
+			{
+				type: "link",
+				target: linkedName,
+				...ArkMeta.assert(root.meta),
+				label,
+			},
+			ctx,
+		);
 	}
 
 	let popType: PopType | null = null;
@@ -392,10 +405,16 @@ function extractUnion(
 			{
 				type: "enum",
 				options: orderedBranches.map((b) => {
-					const val = (b as UnitNode).unit ?? (b as UnitNode).compiledValue;
-					return typeof val === "string" || typeof val === "number"
-						? val
-						: String(val);
+					const raw = (b as UnitNode).unit ?? (b as UnitNode).compiledValue;
+					const value =
+						typeof raw === "string" || typeof raw === "number"
+							? raw
+							: String(raw);
+					return {
+						label: String(value),
+						value,
+						...(typeof raw === "string" ? { symbol: raw } : {}),
+					};
 				}),
 			},
 			ctx,
@@ -421,13 +440,15 @@ function extractUnion(
 }
 
 function extractUnit(node: UnitNode, ctx: ExtractionContext): PopType {
+	const value = String(node.unit);
 	return assertPopType(
 		{
 			type: "symbol",
 			size: 1,
 			binaryType: "u8",
 			popKind: "binary",
-			value: node.unit,
+			value,
+			symbol: value,
 		},
 		ctx,
 	);

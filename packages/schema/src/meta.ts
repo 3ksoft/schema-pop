@@ -25,6 +25,9 @@ export const ArkMeta = type({
 	"obsoleteReason?": "string",
 	"renamedFrom?": "string",
 	"originalType?": "string",
+	// Literal-symbol provenance carried from source importers (e.g. ArkType UnitNode).
+	// Exporters may use it to assign a target-specific global symbol identity.
+	"symbol?": "string",
 });
 
 export type ArkMeta = typeof ArkMeta.infer;

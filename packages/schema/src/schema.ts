@@ -9,7 +9,9 @@ export interface ExtractionContext {
 	warnings: string[];
 	errors: string[];
 	schema: PopSchema;
-	map: Map<string, string>;
+	// Exported ArkType internal node identity -> declared schema type name.
+	// Identity (not expression text) avoids aliasing structurally-equal types.
+	map: Map<unknown, string>;
 	module: PopModule;
 }
 
@@ -66,6 +68,8 @@ export const fieldVariantDefs = {
 	EnumOption: {
 		label: "string",
 		value: "string | number",
+		// Present only when this enum option originated from a literal symbol.
+		"symbol?": "string",
 	},
 
 	Enum: {

@@ -159,9 +159,17 @@ export class SchemaAnalyzer {
 			.replace(/[^a-zA-Z0-9]/g, "");
 	}
 
-	private synthesizeEnum(values: string[], hint: string): string {
-		const sorted = [...values].sort();
-		const hash = sorted.join("|");
+	private synthesizeEnum(
+		values: Array<string | { name: string; symbol?: string }>,
+		hint: string,
+	): string {
+		const normalized = values.map((value) =>
+			typeof value === "string" ? { name: value } : value,
+		);
+		const sorted = [...normalized].sort((a, b) => a.name.localeCompare(b.name));
+		const hash = sorted
+			.map((value) => `${value.name}\u0000${value.symbol ?? ""}`)
+			.join("|");
 		const cached = this.synthEnumsByHash.get(hash);
 		if (cached) return cached.name;
 
@@ -176,20 +184,27 @@ export class SchemaAnalyzer {
 			unique = `${name}${++n}`;
 		}
 
-		const size = values.length <= 256 ? 1 : values.length <= 65536 ? 2 : 4;
+		const size =
+			normalized.length <= 256 ? 1 : normalized.length <= 65536 ? 2 : 4;
 		const underlyingType: "u8" | "u16" | "i32" =
 			size === 1 ? "u8" : size === 2 ? "u16" : "i32";
+		const ordered = [...normalized].sort((a, b) => {
+			if (a.name === "none") return -1;
+			if (b.name === "none") return 1;
+			return 0;
+		});
 		const plan: EnumPlan = {
 			kind: "enum",
 			name: unique,
 			size,
 			align: size,
 			paddedSize: size,
-			variants: values.sort((a, b) => {
-				if (a === 'none') return -1;
-				if (b === 'none') return 1;
-				return 0;
-			}).map((v, i) => ({ name: v, value: i, description: "" })),
+			variants: ordered.map((v, i) => ({
+				name: v.name,
+				value: i,
+				description: "",
+				...(v.symbol !== undefined ? { symbol: v.symbol } : {}),
+			})),
 			underlyingType,
 			synthetic: true,
 		};
@@ -813,6 +828,7 @@ export class SchemaAnalyzer {
 					name: opt.label,
 					value: typeof opt.value === "number" ? opt.value : i,
 					description: "",
+					...(opt.symbol !== undefined ? { symbol: opt.symbol } : {}),
 				};
 			});
 			const size =
@@ -832,10 +848,11 @@ export class SchemaAnalyzer {
 		const disc = (typeDef as any).discriminant || "kind";
 		const variants: VariantPlan[] = (typeDef.variants || []).map(
 			(branch: any, i: number) => {
-				let vName = branch.label;
+				// Named references retain their declared type name. `fromArktype` may
+				// attach a synthetic branch label while preserving the actual target.
+				let vName = branch.type === "link" ? branch.target : branch.label;
 				if (!vName) {
-					if (branch.type === "link") vName = branch.target;
-					else if (branch.type === "object" && branch.typeString)
+					if (branch.type === "object" && branch.typeString)
 						vName = branch.typeString;
 					else vName = `Variant${i + 1}`;
 				}
@@ -846,12 +863,16 @@ export class SchemaAnalyzer {
 				// text codecs can emit the original literal (`release`) — the binary
 				// layout strips the kind field to a unit, which would otherwise lose it.
 				let discriminantValue: string | undefined;
-				if (this.config.layout !== "std430" && branch.type === "link") {
+				let symbol: string | undefined;
+				if (branch.type === "link") {
 					const targetDef: any = this.schema.types[branch.target];
 					const kindField: any = targetDef?.fields?.[disc];
 					if (kindField?.type === "symbol" && kindField.value != null) {
 						discriminantValue = String(kindField.value);
-						vName = this.toPascal(discriminantValue);
+						symbol = kindField.symbol ?? discriminantValue;
+						if (this.config.layout !== "std430") {
+							vName = this.toPascal(discriminantValue);
+						}
 					}
 				}
 				vName = vName.replace(/[^a-zA-Z0-9_]/g, "");
@@ -859,6 +880,7 @@ export class SchemaAnalyzer {
 					name: vName,
 					type: this.resolveFieldType(branch, undefined, `${name}_${vName}`),
 					...(discriminantValue != null ? { discriminantValue } : {}),
+					...(symbol !== undefined ? { symbol } : {}),
 					...(branch.renamedFrom ? { renamedFrom: branch.renamedFrom } : {}),
 				} as VariantPlan;
 			},
@@ -867,7 +889,7 @@ export class SchemaAnalyzer {
 		variants.sort((a, b) => a.name.localeCompare(b.name));
 
 		const tagEnumName = this.synthesizeEnum(
-			variants.map((v) => v.name),
+			variants.map((v) => ({ name: v.name, symbol: (v as any).symbol })),
 			`${name}Tag`,
 		);
 		const tagEnum = this.resolvedPlans.get(tagEnumName) as EnumPlan;
@@ -935,7 +957,10 @@ export class SchemaAnalyzer {
 			// self-describing single-value enum field (custom WebGPU union handling).
 			if (this.config.layout === "std430") {
 				const val = String(type.value);
-				const synthName = this.synthesizeEnum([val], pathHint || "Constant");
+				const synthName = this.synthesizeEnum(
+					[{ name: val, symbol: (type as any).symbol ?? val }],
+					pathHint || "Constant",
+				);
 				return this.assertField({
 					kind: "reference",
 					name: synthName,
@@ -1045,7 +1070,12 @@ export class SchemaAnalyzer {
 
 		if (type.type === "enum") {
 			const values = (type.options || []).map((o: any) =>
-				typeof o === "string" ? o : o.value.toString(),
+				typeof o === "string"
+					? { name: o }
+					: {
+						name: o.label ?? String(o.value),
+						...(o.symbol !== undefined ? { symbol: o.symbol } : {}),
+					},
 			);
 			const synthName = this.synthesizeEnum(values, pathHint || "AnonEnum");
 			return this.assertField({

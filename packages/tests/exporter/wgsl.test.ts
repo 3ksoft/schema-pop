@@ -162,6 +162,78 @@ describe("wgsl exporter — struct shape", () => {
 
 });
 
+describe("wgsl exporter — global literal symbols", () => {
+	test("uses one WGSL symbol identity across singleton fields, enums and union tags", () => {
+		const out = genStd430({
+			Number: {
+				kind: "'number'",
+				maxLength: "u16",
+				minLength: "u16",
+			},
+			String: {
+				kind: "'string'",
+				maxLength: "u16",
+				minLength: "u16",
+				encoding: "'utf-8' | 'ascii'",
+			},
+			Array: {
+				kind: "'array'",
+				maxItems: "u16",
+				minItems: "u16",
+				allowDuplicates: "bool",
+			},
+			Primitives: "'number' | 'string'",
+			TelemetryTypes: "'string' | 'array'",
+			DecodeTelemetry: "String | Array",
+		});
+
+		expect(out).toMatch(/const SMB_string: u32 = \d+u;/);
+		expect(out).toMatch(/const SMB_array: u32 = \d+u;/);
+		expect(out).toContain("const StringKind_string: StringKind = SMB_string;");
+		expect(out).toContain("const TelemetryTypes_string: TelemetryTypes = SMB_string;");
+		expect(out).toContain("const ArrayKind_array: ArrayKind = SMB_array;");
+		expect(out).toContain("const DecodeTelemetryTag_String: DecodeTelemetryTag = SMB_string;");
+		expect(out).toContain("const DecodeTelemetryTag_Array: DecodeTelemetryTag = SMB_array;");
+
+		const stringId = Number(out.match(/const SMB_string: u32 = (\d+)u;/)?.[1]);
+		const arrayId = Number(out.match(/const SMB_array: u32 = (\d+)u;/)?.[1]);
+		expect(Number.isInteger(stringId)).toBe(true);
+		expect(Number.isInteger(arrayId)).toBe(true);
+		expect(out).toMatch(
+			new RegExp(`fn pack_decode_telemetry_from_string[\\s\\S]*?insertBits\\([^\\n]*, ${stringId}u,`),
+		);
+		expect(out).toMatch(
+			new RegExp(`fn pack_decode_telemetry_from_array[\\s\\S]*?insertBits\\([^\\n]*, ${arrayId}u,`),
+		);
+	});
+
+	test("autoSort controls WGSL symbol indexing", () => {
+		const sc = scope({
+			...wgslSchema.import(),
+			First: { kind: "'zeta'" },
+			Second: { kind: "'alpha'" },
+		});
+
+		const unsortedPlan = new SchemaAnalyzer().analyze(fromModule(sc.export()), {
+			layout: "std430",
+			mode: "binary",
+			autoSort: false,
+		}).plan;
+		const sortedPlan = new SchemaAnalyzer().analyze(fromModule(sc.export()), {
+			layout: "std430",
+			mode: "binary",
+			autoSort: true,
+		}).plan;
+
+		const unsorted = wgsl({ dest: "out.wgsl" }).generate(unsortedPlan);
+		const sorted = wgsl({ dest: "out.wgsl" }).generate(sortedPlan);
+		expect(unsorted).toContain("const SMB_zeta: u32 = 0u;");
+		expect(unsorted).toContain("const SMB_alpha: u32 = 1u;");
+		expect(sorted).toContain("const SMB_alpha: u32 = 0u;");
+		expect(sorted).toContain("const SMB_zeta: u32 = 1u;");
+	});
+});
+
 describe("wgsl exporter — padding", () => {
 	// std430: f32 followed by vec4<f32> forces 12 bytes of trailing padding
 	// on the f32 (vec4 needs 16-byte alignment). Clean fixture for padding
