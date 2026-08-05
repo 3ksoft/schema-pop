@@ -18,6 +18,32 @@ describe("SchemaAnalyzer", () => {
 		const schema = fromModule(testMod);
 		expect(schema instanceof type.errors).toBe(false);
 	});
+	it("preserves nested objects as inline structs", () => {
+		const mod = scope({
+			value: {
+				meta: { recorded_at: "string" },
+				name: "string",
+			},
+		});
+
+		const { plan } = new SchemaAnalyzer().analyze(mod, { mode: "binary" });
+		const value = plan.types.find((t) => t.name === "value") as StructPlan;
+		const meta = value.fields.find((f) => f.name === "meta");
+
+		expect(meta?.type.kind).toBe("inlineStruct");
+		if (meta?.type.kind !== "inlineStruct") throw new Error("expected inlineStruct");
+		expect(meta.type.fields.map((f) => f.name)).toEqual(["recorded_at"]);
+	});
+
+	it("surfaces Field validation failures instead of silently degrading them", () => {
+		const analyzer = new SchemaAnalyzer();
+		const fallback = (analyzer as any).assertField({ kind: "any" });
+
+		expect(fallback).toEqual({ kind: "unit" });
+		expect(analyzer.getErrors().length).toBeGreaterThan(0);
+		expect(analyzer.getErrors()[0]).toContain("name");
+	});
+
 	it("should sort fields by descending alignment to minimize padding", () => {
 		const schema = fromModule(testMod);
 		// Field reordering is now opt-in via autoSort (declaration order is

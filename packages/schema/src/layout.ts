@@ -92,7 +92,10 @@ export const $layout = scope({
 		name: "string",
 		type: "Field",
 		offset: "number",
-		bitOffset: "number<8",
+		// autoPack bit-packs small unsigned fields into 32-bit words, so a
+		// field can start anywhere within the word (bitOffset 0..31).
+		// Non-packed fields always sit at bitOffset 0.
+		bitOffset: "number<32",
 		bitSize: "number",
 		size: "number",
 		paddingAfter: "number",

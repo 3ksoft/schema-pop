@@ -263,7 +263,7 @@ export class SchemaAnalyzer {
 	private assertField(field: unknown): Field {
 		const valid = Field.and(ArkMeta)(field);
 		if (valid instanceof type.errors) {
-			for (const e of Object.values(valid.entries)) {
+			for (const e of valid) {
 				this.error(e.message);
 			}
 			return { kind: "unit" };
@@ -1004,7 +1004,7 @@ export class SchemaAnalyzer {
 					return this.assertField({
 						kind: "map",
 						keyKind: "string",
-						value: { kind: "any" },
+						value: { kind: "any", name: "any" },
 					});
 				}
 				return this.assertField({ kind: "unit" });
@@ -1035,6 +1035,7 @@ export class SchemaAnalyzer {
 
 			return this.assertField({
 				kind: "inlineStruct",
+				name: pathHint ?? "",
 				fields,
 				size: paddedSize,
 				align: structAlign,
@@ -1056,11 +1057,11 @@ export class SchemaAnalyzer {
 		}
 
 		if (type.type === "union") {
-			return this.assertField({ kind: "any" });
+			return this.assertField({ kind: "any", name: pathHint ?? "any" });
 		}
 
 		if (type.type === "any") {
-			return this.assertField({ kind: "any" });
+			return this.assertField({ kind: "any", name: pathHint ?? "any" });
 		}
 
 		const builtin = this.getBuiltinPrimitive(type.type);
