@@ -1079,12 +1079,19 @@ export class SchemaAnalyzer {
 					pathHint ? `${pathHint}Item` : undefined,
 				),
 			} as any;
-			if (type.exactLength) nField.exactLength = type.exactLength;
+			if (type.exactLength) {
+				nField.minLength = type.exactLength;
+				nField.maxLength = type.exactLength;
+				nField.exactLength = type.exactLength;
+			}
 			if (type.maxLength) nField.maxLength = type.maxLength;
+
 			// Composite types may carry an explicit ABI layout. Keep the array
 			// shape for codecs/exporters while letting getLayoutInternal() honor
 			// size/alignment supplied by schema metadata.
 			if (type.size !== undefined) nField.size = type.size;
+			nField.bitSize = type.item.bitSize * nField.maxLength;
+
 			if (type.align !== undefined) nField.align = type.align;
 			return this.assertField(nField);
 		}

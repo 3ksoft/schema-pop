@@ -1,6 +1,0 @@
-{
-    "name": "bf",
-    "scripts": {
-        "build": "gcc interpreter.c -o harness"
-    }
-}

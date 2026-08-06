@@ -1,6 +1,0 @@
-{
-    "name": "cpp",
-    "scripts": {
-        "build": "g++ -std=c++17 src/main.cpp -o harness"
-    }
-}

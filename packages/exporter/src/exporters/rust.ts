@@ -66,14 +66,14 @@ impl<const N: usize> SharedString<N> {
 		let len = (self.len as usize).min(N);
 		core::str::from_utf8(&self.data[..len]).unwrap_or("")
 	}
-	#[inline] pub fn is_empty(&self) -> boolean { self.len == 0 }
+	#[inline] pub fn is_empty(&self) -> bool { self.len == 0 }
 	#[inline] pub fn capacity() -> usize { N }
 }
 
 impl<const N: usize> Default for SharedString<N> { fn default() -> Self { Self::new() } }
 impl<const N: usize> Clone for SharedString<N> { fn clone(&self) -> Self { *self } }
 impl<const N: usize> Copy for SharedString<N> {}
-impl<const N: usize> PartialEq for SharedString<N> { fn eq(&self, other: &Self) -> boolean { self.as_str() == other.as_str() } }
+impl<const N: usize> PartialEq for SharedString<N> { fn eq(&self, other: &Self) -> bool { self.as_str() == other.as_str() } }
 impl<const N: usize> fmt::Debug for SharedString<N> { fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{:?}", self.as_str()) } }
 impl<const N: usize> Deref for SharedString<N> { type Target = str; fn deref(&self) -> &str { self.as_str() } }
 impl<const N: usize> From<&str> for SharedString<N> { fn from(s: &str) -> Self { Self::from_str(s) } }
@@ -100,7 +100,7 @@ impl<T: Copy + Default, const N: usize> SharedVec<T, N> {
 
 impl<T, const N: usize> SharedVec<T, N> {
 	#[inline] pub fn len(&self) -> usize { self.len as usize }
-	#[inline] pub fn is_empty(&self) -> boolean { self.len == 0 }
+	#[inline] pub fn is_empty(&self) -> bool { self.len == 0 }
 	#[inline] pub fn capacity(&self) -> usize { N }
 	#[inline] pub fn iter(&self) -> core::slice::Iter<'_, T> { self.data[..self.len as usize].iter() }
 	#[inline] pub fn as_slice(&self) -> &[T] { &self.data[..self.len as usize] }
@@ -116,7 +116,7 @@ impl<T: Default + Copy, const N: usize> Default for SharedVec<T, N> { fn default
 impl<T: Clone, const N: usize> Clone for SharedVec<T, N> { fn clone(&self) -> Self { Self { len: self.len, data: self.data.clone() } } }
 impl<T: Copy, const N: usize> Copy for SharedVec<T, N> {}
 impl<T: PartialEq, const N: usize> PartialEq for SharedVec<T, N> {
-	fn eq(&self, other: &Self) -> boolean {
+	fn eq(&self, other: &Self) -> bool {
 		if self.len != other.len { return false; }
 		self.data[..self.len as usize] == other.data[..other.len as usize]
 	}
