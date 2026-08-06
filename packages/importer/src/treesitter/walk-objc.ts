@@ -13,7 +13,7 @@ const OBJC_PRIMITIVES: Record<string, string> = {
 	float: "f32",
 	CGFloat: "f64",
 	double: "f64",
-	BOOL: "bool",
+	BOOL: "boolean",
 	char: "i8",
 };
 
@@ -176,7 +176,7 @@ export class ObjcImporter extends BaseImporter {
 
 	private parseObjcType(node: TSNode): PopType {
 		if (node.type === "BOOL") {
-			return { type: "boolean", binaryType: "bool" } as PopType;
+			return { type: "boolean", binaryType: "boolean" } as PopType;
 		}
 		if (
 			node.type === "type_identifier" ||
@@ -189,8 +189,8 @@ export class ObjcImporter extends BaseImporter {
 			if (text === "NSString") return { type: "string" } as PopType;
 			const prim = OBJC_PRIMITIVES[text];
 			if (prim) {
-				if (prim === "bool")
-					return { type: "boolean", binaryType: "bool" } as PopType;
+				if (prim === "boolean")
+					return { type: "boolean", binaryType: "boolean" } as PopType;
 				return { type: "number", binaryType: prim } as PopType;
 			}
 

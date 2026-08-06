@@ -1,0 +1,6 @@
+{
+    "name": "rust",
+    "scripts": {
+        "build": "cargo build --release && cp target/release/rust-harness ./harness"
+    }
+}

@@ -446,7 +446,6 @@ function extractUnit(node: UnitNode, ctx: ExtractionContext): PopType {
 			type: "symbol",
 			size: 1,
 			binaryType: "u8",
-			popKind: "binary",
 			value,
 			symbol: value,
 		},

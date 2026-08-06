@@ -29,8 +29,7 @@ const CPP_PRIMITIVES: Record<string, string> = {
 	i64: "int64_t",
 	f32: "float",
 	f64: "double",
-	bool: "bool",
-	boolean: "bool",
+	boolean: "boolean",
 };
 
 export function cpp(config: CppConfig): ExporterPlugin<CppConfig, string> {
@@ -154,9 +153,9 @@ export function cpp(config: CppConfig): ExporterPlugin<CppConfig, string> {
 		wrapVersion: (version, code) =>
 			version
 				? wrapNamespace(version, code, {
-						open: (mod) => `namespace ${mod} {`,
-						close: "}",
-					})
+					open: (mod) => `namespace ${mod} {`,
+					close: "}",
+				})
 				: code,
 
 		...(cfg.harness

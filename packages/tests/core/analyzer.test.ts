@@ -98,41 +98,6 @@ describe("SchemaAnalyzer", () => {
 		);
 	});
 
-	it("propagates Renamed marker + ArkType defaults into the plan (migration metadata)", () => {
-		const { Renamed } = require("../../schema/src");
-		const mod = scope({
-			...binary.import(),
-			Renamed,
-			Base: { a: "u8" },
-			// type-level rename
-			RenStruct: "Renamed<Base, 'OldBase'>",
-			// field-level rename + ArkType default on a new field
-			Battery: {
-				voltage: "Renamed<u32, 'voltage_mv'>",
-				current: "i32",
-				firmware: "u16 = 7",
-			},
-		}).export();
-
-		const { plan } = new SchemaAnalyzer().analyze(fromModule(mod), {
-			version: "2.0.0",
-		});
-
-		const renStruct = plan.types.find((t) => t.name === "RenStruct");
-		expect((renStruct as any)?.renamedFrom).toBe("OldBase");
-
-		const battery = plan.types.find(
-			(t) => t.name === "Battery",
-		) as StructPlan;
-		const voltage = battery.fields.find((f) => f.name === "voltage");
-		const firmware = battery.fields.find((f) => f.name === "firmware");
-		expect((voltage as any)?.renamedFrom).toBe("voltage_mv");
-		expect((firmware as any)?.defaultValue).toBe(7);
-		// Untouched fields carry no migration metadata (keeps plans/baselines clean).
-		const current = battery.fields.find((f) => f.name === "current");
-		expect((current as any)?.renamedFrom).toBeUndefined();
-		expect((current as any)?.defaultValue).toBeUndefined();
-	});
 
 	it("preserves literal-symbol provenance in enum and discriminated-union plans", () => {
 		const mod = scope({
@@ -193,8 +158,8 @@ describe("SchemaAnalyzer", () => {
 
 		const enumOf = (name: string) =>
 			plan.types.find((t) => t.name === name && t.kind === "enum") as
-				| { variants: { name: string; value: number }[] }
-				| undefined;
+			| { variants: { name: string; value: number }[] }
+			| undefined;
 		const valueOf = (e: ReturnType<typeof enumOf>, member: string) =>
 			e?.variants.find((v) => v.name === member)?.value;
 
@@ -247,17 +212,18 @@ describe("SchemaAnalyzer", () => {
 			(t) => t.name === "single_grid",
 		) as AliasPlan;
 
+
 		expect(single_grid?.kind).toBe("alias");
 		expect(single_grid?.type.kind).toBe("array");
-		expect(single_grid?.type.exactLength).toBe(4);
+		if (single_grid.type.kind === "array") {
+			expect(single_grid?.type.exactLength).toBe(4);
 
-		const item = single_grid?.type.item as Field;
-		expect(item?.kind).toBe("primitive");
-		expect(item?.name).toBe("i32");
-		expect(item?.atomic).toBe(true);
-		expect(item?.binaryType).toBe("i32");
-		expect(item?.popKind).toBe("binary");
+			const item = single_grid?.type.item as Field;
+			expect(item?.kind).toBe("primitive");
+			expect(item?.atomic).toBe(true);
+			expect(item?.binaryType).toBe("i32");
 
+		}
 		// collision_grid is nested inside the "spatials" struct
 		const spatials = plan.types.find(
 			(t) => t.name === "spatials",

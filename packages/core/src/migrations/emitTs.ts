@@ -87,7 +87,7 @@ function zeroValue(field: Field): string {
 	switch (field.kind) {
 		case "primitive": {
 			const n = (field as any).name;
-			if (n === "bool" || n === "boolean") return "false";
+			if (n === "boolean" || n === "boolean") return "false";
 			if (n === "u64" || n === "i64") return "0";
 			return "0";
 		}

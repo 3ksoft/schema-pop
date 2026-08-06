@@ -20,7 +20,7 @@ const RUST_PRIMITIVES: Record<string, string> = {
 	i128: "i128",
 	f32: "f32",
 	f64: "f64",
-	bool: "bool",
+	boolean: "boolean",
 };
 
 export class RustImporter extends BaseImporter {
@@ -359,8 +359,8 @@ export class RustImporter extends BaseImporter {
 				const n = node.text;
 				const mapped = RUST_PRIMITIVES[n];
 				if (mapped) {
-					if (mapped === "bool")
-						return { type: "boolean", binaryType: "bool" } as PopType;
+					if (mapped === "boolean")
+						return { type: "boolean", binaryType: "boolean" } as PopType;
 					return { type: "number", binaryType: mapped } as PopType;
 				}
 				return { type: "any", originalType: n } as PopType;

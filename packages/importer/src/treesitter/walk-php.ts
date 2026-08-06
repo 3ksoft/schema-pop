@@ -9,7 +9,7 @@ export interface WalkPhpOptions {
 const PHP_PRIMITIVES: Record<string, string> = {
 	int: "i64",
 	float: "f64",
-	bool: "bool",
+	boolean: "boolean",
 };
 
 export class PhpImporter extends BaseImporter {
@@ -179,8 +179,8 @@ export class PhpImporter extends BaseImporter {
 			if (text === "string") return { type: "string" } as PopType;
 			const prim = PHP_PRIMITIVES[text];
 			if (prim) {
-				if (prim === "bool")
-					return { type: "boolean", binaryType: "bool" } as PopType;
+				if (prim === "boolean")
+					return { type: "boolean", binaryType: "boolean" } as PopType;
 				return { type: "number", binaryType: prim } as PopType;
 			}
 			return { type: "link", target: text } as PopType;
@@ -189,8 +189,8 @@ export class PhpImporter extends BaseImporter {
 			if (node.text === "string") return { type: "string" } as PopType;
 			const prim = PHP_PRIMITIVES[node.text];
 			if (prim) {
-				if (prim === "bool")
-					return { type: "boolean", binaryType: "bool" } as PopType;
+				if (prim === "boolean")
+					return { type: "boolean", binaryType: "boolean" } as PopType;
 				return { type: "number", binaryType: prim } as PopType;
 			}
 			return { type: "any", originalType: node.text } as PopType;

@@ -286,6 +286,46 @@ export class SchemaAnalyzer {
 		return valid;
 	}
 
+	private getBooleanPrimitive(): Field {
+		const base: Field = {
+			kind: "primitive",
+			name: "boolean",
+			size: 4,
+			align: 4,
+			paddedSize: 4,
+			bitSize: 32,
+			unsigned: true,
+		} as const;
+
+		if (this.config.layout === "dbus") {
+			return base;
+		}
+
+		if (this.config.layout === "std140" || this.config.layout === "std430") {
+			if (this.config.autoPack) {
+				return {
+					...base,
+					size: 1,
+					align: 1,
+					paddedSize: 1,
+					bitSize: 1,
+				} as Field;
+			}
+
+			return base;
+		}
+
+		return {
+			kind: "primitive",
+			name: "boolean",
+			size: 1,
+			align: 1,
+			paddedSize: 1,
+			bitSize: this.config.autoPack ? 1 : 8,
+			unsigned: true,
+		};
+	}
+
 	private getBuiltinPrimitive(oName: string): Field | undefined {
 		const name =
 			oName === "number"
@@ -293,21 +333,12 @@ export class SchemaAnalyzer {
 				: oName === "bigint"
 					? "i64"
 					: oName === "boolean"
-						? "bool"
+						? "boolean"
 						: oName;
-		if (name === "bool")
-			return {
-				kind: "primitive",
-				name: "bool",
-				size: 1,
-				align: 1,
-				paddedSize: 1,
-				// Only pack booleans into bitfields under autoPack; otherwise emit a
-				// full byte (the `autoPack` pass at the bottom still bit-packs when on).
-				bitSize: this.config.autoPack ? 1 : 8,
-				unsigned: true,
-				popKind: this.config.autoPack ? "bitwise" : "binary",
-			};
+
+		if (name === "boolean")
+			return this.getBooleanPrimitive()
+
 		const match = name.match(/^([ui])(\d+)$/);
 		if (match) {
 			const bits = parseInt(match[2]!, 10);
@@ -321,7 +352,6 @@ export class SchemaAnalyzer {
 					bitSize: bits,
 					unsigned: name.startsWith("u"),
 					isFloat: false,
-					popKind: "bitwise",
 				};
 			}
 			if ([8, 16, 32, 64, 128].includes(bits)) {
@@ -335,7 +365,6 @@ export class SchemaAnalyzer {
 					bitSize: bits,
 					unsigned: name.startsWith("u"),
 					isFloat: false,
-					popKind: "binary",
 				};
 			}
 		}
@@ -351,7 +380,6 @@ export class SchemaAnalyzer {
 				bitSize: bytes * 8,
 				unsigned: false,
 				isFloat: true,
-				popKind: "binary",
 			};
 		}
 		return undefined;
@@ -435,7 +463,7 @@ export class SchemaAnalyzer {
 			let size = field.size;
 			let align = field.align;
 
-			if (field.name === "bool" || field.name === "boolean") {
+			if (field.name === "boolean" || field.name === "boolean") {
 				size = 4;
 				align = 4;
 			} else if (field.bitSize === 64) {
@@ -577,6 +605,40 @@ export class SchemaAnalyzer {
 		return { name, size: 0, align: 1, paddedSize: 0 };
 	}
 
+	private isPackedField(field: FieldPlan): boolean {
+		return field.bitSize > 0 && field.bitSize < field.size * 8;
+	}
+
+	private isInlineSafeField(field: Field): boolean {
+		switch (field.kind) {
+			case "primitive":
+			case "unit":
+			case "string":
+				return true;
+
+			case "array":
+				return this.isInlineSafeField(field.item);
+
+			case "optional":
+				return this.isInlineSafeField(field.inner);
+
+			case "inlineStruct":
+				return field.fields.every(
+					(f) =>
+						!this.isPackedField(f) &&
+						this.isInlineSafeField(f.type),
+				);
+
+			case "reference":
+				// Sam ref jest OK — JIT może przy zagnieżdżeniu
+				// wywołać codecs.get(...) zamiast dalej inline'ować.
+				return true;
+
+			default:
+				return false;
+		}
+	}
+
 	private analyzeTopLevel(name: string, typeDef: PopType): TypePlan {
 		const description = typeDef.description ?? "";
 		const obsolete = typeDef.obsolete;
@@ -608,11 +670,13 @@ export class SchemaAnalyzer {
 
 		const field = this.resolveFieldType(typeDef, name);
 		const layout = this.getLayout(field);
+
 		return {
 			kind: "alias",
 			...layout,
 			name,
 			type: field,
+			inlineSafe: this.isInlineSafeField(field),
 			...(description ? { description } : {}),
 			...(renamedFrom ? { renamedFrom } : {}),
 		};
@@ -697,21 +761,18 @@ export class SchemaAnalyzer {
 			propsWithMeta.forEach((meta) => {
 				const t = meta.type;
 				if (t.kind === "primitive") {
-					if (t.name === "bool" || t.name === "boolean") {
+					if (t.name === "boolean" || t.name === "boolean") {
 						meta.type = {
 							...t,
-							popKind: "bitwise",
 							bitSize: 1,
 						};
 					} else if (t.unsigned && t.bitSize !== undefined && t.bitSize <= 16) {
 						meta.type = {
 							...t,
-							popKind: "bitwise",
 						};
 					} else if (t.unsigned && t.size !== undefined && t.size <= 2) {
 						meta.type = {
 							...t,
-							popKind: "bitwise",
 							bitSize: t.size * 8,
 						};
 					}
@@ -978,21 +1039,25 @@ export class SchemaAnalyzer {
 			});
 		}
 
-		if (type.popKind === "binary" || type.popKind === "bitwise") {
-			const size = type.size || 0;
-			const align = type.align || 1;
-			const bitSize = type.popKind === "bitwise" ? size : size * 8;
-			const paddedSize =
-				Math.ceil((type.popKind === "bitwise" ? 1 : size) / align) * align;
+		if (type.size) {
+			if (!type.align)
+				throw new Error("no align on type " + JSON.stringify(type, null, 2));
+			if (!type.bitSize)
+				throw new Error("no bitsize on type " + JSON.stringify(type, null, 2));
+
+			const size = type.size;
+			const align = type.align;
+			const bitSize = type.bitSize;
+			const paddedSize = Math.ceil(size / align) * align;
+
 			return this.assertField({
 				...type,
 				kind: "primitive",
 				name: type.binaryType || type.type,
-				size: type.popKind === "bitwise" ? 1 : size,
-				align: type.popKind === "bitwise" ? 1 : align,
-				paddedSize: type.popKind === "bitwise" ? 1 : paddedSize,
+				size,
+				align,
+				paddedSize,
 				bitSize,
-				popKind: type.popKind,
 			});
 		}
 

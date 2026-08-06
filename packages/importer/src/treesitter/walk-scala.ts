@@ -13,7 +13,7 @@ const SCALA_PRIMITIVES: Record<string, string> = {
 	Long: "i64",
 	Float: "f32",
 	Double: "f64",
-	Boolean: "bool",
+	Boolean: "boolean",
 	Char: "u16",
 };
 
@@ -141,8 +141,8 @@ export class ScalaImporter extends BaseImporter {
 		if (text === "String") return { type: "string" } as PopType;
 		const prim = SCALA_PRIMITIVES[text];
 		if (prim) {
-			if (prim === "bool")
-				return { type: "boolean", binaryType: "bool" } as PopType;
+			if (prim === "boolean")
+				return { type: "boolean", binaryType: "boolean" } as PopType;
 			return { type: "number", binaryType: prim } as PopType;
 		}
 

@@ -19,7 +19,7 @@ export const $ = type.module({
 
 	ModelConfig: {
 		contextWindow: "u32",
-		gpuEnabled: "bool",
+		gpuEnabled: "boolean",
 	},
 
 	// --- Actions ---
@@ -83,7 +83,7 @@ export const $ = type.module({
 		// Qwen 3.5 może wypluć 2-3 tokeny w jednym cyklu!
 		tokenIds: "u32[] <= 4",
 		textChunk: "string<1023", // Zdekodowany tekst (może zawierać kilka połączonych tokenów z MTP)
-		isFinished: "bool",
+		isFinished: "boolean",
 	},
 
 	InferenceStats: {

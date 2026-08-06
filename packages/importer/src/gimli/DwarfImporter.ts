@@ -28,7 +28,7 @@ const DWARF_ENCODINGS: Record<number, Record<number, string>> = {
 	0x07: { 1: "u8", 2: "u16", 4: "u32", 8: "u64" }, // DW_ATE_unsigned
 	0x08: { 1: "i8", 2: "i16", 4: "i32", 8: "i64" }, // DW_ATE_unsigned_char (or signed based on compiler, usually u8)
 	0x06: { 1: "i8" }, // DW_ATE_signed_char
-	0x02: { 1: "bool" }, // DW_ATE_boolean
+	0x02: { 1: "boolean" }, // DW_ATE_boolean
 	0x04: { 4: "f32", 8: "f64" }, // DW_ATE_float
 };
 
@@ -92,26 +92,26 @@ export class DwarfImporter extends BaseImporter {
 				const size = dwarfType.byte_size ?? 0;
 				const enc = dwarfType.encoding ?? 0;
 				const binType = DWARF_ENCODINGS[enc]?.[size] ?? null;
-				if (binType === "bool") {
+				if (binType === "boolean") {
 					result = {
 						type: "boolean",
-						binaryType: "bool",
+						binaryType: "boolean",
 						size,
-						popKind: "binary",
+
 					};
 				} else if (binType) {
 					result = {
 						type: "number",
 						binaryType: binType,
 						size,
-						popKind: "binary",
+
 					};
 				} else {
 					result = {
 						type: "any",
 						originalType: dwarfType.name || "unknown",
 						size,
-						popKind: "binary",
+
 					};
 				}
 				break;
@@ -134,7 +134,7 @@ export class DwarfImporter extends BaseImporter {
 					typeString: dwarfType.name,
 					size: dwarfType.byte_size,
 					fields,
-					popKind: "binary",
+
 				};
 				break;
 			}
@@ -159,13 +159,13 @@ export class DwarfImporter extends BaseImporter {
 						item: itemType,
 						minLength: len,
 						maxLength: len,
-						popKind: "binary",
+
 					};
 				} else {
 					result = {
 						type: "any",
 						originalType: "UnknownArray",
-						popKind: "binary",
+
 					};
 				}
 				break;
@@ -174,7 +174,7 @@ export class DwarfImporter extends BaseImporter {
 				result = {
 					type: "any",
 					originalType: dwarfType.name || dwarfType.tag,
-					popKind: "binary",
+
 				};
 				break;
 		}

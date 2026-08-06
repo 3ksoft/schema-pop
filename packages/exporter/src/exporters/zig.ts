@@ -26,8 +26,7 @@ const ZIG_PRIMITIVES: Record<string, string> = {
 	i128: "i128",
 	f32: "f32",
 	f64: "f64",
-	bool: "bool",
-	boolean: "bool",
+	boolean: "boolean",
 };
 
 export function zig(config: ZigConfig): ExporterPlugin<ZigConfig, string> {
@@ -138,9 +137,9 @@ export function zig(config: ZigConfig): ExporterPlugin<ZigConfig, string> {
 		wrapVersion: (version, code) =>
 			version
 				? wrapNamespace(version, code, {
-						open: (mod) => `pub const ${mod} = struct {`,
-						close: "};",
-					})
+					open: (mod) => `pub const ${mod} = struct {`,
+					close: "};",
+				})
 				: code,
 		...(cfg.harness
 			? { getHarness: (plans: LayoutPlan[]) => zigHarness(plans) }

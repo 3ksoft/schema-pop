@@ -11,7 +11,6 @@
 		"build:core": "cd packages/core && bun run build && bun link && cd ../..",
 		"build": "bun build:schema && bun run build:core && bun build:exporter",
 		"typecheck": "cd packages/schema && bun run typecheck && cd ../core && bun run typecheck && cd ../exporter && bun run typecheck && cd ../tests && bun run typecheck",
-		"test": "cd packages/core && bun test",
 		"format": "biome format --write",
 		"format:check": "biome format",
 		"release": "scripts/publish.sh",

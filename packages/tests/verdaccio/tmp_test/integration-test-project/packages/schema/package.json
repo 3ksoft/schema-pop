@@ -1,0 +1,17 @@
+{
+    "name": "integration-test-project-schema",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "generate": "bun scripts/generate.ts",
+        "build": "bun run generate"
+    },
+    "devDependencies": {
+        "schema-pop": "latest",
+        "@schema-pop/schema": "latest",
+        "@schema-pop/core": "latest",
+        "@schema-pop/exporter": "latest",
+        "@types/node": "^25.6.0"
+    }
+}

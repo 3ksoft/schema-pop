@@ -19,7 +19,7 @@ const GO_PRIMITIVES: Record<string, string> = {
 	uint64: "u64",
 	float32: "f32",
 	float64: "f64",
-	bool: "bool",
+	boolean: "boolean",
 	byte: "u8",
 	rune: "i32",
 };
@@ -142,8 +142,8 @@ export class GoImporter extends BaseImporter {
 			if (node.text === "string") return { type: "string" } as PopType;
 			const prim = GO_PRIMITIVES[node.text];
 			if (prim) {
-				if (prim === "bool")
-					return { type: "boolean", binaryType: "bool" } as PopType;
+				if (prim === "boolean")
+					return { type: "boolean", binaryType: "boolean" } as PopType;
 				return { type: "number", binaryType: prim } as PopType;
 			}
 			return { type: "link", target: node.text } as PopType;

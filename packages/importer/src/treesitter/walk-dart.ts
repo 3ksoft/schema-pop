@@ -9,7 +9,7 @@ export interface WalkDartOptions {
 const DART_PRIMITIVES: Record<string, string> = {
 	int: "i64",
 	double: "f64",
-	bool: "bool",
+	boolean: "boolean",
 };
 
 export class DartImporter extends BaseImporter {
@@ -173,8 +173,8 @@ export class DartImporter extends BaseImporter {
 			} else {
 				const prim = DART_PRIMITIVES[name];
 				if (prim) {
-					if (prim === "bool")
-						base = { type: "boolean", binaryType: "bool" } as PopType;
+					if (prim === "boolean")
+						base = { type: "boolean", binaryType: "boolean" } as PopType;
 					else base = { type: "number", binaryType: prim } as PopType;
 				} else {
 					base = { type: "link", target: name } as PopType;

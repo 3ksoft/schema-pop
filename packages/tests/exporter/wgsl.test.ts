@@ -180,7 +180,7 @@ describe("wgsl exporter — global literal symbols", () => {
 				kind: "'array'",
 				maxItems: "u16",
 				minItems: "u16",
-				allowDuplicates: "bool",
+				allowDuplicates: "boolean",
 			},
 			Primitives: "'number' | 'string'",
 			TelemetryTypes: "'string' | 'array'",
@@ -272,12 +272,12 @@ describe("wgsl exporter — f64", () => {
 	});
 });
 
-describe("wgsl exporter — bool", () => {
-	// The logical struct keeps `bool`; the memory representation packs it into a
+describe("wgsl exporter — boolean", () => {
+	// The logical struct keeps `boolean`; the memory representation packs it into a
 	// u32 word via extractBits/insertBits in the unpack/pack helpers.
-	test("bool field stays bool in the logical struct, packed into a u32 word", () => {
+	test("boolean field stays boolean in the logical struct, packed into a u32 word", () => {
 		const out = gen({ S: { flag: "boolean" } });
-		expect(out).toMatch(/flag:\s*bool/);
+		expect(out).toMatch(/flag:\s*boolean/);
 		expect(out).toMatch(/extractBits\(raw, 0u, \d+u\) != 0u/);
 		expect(out).toMatchSnapshot();
 	});

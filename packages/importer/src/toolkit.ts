@@ -1,5 +1,5 @@
 import { type } from "arktype";
-import { PopType, PopFunction, BINARY_METADATA } from "@schema-pop/schema";
+import { PopType, PopFunction } from "@schema-pop/schema";
 
 const WalkItem = PopType.or(PopFunction);
 export const WalkResult = type({
@@ -135,18 +135,6 @@ export abstract class BaseImporter {
 		fallbackLabel: string,
 	): PopType | PopFunction {
 		this.ensureLabels(field, fallbackLabel);
-		const isFunction =
-			field &&
-			typeof field === "object" &&
-			(field as any).type === "function";
-		if (
-			!isFunction &&
-			field &&
-			typeof field === "object" &&
-			!(field as any)["popKind"]
-		) {
-			(field as any)["popKind"] = "rich";
-		}
 
 		const valid = WalkItem(field);
 		if (valid instanceof type.errors) {
@@ -157,7 +145,6 @@ export abstract class BaseImporter {
 				type: "any",
 				label: fallbackLabel,
 				originalType: "unknown",
-				popKind: "rich",
 			} as PopType;
 		}
 		return valid as PopType | PopFunction;
@@ -288,8 +275,8 @@ export function resolveScalarType(
 ): PopType {
 	const binType = primitiveMap[text];
 	if (binType) {
-		if (binType === "bool")
-			return { type: "boolean", binaryType: "bool" } as PopType;
+		if (binType === "boolean")
+			return { type: "boolean", binaryType: "boolean" } as PopType;
 		return { type: "number", binaryType: binType } as PopType;
 	}
 	return { type: "link", target: text } as PopType;

@@ -59,7 +59,7 @@ describe("SchemaAnalyzer Structural Inference", () => {
 		expect(balanceType.size).toBe(2);
 
 		const adminType = getPrimitiveField(user, "isAdmin");
-		expect(adminType.name).toBe("bool");
+		expect(adminType.name).toBe("boolean");
 		expect(adminType.size).toBe(1);
 	});
 

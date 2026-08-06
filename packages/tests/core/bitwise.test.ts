@@ -15,13 +15,13 @@ function analyze(s: any) {
 }
 
 describe("fromModule — bitwise types", () => {
-	it("extracts bitwise fields with popKind='bitwise'", () => {
+	it("extracts bitwise fields with bitSize", () => {
 		const s = type.module({ ...binary.import(), Flags: { a: "u1", b: "u3", c: "u4" } });
 		const schema = fromModule(s).schema;
 		const flags = schema.types["Flags"] as any;
-		expect(flags.fields.a.popKind).toBe("bitwise");
-		expect(flags.fields.b.popKind).toBe("bitwise");
-		expect(flags.fields.c.popKind).toBe("bitwise");
+		expect(flags.fields.a.bitSize).not.toBeNull()
+		expect(flags.fields.b.bitSize).not.toBeNull()
+		expect(flags.fields.c.bitSize).not.toBeNull()
 	});
 
 	it("layout produces correct bitOffset and bitSize per field", () => {

@@ -13,7 +13,6 @@ const createPrimReaders = (wordSize: string): Record<string, PrimReader> => {
     const readers: Record<string, PrimReader> = {
         u8: (v, o) => v.getUint8(o),
         uint8: (v, o) => v.getUint8(o),
-        bool: (v, o) => v.getUint8(o) !== 0,
         boolean: (v, o) => v.getUint8(o) !== 0,
         i8: (v, o) => v.getInt8(o),
         int8: (v, o) => v.getInt8(o),
@@ -44,7 +43,6 @@ const createPrimWriters = (wordSize: string): Record<string, PrimWriter> => {
     const writers: Record<string, PrimWriter> = {
         u8: (v, x, o) => v.setUint8(o, x),
         uint8: (v, x, o) => v.setUint8(o, x),
-        bool: (v, x, o) => v.setUint8(o, x ? 1 : 0),
         boolean: (v, x, o) => v.setUint8(o, x ? 1 : 0),
         i8: (v, x, o) => v.setInt8(o, x),
         int8: (v, x, o) => v.setInt8(o, x),
@@ -366,14 +364,14 @@ export function createInterpretedCodec(
                 deserialize: (view, offset = 0, outObj) => {
                     const target = outObj || {};
                     for (const f of t.fields) {
-                        if ((f.type as any).popKind === "bitwise" && (f as any).bitOffset !== undefined) {
+                        if ((f as any).bitOffset !== undefined) {
                             const bitSize = (f as any).bitSize;
                             const bitOffset = (f as any).bitOffset;
                             const mask = Math.pow(2, bitSize) - 1;
                             const size = f.size || 1;
                             const primName = size === 4 ? "u32" : size === 2 ? "u16" : "u8";
                             const raw = (readPrim(primName, view, offset + f.offset) >> bitOffset) & mask;
-                            const isBool = (f.type as any).name === "bool" || (f.type as any).name === "boolean";
+                            const isBool = (f.type as any).name === "boolean" || (f.type as any).name === "boolean";
                             target[f.name] = isBool ? raw !== 0 : raw;
                         } else {
                             target[f.name] = readField(f.type, view, offset + f.offset);
@@ -385,18 +383,18 @@ export function createInterpretedCodec(
                 serialize: (val, view, offset = 0) => {
                     const handledBitBytes = new Set<number>();
                     for (const f of t.fields) {
-                        if ((f.type as any).popKind === "bitwise" && (f as any).bitOffset !== undefined) {
+                        if ((f as any).bitOffset !== undefined) {
                             if (handledBitBytes.has(f.offset)) continue;
                             handledBitBytes.add(f.offset);
                             const sameBytes = t.fields.filter(
-                                (sf: any) => (sf.type as any).popKind === "bitwise" && sf.offset === f.offset
+                                (sf: any) => sf.offset === f.offset
                             );
                             let word = 0;
                             const size = f.size || 1;
                             for (const bf of sameBytes) {
                                 const mask = Math.pow(2, (bf as any).bitSize) - 1;
                                 const primName = (bf.type as any).name;
-                                const isBool = primName === "bool" || primName === "boolean";
+                                const isBool = primName === "boolean";
                                 const srcVal = isBool ? (val[bf.name] ? 1 : 0) : val[bf.name];
                                 word |= (srcVal & mask) << (bf as any).bitOffset;
                             }
@@ -417,11 +415,11 @@ export function createInterpretedCodec(
                     const f = t.fields.find((field: any) => field.name === key);
                     if (!f) return;
 
-                    if ((f.type as any).popKind === "bitwise" && (f as any).bitOffset !== undefined) {
+                    if ((f as any).bitOffset !== undefined) {
                         const size = f.size || 1;
                         const rPrim = size === 4 ? "u32" : size === 2 ? "u16" : "u8";
                         const mask = Math.pow(2, (f as any).bitSize) - 1;
-                        const isBool = (f.type as any).name === "bool" || (f.type as any).name === "boolean";
+                        const isBool = (f.type as any).name === "boolean" || (f.type as any).name === "boolean";
                         const src = isBool ? (val ? 1 : 0) : val;
 
                         let temp = readPrim(rPrim, view, offset + f.offset);

@@ -29,17 +29,16 @@ export function createRuntimeCodec(
     const typeByName = new Map(plan.types.map((t) => [t.name, t]));
 
     const sizeOf = (t: any): number => t.paddedSize ?? t.size ?? 0;
+
     const inlineable = (name: string): boolean => {
         const t: any = typeByName.get(name);
-        if (!t) return false;
-        if (t.kind !== "struct" && t.kind !== "alias") return false;
-        if (t.kind === "struct" && t.fields?.some((f: any) => f.type?.popKind === "bitwise")) return false;
+        if (!t.inlineSafe) return false;
         return sizeOf(t) <= inlineBudget;
     };
 
     const getPrim = (name: string) => {
         switch (name.toLowerCase()) {
-            case "u8": case "uint8": case "bool": return { r: "getUint8", w: "setUint8", b: 1, isBool: name === "bool" };
+            case "u8": case "uint8": case "boolean": return { r: "getUint8", w: "setUint8", b: 1, isBool: name === "boolean" };
             case "i8": case "int8": return { r: "getInt8", w: "setInt8", b: 1 };
             case "u16": case "uint16": return { r: "getUint16", w: "setUint16", b: 2 };
             case "i16": case "int16": return { r: "getInt16", w: "setInt16", b: 2 };
@@ -213,14 +212,14 @@ export function createRuntimeCodec(
 			`;
         } else if (t.kind === "struct") {
             const readField = (f: any): string => {
-                if ((f.type as any).popKind === "bitwise" && f.bitOffset !== undefined) {
+                if (f.bitOffset !== undefined) {
                     const mask = Math.pow(2, f.bitSize) - 1;
                     const size = f.size || 1;
                     const rMethod = size === 4 ? `getUint32` : size === 2 ? `getUint16` : `getUint8`;
                     const isLeParam = size > 1 ? `, ${isLE}` : ``;
                     const raw = `(view.${rMethod}(offset + ${f.offset}${isLeParam}) >> ${f.bitOffset}) & ${mask}`;
                     const primName = (f.type as any).name;
-                    if (primName === "bool" || primName === "boolean") return `(${raw}) !== 0`;
+                    if (primName === "boolean") return `(${raw}) !== 0`;
                     return raw;
                 }
                 return genRead(f.type, `offset + ${f.offset}`);
@@ -230,10 +229,10 @@ export function createRuntimeCodec(
             const handledBitBytes = new Set<number>();
             let serWrites = "";
             for (const f of t.fields) {
-                if ((f.type as any).popKind === "bitwise" && (f as any).bitOffset !== undefined) {
+                if ((f as any).bitOffset !== undefined) {
                     if (handledBitBytes.has(f.offset)) continue;
                     handledBitBytes.add(f.offset);
-                    const sameBytes = t.fields.filter((sf) => (sf.type as any).popKind === "bitwise" && sf.offset === f.offset);
+                    const sameBytes = t.fields.filter((sf) => sf.offset === f.offset);
                     const size = f.size || 1;
                     const wMethod = size === 4 ? `setUint32` : size === 2 ? `setUint16` : `setUint8`;
                     const isLeParam = size > 1 ? `, ${isLE}` : ``;
@@ -241,7 +240,7 @@ export function createRuntimeCodec(
                     for (const bf of sameBytes) {
                         const mask = Math.pow(2, (bf as any).bitSize) - 1;
                         const primName = (bf.type as any).name;
-                        const src = (primName === "bool" || primName === "boolean") ? `(val.${bf.name} ? 1 : 0)` : `val.${bf.name}`;
+                        const src = (primName === "boolean") ? `(val.${bf.name} ? 1 : 0)` : `val.${bf.name}`;
                         stmt += ` _b${f.offset} |= ((${src} & ${mask}) << ${(bf as any).bitOffset});`;
                     }
                     stmt += ` view.${wMethod}(offset + ${f.offset}, _b${f.offset}${isLeParam});`;

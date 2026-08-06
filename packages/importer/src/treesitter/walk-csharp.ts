@@ -13,7 +13,7 @@ const CS_PRIMITIVES: Record<string, string> = {
 	ulong: "u64",
 	float: "f32",
 	double: "f64",
-	bool: "bool",
+	boolean: "boolean",
 	char: "u16",
 };
 
@@ -336,8 +336,8 @@ export class CSharpImporter extends BaseImporter {
 			if (text === "string") return { type: "string" } as PopType;
 			const prim = CS_PRIMITIVES[text];
 			if (prim) {
-				if (prim === "bool")
-					return { type: "boolean", binaryType: "bool" } as PopType;
+				if (prim === "boolean")
+					return { type: "boolean", binaryType: "boolean" } as PopType;
 				return { type: "number", binaryType: prim } as PopType;
 			}
 			return { type: "link", target: node.text } as PopType;

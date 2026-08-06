@@ -21,10 +21,10 @@
 		"typecheck": "tsgo --noEmit",
 		"test": "bun test"
 	},
-	"dependencies": {
-		"arkregex": "^0.0.5",
-		"arktype": "2.2.1",
-		"@ark/schema": "0.56.0"
+	"peerDependencies": {
+		"arkregex": "^0.0.8",
+		"arktype": "2.2.3",
+		"@ark/schema": "0.56.2"
 	},
 	"devDependencies": {
 		"typescript": "^7.0.2"

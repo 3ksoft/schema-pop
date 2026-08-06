@@ -18,7 +18,7 @@ export const $ = scope({
 
 	ModelConfig: {
 		contextWindow: "u32",
-		gpuEnabled: "bool",
+		gpuEnabled: "boolean",
 	},
 
 	// --- ENGINE ACTIONS (TS -> RUST) ---
@@ -66,7 +66,7 @@ export const $ = scope({
 		kind: "'TokenEmitted'",
 		id: "NodeId",
 		token: "string<1023",
-		isFinished: "bool",
+		isFinished: "boolean",
 	},
 
 	/**

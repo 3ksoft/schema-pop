@@ -20,8 +20,7 @@ const RUST_PRIMITIVES: Record<string, string> = {
 	i128: "i128",
 	f32: "f32",
 	f64: "f64",
-	bool: "bool",
-	boolean: "bool",
+	boolean: "boolean",
 	number: "f64",
 	bigint: "i64",
 };

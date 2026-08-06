@@ -99,11 +99,11 @@
             "description": "boolean (packed as 1 bit)",
             "popKind": "bitwise",
             "isBinary": true,
-            "binaryType": "bool",
+            "binaryType": "boolean",
             "label": "flag",
             "required": true,
             "kind": "primitive",
-            "name": "bool",
+            "name": "boolean",
             "paddedSize": 1,
             "bitSize": 1
           },

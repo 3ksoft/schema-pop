@@ -52,7 +52,7 @@ If your `clang` isn't on `PATH`, point at it: `--clang /opt/clang-22/bin/clang`.
 ## Extra `Bit` / `Binary` types
 
 For widths or shapes outside the schema-pop standard set (anything beyond
-`u1..u7`, `u8..u128`, `f32`/`f64`, `bool`), define your own scope and pass
+`u1..u7`, `u8..u128`, `f32`/`f64`, `boolean`), define your own scope and pass
 it via `-x` (repeatable). The importer:
 
 1. dynamically loads the file,

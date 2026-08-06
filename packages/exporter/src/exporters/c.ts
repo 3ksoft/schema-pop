@@ -54,8 +54,7 @@ const C_PRIMITIVES: Record<string, string> = {
 	i64: "int64_t",
 	f32: "float",
 	f64: "double",
-	bool: "bool",
-	boolean: "bool",
+	boolean: "boolean",
 };
 
 export function c(config: CConfig): ExporterPlugin<CConfig, string> {

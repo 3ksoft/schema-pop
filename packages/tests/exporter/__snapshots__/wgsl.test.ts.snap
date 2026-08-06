@@ -14,9 +14,9 @@ const ZONE_BOUNDS_LEN: u32 = 4u;
 struct Obstacle {
 	pos: vec2<f32>,
 	rotation: f32,
-	enabled: bool,
-	static: bool,
-	round: bool,
+	enabled: boolean,
+	static: boolean,
+	round: boolean,
 };
 
 const OBSTACLE_POS_LEN: u32 = 2u;
@@ -240,9 +240,9 @@ fn pack_s(unpacked: S) -> array<u32, 2> {
 "
 `;
 
-exports[`wgsl exporter — bool bool field stays bool in the logical struct, packed into a u32 word 1`] = `
+exports[`wgsl exporter — boolean boolean field stays boolean in the logical struct, packed into a u32 word 1`] = `
 "struct S {
-	flag: bool,
+	flag: boolean,
 };
 
 

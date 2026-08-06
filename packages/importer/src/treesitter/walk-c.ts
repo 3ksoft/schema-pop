@@ -66,8 +66,8 @@ function resolveCPrimitive(text: string): string | null {
 		case "double":
 			return "f64";
 		case "_Bool":
-		case "bool":
-			return "bool";
+		case "boolean":
+			return "boolean";
 		default:
 			return null;
 	}
@@ -523,8 +523,8 @@ export class CImporter extends BaseImporter {
 				const text = node.text;
 				const prim = resolveTextToPrimitive(text);
 				if (prim) {
-					if (prim === "bool")
-						return { type: "boolean", binaryType: "bool" } as PopType;
+					if (prim === "boolean")
+						return { type: "boolean", binaryType: "boolean" } as PopType;
 					return { type: "number", binaryType: prim } as PopType;
 				}
 				return { type: "any", originalType: text } as PopType;
@@ -533,8 +533,8 @@ export class CImporter extends BaseImporter {
 				const text = node.text;
 				const prim = resolveTextToPrimitive(text);
 				if (prim) {
-					if (prim === "bool")
-						return { type: "boolean", binaryType: "bool" } as PopType;
+					if (prim === "boolean")
+						return { type: "boolean", binaryType: "boolean" } as PopType;
 					return { type: "number", binaryType: prim } as PopType;
 				}
 				return { type: "link", target: text } as PopType;

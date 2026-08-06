@@ -9,7 +9,7 @@ export interface WalkElixirOptions {
 const ELIXIR_PRIMITIVES: Record<string, string> = {
 	integer: "i64",
 	float: "f64",
-	boolean: "bool",
+	boolean: "boolean",
 };
 
 export class ElixirImporter extends BaseImporter {
@@ -145,8 +145,8 @@ export class ElixirImporter extends BaseImporter {
 
 		const prim = ELIXIR_PRIMITIVES[clean] || ELIXIR_PRIMITIVES[text];
 		if (prim) {
-			if (prim === "bool")
-				return { type: "boolean", binaryType: "bool" } as PopType;
+			if (prim === "boolean")
+				return { type: "boolean", binaryType: "boolean" } as PopType;
 			return { type: "number", binaryType: prim } as PopType;
 		}
 

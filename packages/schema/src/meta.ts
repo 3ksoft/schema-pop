@@ -1,7 +1,6 @@
 import { type } from "arktype";
 
 export const ArkMeta = type({
-	"popKind?": "'rich' | 'bitwise' | 'binary' | 'reserved'",
 	"description?": "string",
 	"category?": "string",
 	"min?": "number",
@@ -18,6 +17,7 @@ export const ArkMeta = type({
 	"bitSize?": "number",
 	"unsigned?": "boolean",
 	"isFloat?": "boolean",
+	"inlineSafe?": "boolean",
 
 	"atomic?": "boolean",
 

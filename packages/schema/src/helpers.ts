@@ -51,7 +51,7 @@ export const Binary = generic(
             align: (args.align as any).unit,
             binaryType: (args.type as any).unit,
             description: explainType((args.type as any).unit),
-            popKind: "binary",
+
         });
     },
     class extends Hkt<[t: unknown, size: number, align: number, type: string]> {
@@ -67,7 +67,7 @@ export const Bit = generic(["t", "unknown"], ["size", "number"])(
         return (args.t as Type).configure({
             size: (args.size as any).unit,
             description: explainType((args.size as any).unit),
-            popKind: "bitwise",
+
         });
     },
     class extends Hkt<[t: unknown, size: number]> {
@@ -82,7 +82,7 @@ export const Reserved = generic(["t", "unknown"], ["size", "number"])(
     (args) => {
         return (args.t as Type).configure({
             size: (args.size as any).unit,
-            popKind: "reserved",
+
         });
     },
     class extends Hkt<[]> {

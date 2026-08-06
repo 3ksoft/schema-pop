@@ -9,7 +9,7 @@ export interface WalkTsOptions {
 const TS_PRIMITIVE_KEYWORDS: Record<string, PopType> = {
 	number: { type: "number", binaryType: "f64" } as PopType,
 	bigint: { type: "number", binaryType: "i64" } as PopType,
-	boolean: { type: "boolean", binaryType: "bool" } as PopType,
+	boolean: { type: "boolean", binaryType: "boolean" } as PopType,
 	string: { type: "string" } as PopType,
 };
 

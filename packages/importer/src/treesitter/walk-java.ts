@@ -13,7 +13,7 @@ const JAVA_PRIMITIVES: Record<string, string> = {
 	long: "i64",
 	float: "f32",
 	double: "f64",
-	boolean: "bool",
+	boolean: "boolean",
 	char: "u16",
 };
 
@@ -179,8 +179,8 @@ export class JavaImporter extends BaseImporter {
 		) {
 			const prim = JAVA_PRIMITIVES[node.text];
 			if (prim) {
-				if (prim === "bool")
-					return { type: "boolean", binaryType: "bool" } as PopType;
+				if (prim === "boolean")
+					return { type: "boolean", binaryType: "boolean" } as PopType;
 				return { type: "number", binaryType: prim } as PopType;
 			}
 		}
@@ -189,8 +189,8 @@ export class JavaImporter extends BaseImporter {
 			if (text === "String") return { type: "string" } as PopType;
 			const prim = JAVA_PRIMITIVES[text];
 			if (prim) {
-				if (prim === "bool")
-					return { type: "boolean", binaryType: "bool" } as PopType;
+				if (prim === "boolean")
+					return { type: "boolean", binaryType: "boolean" } as PopType;
 				return { type: "number", binaryType: prim } as PopType;
 			}
 			return { type: "link", target: text } as PopType;

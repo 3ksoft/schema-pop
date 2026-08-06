@@ -71,16 +71,7 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 			const sizeOf = (t: any): number => t.paddedSize ?? t.size ?? 0;
 			const inlineable = (name: string): boolean => {
 				const t: any = typeByName.get(name);
-				if (!t) return false;
-				if (t.kind !== "struct" && t.kind !== "alias") return false;
-				// Bitfield structs must go through their generated ser/de — the inline
-				// object-literal path emits one whole-byte read/write per field with no
-				// bit shifting, silently corrupting packed fields.
-				if (
-					t.kind === "struct" &&
-					t.fields?.some((f: any) => f.type?.popKind === "bitwise")
-				)
-					return false;
+				if (!t.inlineSafe) return false;
 				return sizeOf(t) <= inlineBudget;
 			};
 
@@ -88,12 +79,12 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 				switch (name.toLowerCase()) {
 					case "u8":
 					case "uint8":
-					case "bool":
+					case "boolean":
 						return {
 							r: "getUint8",
 							w: "setUint8",
 							b: 1,
-							isBool: name === "bool",
+							isBool: name === "boolean",
 						};
 					case "i8":
 					case "int8":
@@ -487,14 +478,14 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 				}
 				if (t.kind === "struct") {
 					const readField = (f: any): string => {
-						if ((f.type as any).popKind === "bitwise" && f.bitOffset !== undefined) {
+						if (f.bitOffset !== undefined) {
 							const mask = Math.pow(2, f.bitSize) - 1;
 							const size = f.size || 1;
 							const rMethod = size === 4 ? `getUint32` : size === 2 ? `getUint16` : `getUint8`;
 							const isLeParam = size > 1 ? `, ${isLE}` : ``;
 							const raw = `(view.${rMethod}(offset + ${f.offset}${isLeParam}) >> ${f.bitOffset}) & ${mask}`;
 							const primName = (f.type as any).name;
-							if (primName === "bool" || primName === "boolean") return `(${raw}) !== 0`;
+							if (primName === "boolean" || primName === "boolean") return `(${raw}) !== 0`;
 							return raw;
 						}
 						return genRead(f.type, `offset + ${f.offset}`);
@@ -508,11 +499,11 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 					code += `export function serialize${tName}(val: ${tName}, view: DataView, offset: number): void {\n`;
 					const handledBitBytes = new Set<number>();
 					for (const f of t.fields) {
-						if ((f.type as any).popKind === "bitwise" && (f as any).bitOffset !== undefined) {
+						if ((f as any).bitOffset !== undefined) {
 							if (handledBitBytes.has(f.offset)) continue;
 							handledBitBytes.add(f.offset);
 							const sameBytes = t.fields.filter(
-								(sf) => (sf.type as any).popKind === "bitwise" && sf.offset === f.offset,
+								(sf) => sf.offset === f.offset,
 							);
 							const size = f.size || 1;
 							const wMethod = size === 4 ? `setUint32` : size === 2 ? `setUint16` : `setUint8`;
@@ -521,7 +512,7 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 							for (const bf of sameBytes) {
 								const mask = Math.pow(2, (bf as any).bitSize) - 1;
 								const primName = (bf.type as any).name;
-								const src = (primName === "bool" || primName === "boolean")
+								const src = (primName === "boolean" || primName === "boolean")
 									? `(val.${fieldName(bf.name)} ? 1 : 0)`
 									: `val.${fieldName(bf.name)}`;
 								stmt += ` _b${f.offset} |= ((${src} & ${mask}) << ${(bf as any).bitOffset});`;
@@ -545,14 +536,14 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 
 						t.fields.forEach((f) => {
 							code += `\t\tcase "${fieldName(f.name)}":\n`;
-							if ((f.type as any).popKind === "bitwise" && f.bitOffset !== undefined) {
+							if (f.bitOffset !== undefined) {
 								const size = f.size || 1;
 								const rMethod = size === 4 ? `getUint32` : size === 2 ? `getUint16` : `getUint8`;
 								const wMethod = size === 4 ? `setUint32` : size === 2 ? `setUint16` : `setUint8`;
 								const isLeParam = size > 1 ? `, ${isLE}` : ``;
 								const mask = Math.pow(2, f.bitSize) - 1;
 								const primName = (f.type as any).name;
-								const src = (primName === "bool" || primName === "boolean")
+								const src = (primName === "boolean" || primName === "boolean")
 									? `(val ? 1 : 0)`
 									: `val`;
 								code += `\t\t\t{ let temp = view.${rMethod}(offset + ${f.offset}${isLeParam}); temp &= ~(${mask} << ${f.bitOffset}); temp |= ((${src} & ${mask}) << ${f.bitOffset}); view.${wMethod}(offset + ${f.offset}, temp${isLeParam}); }\n`;

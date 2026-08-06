@@ -17,7 +17,7 @@ const DBUS_PRIMITIVES: Record<
 	}
 > = {
 	y: { type: "number", binary: "u8", size: 1, align: 1 },
-	b: { type: "boolean", binary: "bool", size: 4, align: 4 }, // D-Bus bool
+	b: { type: "boolean", binary: "boolean", size: 4, align: 4 }, // D-Bus boolean
 	n: { type: "number", binary: "i16", size: 2, align: 2 },
 	q: { type: "number", binary: "u16", size: 2, align: 2 },
 	i: { type: "number", binary: "i32", size: 4, align: 4 },
@@ -144,7 +144,7 @@ export class DbusImporter extends BaseImporter {
 				size: prim.size,
 				align: prim.align,
 				isBinary: true,
-				popKind: "binary",
+
 				label: name,
 				originalType: sig,
 			} as any;

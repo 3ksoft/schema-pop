@@ -194,7 +194,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 			const getCleanWgslType = (f: Field): string => {
 				if (f.kind === "primitive") {
 					if (f.atomic) return `atomic<${f.binaryType || "u32"}>`;
-					if (f.name === "bool" || f.name === "boolean") return "bool";
+					if (f.name === "boolean" || f.name === "boolean") return "boolean";
 					if (f.name === "f32") return "f32";
 					if (f.name === "i32" || f.name === "i16" || f.name === "i8") return "i32";
 					return "u32";
@@ -214,7 +214,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 			// Typ członka structa host-shareable (struct z atomikami jest bindowany
 			// bezpośrednio jako storage — nie ma formy packed na poziomie bindingu).
 			// Referencje do zwykłych (pakowanych) structów/aliasów muszą być surowymi
-			// słowami: ich clean-forma może zawierać typy non-host-shareable (bool),
+			// słowami: ich clean-forma może zawierać typy non-host-shareable (boolean),
 			// a jej naturalny layout WGSL różni się od layoutu codeca.
 			const getStorageWgslType = (f: Field): string => {
 				if (f.kind === "reference") {
@@ -331,7 +331,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 				const rawAt = (offset: string) => parentWords === 1 ? `raw` : `raw[${offset}]`;
 
 				if (f.kind === "primitive") {
-					if (cleanType === "bool") return `${target} = ${rawAt(baseWord)} != 0u;\n`;
+					if (cleanType === "boolean") return `${target} = ${rawAt(baseWord)} != 0u;\n`;
 					return `${target} = bitcast<${cleanType}>(${rawAt(baseWord)});\n`;
 				}
 				if (f.kind === "reference") {
@@ -378,7 +378,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 				const outAt = (offset: string) => parentWords === 1 ? `out` : `out[${offset}]`;
 
 				if (f.kind === "primitive") {
-					if (cleanType === "bool") return `${outAt(baseWord)} = select(0u, 1u, ${source});\n`;
+					if (cleanType === "boolean") return `${outAt(baseWord)} = select(0u, 1u, ${source});\n`;
 					return `${outAt(baseWord)} = bitcast<u32>(${source});\n`;
 				}
 				if (f.kind === "reference") {
@@ -453,7 +453,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 
 							if (l.isBitfield) {
 								const ext = `extractBits(${rawAt(`${l.wordIndex}u`)}, ${l.bitShift}u, ${l.bitSize}u)`;
-								if (cleanType === "bool") {
+								if (cleanType === "boolean") {
 									unpackBody += `\t${target} = ${ext} != 0u;\n`;
 								} else if (f.type.kind === "reference") {
 									const refKind = typesMap.get(f.type.name)?.kind;
@@ -494,7 +494,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 									initializedWords.add(l.wordIndex);
 								}
 								let valExpr = "";
-								if (cleanType === "bool") valExpr = `select(0u, 1u, ${source})`;
+								if (cleanType === "boolean") valExpr = `select(0u, 1u, ${source})`;
 								else if (f.type.kind === "reference") {
 									const refKind = typesMap.get(f.type.name)?.kind;
 									if (refKind === "struct" || refKind === "alias") {

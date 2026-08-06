@@ -39,83 +39,83 @@ export type AddedFieldDefault =
 
 export type FieldChange =
 	| {
-			kind: "added";
-			field: FieldPlan;
-			default: AddedFieldDefault;
-			status: DiffStatus;
-	  }
+		kind: "added";
+		field: FieldPlan;
+		default: AddedFieldDefault;
+		status: DiffStatus;
+	}
 	| { kind: "removed"; field: FieldPlan; status: DiffStatus }
 	| {
-			kind: "renamed";
-			from: FieldPlan;
-			to: FieldPlan;
-			oldName: string;
-			status: DiffStatus;
-	  }
+		kind: "renamed";
+		from: FieldPlan;
+		to: FieldPlan;
+		oldName: string;
+		status: DiffStatus;
+	}
 	| { kind: "reordered"; from: FieldPlan; to: FieldPlan; status: DiffStatus }
 	| {
-			kind: "type-widened";
-			from: FieldPlan;
-			to: FieldPlan;
-			status: DiffStatus;
-	  }
+		kind: "type-widened";
+		from: FieldPlan;
+		to: FieldPlan;
+		status: DiffStatus;
+	}
 	| {
-			kind: "type-narrowed";
-			from: FieldPlan;
-			to: FieldPlan;
-			status: DiffStatus;
-	  }
+		kind: "type-narrowed";
+		from: FieldPlan;
+		to: FieldPlan;
+		status: DiffStatus;
+	}
 	| {
-			kind: "type-changed";
-			from: FieldPlan;
-			to: FieldPlan;
-			status: DiffStatus;
-	  };
+		kind: "type-changed";
+		from: FieldPlan;
+		to: FieldPlan;
+		status: DiffStatus;
+	};
 
 export type VariantChange =
 	| { kind: "added"; variant: VariantPlan | EnumVariant; status: DiffStatus }
 	| { kind: "removed"; variant: VariantPlan | EnumVariant; status: DiffStatus }
 	| {
-			kind: "renamed";
-			from: VariantPlan | EnumVariant;
-			to: VariantPlan | EnumVariant;
-			oldName: string;
-			status: DiffStatus;
-	  }
+		kind: "renamed";
+		from: VariantPlan | EnumVariant;
+		to: VariantPlan | EnumVariant;
+		oldName: string;
+		status: DiffStatus;
+	}
 	| {
-			kind: "changed";
-			from: VariantPlan | EnumVariant;
-			to: VariantPlan | EnumVariant;
-			status: DiffStatus;
-	  };
+		kind: "changed";
+		from: VariantPlan | EnumVariant;
+		to: VariantPlan | EnumVariant;
+		status: DiffStatus;
+	};
 
 export type TypeDiff =
 	| { kind: "added"; to: TypePlan; status: DiffStatus }
 	| { kind: "removed"; from: TypePlan; status: DiffStatus }
 	| {
-			kind: "unchanged";
-			from: TypePlan;
-			to: TypePlan;
-	  }
+		kind: "unchanged";
+		from: TypePlan;
+		to: TypePlan;
+	}
 	| {
-			kind: "renamed";
-			from: TypePlan;
-			to: TypePlan;
-			oldName: string;
-			fieldChanges: FieldChange[];
-			variantChanges: VariantChange[];
-			aliasChange?: { from: Field; to: Field; status: DiffStatus };
-			status: DiffStatus;
-	  }
+		kind: "renamed";
+		from: TypePlan;
+		to: TypePlan;
+		oldName: string;
+		fieldChanges: FieldChange[];
+		variantChanges: VariantChange[];
+		aliasChange?: { from: Field; to: Field; status: DiffStatus };
+		status: DiffStatus;
+	}
 	| {
-			kind: "changed";
-			from: TypePlan;
-			to: TypePlan;
-			fieldChanges: FieldChange[];
-			variantChanges: VariantChange[];
-			aliasChange?: { from: Field; to: Field; status: DiffStatus };
-			status: DiffStatus;
-	  };
+		kind: "changed";
+		from: TypePlan;
+		to: TypePlan;
+		fieldChanges: FieldChange[];
+		variantChanges: VariantChange[];
+		aliasChange?: { from: Field; to: Field; status: DiffStatus };
+		status: DiffStatus;
+	};
 
 export type PlanDiff = {
 	from: LayoutPlan;
@@ -126,7 +126,7 @@ export type PlanDiff = {
 };
 
 const PRIMITIVE_RANK: Record<string, number> = {
-	bool: 0,
+	boolean: 0,
 	u8: 1,
 	i8: 1,
 	u16: 2,
@@ -532,22 +532,22 @@ function diffMatchedTypes(
 		// supply a full conversion.
 		return baseRenamed
 			? {
-					kind: "renamed",
-					from,
-					to,
-					oldName: oldName!,
-					fieldChanges: [],
-					variantChanges: [],
-					status: "user-supplied",
-				}
+				kind: "renamed",
+				from,
+				to,
+				oldName: oldName!,
+				fieldChanges: [],
+				variantChanges: [],
+				status: "user-supplied",
+			}
 			: {
-					kind: "changed",
-					from,
-					to,
-					fieldChanges: [],
-					variantChanges: [],
-					status: "user-supplied",
-				};
+				kind: "changed",
+				from,
+				to,
+				fieldChanges: [],
+				variantChanges: [],
+				status: "user-supplied",
+			};
 	}
 
 	let fieldChanges: FieldChange[] = [];
@@ -599,24 +599,24 @@ function diffMatchedTypes(
 
 	return baseRenamed
 		? {
-				kind: "renamed",
-				from,
-				to,
-				oldName: oldName!,
-				fieldChanges,
-				variantChanges,
-				...(aliasChange ? { aliasChange } : {}),
-				status,
-			}
+			kind: "renamed",
+			from,
+			to,
+			oldName: oldName!,
+			fieldChanges,
+			variantChanges,
+			...(aliasChange ? { aliasChange } : {}),
+			status,
+		}
 		: {
-				kind: "changed",
-				from,
-				to,
-				fieldChanges,
-				variantChanges,
-				...(aliasChange ? { aliasChange } : {}),
-				status,
-			};
+			kind: "changed",
+			from,
+			to,
+			fieldChanges,
+			variantChanges,
+			...(aliasChange ? { aliasChange } : {}),
+			status,
+		};
 }
 
 /**

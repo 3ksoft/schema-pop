@@ -21,9 +21,7 @@ const PRIMITIVE_TS: Record<string, string> = {
 	i64: "bigint",
 	u128: "bigint",
 	i128: "bigint",
-	bool: "boolean",
 	boolean: "boolean",
-	// rich-tier primitives (popKind: 'rich')
 	number: "number",
 	bigint: "bigint",
 	string: "string",

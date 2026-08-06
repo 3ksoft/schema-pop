@@ -13,7 +13,7 @@ const KOTLIN_PRIMITIVES: Record<string, string> = {
 	Long: "i64",
 	Float: "f32",
 	Double: "f64",
-	Boolean: "bool",
+	Boolean: "boolean",
 	Char: "u16",
 };
 
@@ -280,8 +280,8 @@ export class KotlinImporter extends BaseImporter {
 
 			const prim = KOTLIN_PRIMITIVES[text];
 			if (prim) {
-				if (prim === "bool")
-					return { type: "boolean", binaryType: "bool" } as PopType;
+				if (prim === "boolean")
+					return { type: "boolean", binaryType: "boolean" } as PopType;
 				return { type: "number", binaryType: prim } as PopType;
 			}
 
@@ -290,8 +290,8 @@ export class KotlinImporter extends BaseImporter {
 				const bPrim = KOTLIN_PRIMITIVES[base];
 				if (bPrim) {
 					const itemType =
-						bPrim === "bool"
-							? { type: "boolean", binaryType: "bool" }
+						bPrim === "boolean"
+							? { type: "boolean", binaryType: "boolean" }
 							: { type: "number", binaryType: bPrim };
 					return { type: "array", item: itemType } as PopType;
 				}

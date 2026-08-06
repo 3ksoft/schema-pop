@@ -7,7 +7,7 @@ import { $ } from "../vault/analyzer-test.1";
 describe("ArkType Codec: toArktype (Encoder)", () => {
 	it("encodes a number with bounds and step", () => {
 		const def = PopType.assert({
-			popKind: "rich",
+
 			label: "TestNumber",
 			type: "number",
 			min: 0,
@@ -30,8 +30,6 @@ describe("ArkType Codec: toArktype (Encoder)", () => {
 
 	it("encodes a string with constraints", () => {
 		const def: PopType = {
-			popKind: "rich",
-			label: "TestString",
 			type: "string",
 			minLength: 3,
 			maxLength: 5,
@@ -50,12 +48,11 @@ describe("ArkType Codec: toArktype (Encoder)", () => {
 
 	it("encodes objects with optional fields", () => {
 		const def: PopType = {
-			popKind: "rich",
-			label: "TestObject",
+
 			type: "object",
 			fields: {
-				name: { popKind: "rich", label: "name", type: "string" },
-				age: { popKind: "rich", label: "age", type: "number", required: false },
+				name: { type: "string" },
+				age: { type: "number", required: false } as any,
 			},
 		};
 		const t = toArktype(def);
@@ -69,8 +66,6 @@ describe("ArkType Codec: toArktype (Encoder)", () => {
 
 	it("encodes enums correctly", () => {
 		const def: PopType = {
-			popKind: "rich",
-			label: "TestEnum",
 			type: "enum",
 			options: ["A", "B", "C"],
 		};

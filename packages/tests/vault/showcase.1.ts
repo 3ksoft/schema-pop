@@ -4,7 +4,7 @@
 // when you ship a new exporter).
 //
 // Sections, top → bottom:
-//   1. Primitive scalars     — u8..u128, i8..i128, f32/f64, bool
+//   1. Primitive scalars     — u8..u128, i8..i128, f32/f64, boolean
 //   2. String-literal unions — enums-by-shape
 //   3. Bitwise fields        — u1..u7 packed into one byte
 //   4. Wrappers              — Describe, Scale, Reserved, Obsolete, Renamed
@@ -34,7 +34,7 @@ export const $ = type.module({
 
 	// 1. PRIMITIVES — full coverage of fixed-width integer + float.
 	AllScalars: {
-		flag: "bool",
+		flag: "boolean",
 		small_unsigned: "u8",
 		small_signed: "i8",
 		port: "u16",
@@ -79,7 +79,7 @@ export const $ = type.module({
 		// `Describe<T, "...">` adds free-form text rendered as a comment.
 		voltage: "Describe<Scale<u16, 0.001>, 'volts (mV raw → V scaled)'>",
 		current: "Describe<i16, 'milliamps, signed'>",
-		charging: "bool",
+		charging: "boolean",
 
 		// `Reserved<T, N>` declares N elements of type T as padding —
 		// shows up as named padding in C output, `_pad: [u8; 3]` in Rust.

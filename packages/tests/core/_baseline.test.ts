@@ -38,7 +38,7 @@ const FIXTURES: Record<string, Fixture> = {
 		scope: () =>
 			scope({
 				...binary.import(),
-				Sample: { tiny: "u8", word: "u32", signed: "i32", flag: "bool" },
+				Sample: { tiny: "u8", word: "u32", signed: "i32", flag: "boolean" },
 			}),
 	},
 	primitives_bigint: {
@@ -63,7 +63,7 @@ const FIXTURES: Record<string, Fixture> = {
 			scope({
 				...binary.import(),
 				Inner: { x: "u8" },
-				Outer: { inner: "Inner", flag: "bool" },
+				Outer: { inner: "Inner", flag: "boolean" },
 			}),
 	},
 	optional_field: {

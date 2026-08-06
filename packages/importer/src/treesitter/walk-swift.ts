@@ -19,7 +19,7 @@ const SWIFT_PRIMITIVES: Record<string, string> = {
 	UInt: "u64",
 	Float: "f32",
 	Double: "f64",
-	Bool: "bool",
+	Bool: "boolean",
 };
 
 export class SwiftImporter extends BaseImporter {
@@ -245,8 +245,8 @@ export class SwiftImporter extends BaseImporter {
 			if (text === "String") return { type: "string" } as PopType;
 			const prim = SWIFT_PRIMITIVES[text];
 			if (prim) {
-				if (prim === "bool")
-					return { type: "boolean", binaryType: "bool" } as PopType;
+				if (prim === "boolean")
+					return { type: "boolean", binaryType: "boolean" } as PopType;
 				return { type: "number", binaryType: prim } as PopType;
 			}
 			return { type: "link", target: text } as PopType;
@@ -256,8 +256,8 @@ export class SwiftImporter extends BaseImporter {
 			if (text === "String") return { type: "string" } as PopType;
 			const prim = SWIFT_PRIMITIVES[text];
 			if (prim) {
-				if (prim === "bool")
-					return { type: "boolean", binaryType: "bool" } as PopType;
+				if (prim === "boolean")
+					return { type: "boolean", binaryType: "boolean" } as PopType;
 				return { type: "number", binaryType: prim } as PopType;
 			}
 			return { type: "link", target: text } as PopType;
@@ -266,8 +266,8 @@ export class SwiftImporter extends BaseImporter {
 		if (text === "String") return { type: "string" } as PopType;
 		const prim = SWIFT_PRIMITIVES[text];
 		if (prim) {
-			if (prim === "bool")
-				return { type: "boolean", binaryType: "bool" } as PopType;
+			if (prim === "boolean")
+				return { type: "boolean", binaryType: "boolean" } as PopType;
 			return { type: "number", binaryType: prim } as PopType;
 		}
 		if (text.endsWith("?")) {

@@ -71,7 +71,7 @@ const builtin_position = binary.type("f32[] == 4").configure({
 	size: 16,
 	align: 16,
 });
-const front_facing = binary.type("bool").configure({ wgslBuiltin: "front_facing" });
+const front_facing = binary.type("boolean").configure({ wgslBuiltin: "front_facing" });
 const frag_depth = binary.type("f32").configure({ wgslBuiltin: "frag_depth" });
 const sample_index = binary.type("u32").configure({ wgslBuiltin: "sample_index" });
 const sample_mask = binary.type("u32").configure({ wgslBuiltin: "sample_mask" });

@@ -75,7 +75,7 @@ function isRichField(f: Field, opts: RichTierOptions = {}): boolean {
 		return true;
 	}
 	if (f.kind === "map") return true;
-	if (f.kind === "primitive" && (f as any).popKind === "rich") return true;
+	if (f.kind === "primitive" && !f.size) return true;
 	if (f.kind === "array") return isRichField(f.item, opts);
 	if (f.kind === "optional") return isRichField(f.inner, opts);
 	if (f.kind === "inlineStruct")
