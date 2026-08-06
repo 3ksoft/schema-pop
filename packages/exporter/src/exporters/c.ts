@@ -1,10 +1,9 @@
+import type { BaseConfig, ExporterPlugin } from "../api";
 import type {
-	ExporterPlugin,
 	Field,
 	FieldPlan,
 	LayoutPlan,
 	StructPlan,
-	BaseConfig,
 } from "@schema-pop/schema";
 import { ExporterTools, toSnakeCase } from "../exporterTools";
 

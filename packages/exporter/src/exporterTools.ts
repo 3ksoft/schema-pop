@@ -1,9 +1,11 @@
 import type {
-	NamingStrategy,
-	CommentStyle,
 	Field,
 	TypePlan,
 } from "@schema-pop/schema";
+import type {
+	NamingStrategy,
+	CommentStyle
+} from "./api"
 
 function indent(n: number = 1, text: string = ""): string {
 	return text

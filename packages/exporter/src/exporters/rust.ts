@@ -1,9 +1,5 @@
-import type {
-	BaseConfig,
-	ExporterPlugin,
-	Field,
-	LayoutPlan,
-} from "@schema-pop/schema";
+import type { BaseConfig, ExporterPlugin } from "../api";
+import type { Field, LayoutPlan } from "@schema-pop/schema";
 import { ExporterTools } from "../exporterTools";
 
 export interface RustConfig

@@ -528,28 +528,24 @@ export class SchemaAnalyzer {
 				? field.exactLength!
 				: field.maxLength || field.exactLength || 0;
 			const itemLayout = this.getLayoutInternal(field.item);
+			const layoutMeta = field as typeof field & { size?: number; align?: number };
 
 			let align = isFixed ? itemLayout.align : Math.max(4, itemLayout.align);
 			let stride = itemLayout.paddedSize;
 
-			const isVector =
-				isFixed && field.item.kind === "primitive" && max >= 2 && max <= 4;
-
-			if (this.config.layout === "std140" || this.config.layout === "std430") {
-				if (isVector) {
-					align = max === 2 ? 2 * itemLayout.size : 4 * itemLayout.size;
-					stride = itemLayout.size;
-				} else if (this.config.layout === "std140") {
-					align = Math.max(align, 16);
-					stride = Math.ceil(stride / 16) * 16;
-				}
+			// First compute the structural array ABI. Explicit size/alignment
+			// metadata is applied below as the final override.
+			if (this.config.layout === "std140") {
+				align = Math.max(align, 16);
+				stride = Math.ceil(stride / 16) * 16;
 			}
 
-			const baseSize =
-				(isFixed && isVector ? 0 : isFixed ? 0 : 4) + max * stride;
-			const paddedSize = Math.ceil(baseSize / align) * align;
+			const structuralSize = (isFixed ? 0 : 4) + max * stride;
+			const size = layoutMeta.size ?? structuralSize;
+			align = layoutMeta.align ?? align;
+			const paddedSize = Math.ceil(size / align) * align;
 
-			return { name, size: baseSize, align, paddedSize };
+			return { name, size, align, paddedSize };
 		}
 
 		if (field.kind === "string") {
@@ -1020,6 +1016,11 @@ export class SchemaAnalyzer {
 			} as any;
 			if (type.exactLength) nField.exactLength = type.exactLength;
 			if (type.maxLength) nField.maxLength = type.maxLength;
+			// Composite types may carry an explicit ABI layout. Keep the array
+			// shape for codecs/exporters while letting getLayoutInternal() honor
+			// size/alignment supplied by schema metadata.
+			if (type.size !== undefined) nField.size = type.size;
+			if (type.align !== undefined) nField.align = type.align;
 			return this.assertField(nField);
 		}
 

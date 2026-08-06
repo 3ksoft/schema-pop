@@ -1,10 +1,5 @@
-import type {
-	BaseConfig,
-	ExporterPlugin,
-	LayoutPlan,
-	TypePlan,
-	UnionPlan,
-} from "@schema-pop/schema";
+import type { BaseConfig, ExporterPlugin } from "../api";
+import type { LayoutPlan, TypePlan, UnionPlan } from "@schema-pop/schema";
 import { ExporterTools } from "../exporterTools";
 
 export interface TsExportsConfig extends Omit<BaseConfig, "commentStyle"> {

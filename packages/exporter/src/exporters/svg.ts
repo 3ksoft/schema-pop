@@ -1,11 +1,5 @@
-import type {
-	BaseConfig,
-	ExporterPlugin,
-	Field,
-	FieldPlan,
-	LayoutPlan,
-	TypePlan,
-} from "@schema-pop/schema";
+import type { BaseConfig, ExporterPlugin } from "../api";
+import type { Field, FieldPlan, LayoutPlan, TypePlan } from "@schema-pop/schema";
 
 export interface SvgConfig extends BaseConfig {
 	width?: number;

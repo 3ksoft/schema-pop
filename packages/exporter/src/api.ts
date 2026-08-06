@@ -1,17 +1,36 @@
-import { type } from "arktype";
-import type { LayoutPlan } from "./layout";
-import { EXPORTER_REGISTRY, IMPORTER_REGISTRY } from "./registry";
+import { type, type LayoutPlan } from "@schema-pop/schema";
 
-const AllowedExtensionsSchema = type.enumerated(
-	...(Object.keys(IMPORTER_REGISTRY) as (keyof typeof IMPORTER_REGISTRY)[]),
-);
-const AllowedLanguagesSchema = type.enumerated(
-	...(Array.from(
-		new Set(Object.values(IMPORTER_REGISTRY)),
-	) as (typeof IMPORTER_REGISTRY)[keyof typeof IMPORTER_REGISTRY][]),
-);
+// 1. Rejestr eksporterów jako jedno źródło prawdy
+export const EXPORTER_REGISTRY = {
+	c: "core",
+	cpp: "core",
+	rust: "core",
+	"rust:serde": "core",
+	ts: "core",
+	"ts:codec": "core",
+	"ts:exports": "core",
+	zig: "core",
+	wgsl: "core",
+	"cpp:harness": "extra",
+	"rust:harness": "extra",
+	"zig:harness": "extra",
+} as const;
+
+export type ExporterTarget = keyof typeof EXPORTER_REGISTRY;
+
+// Mock / Import rejestru importerów (podmień ścieżkę jeśli jest w innym pakiecie)
+// import { IMPORTER_REGISTRY, AllowedExtensionsSchema, AllowedLanguagesSchema } from "@schema-pop/importers";
+const IMPORTER_REGISTRY: Record<string, string> = {
+	".ts": "typescript",
+	".json": "json",
+};
+
+const AllowedExtensionsSchema = type("'ts' | 'json'");
+const AllowedLanguagesSchema = type("'typescript' | 'json'");
+
+// 2. Schematy ArkType
 const AllowedTypesSchema = type.enumerated(
-	...(Object.keys(EXPORTER_REGISTRY) as (keyof typeof EXPORTER_REGISTRY)[]),
+	...(Object.keys(EXPORTER_REGISTRY) as ExporterTarget[]),
 );
 
 export const exporter = type.module({
@@ -31,6 +50,7 @@ export const exporter = type.module({
 		"noWrap?": "boolean",
 	},
 });
+
 const CliConfig = type.module({
 	AllowedTypesSchema: AllowedTypesSchema,
 	AllowedExtensionsSchema: AllowedExtensionsSchema,
@@ -70,7 +90,7 @@ export const CliParserSchema = type({
 	"mode?": "string",
 	input: "string | string[]",
 }).pipe((data) => {
-	var input = typeof data.input === "string" ? [data.input] : data.input;
+	const input = typeof data.input === "string" ? [data.input] : data.input;
 	const parsedInputs = input.map((filepath) => {
 		return InputFile({
 			path: filepath,
@@ -96,31 +116,19 @@ export type CommentStyle = typeof CommentStyle.infer;
 export type ExportStrategy = typeof ExportStrategy.infer;
 export type BaseConfig = typeof BaseConfig.infer;
 
+// 3. Główny interfejs dla pluginów eksportera
 export interface ExporterPlugin<
 	TConfig extends BaseConfig = BaseConfig,
 	TOut = string | Record<string, string>,
 > {
 	name: string;
 	config: TConfig;
-	/**
-	 * Default file extension (without leading dot) for output files
-	 * when the user sets `defineConfig.destDir` instead of explicit
-	 * `dest` per target. Falls back to `name` when omitted.
-	 */
 	extension?: string;
 	generate: (plan: LayoutPlan) => TOut;
 	wrapVersion?: (version: string | undefined, code: string) => string;
 	getFileHeader?: () => string;
 	getFileFooter?: () => string;
 	getHarness?: (plans: LayoutPlan[]) => Record<string, string>;
-	/**
-	 * Aggregate every per-schema file written by this plugin instance
-	 * into the same directory and return additional barrel files
-	 * (`{ filename: contents }`) to drop next to them. Used by the TS
-	 * exporter to emit `index.ts` so consumers can
-	 * `import { ... } from "./schema"` instead of cherry-picking each
-	 * `<schemaName>.ts` by hand.
-	 */
 	getIndex?: (
 		files: { dest: string; schemaName: string }[],
 	) => Record<string, string>;

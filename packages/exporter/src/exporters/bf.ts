@@ -1,8 +1,5 @@
-import {
-	BaseConfig,
-	type ExporterPlugin,
-	LayoutPlan,
-} from "@schema-pop/schema";
+import { BaseConfig, type ExporterPlugin } from "../api";
+import type { LayoutPlan } from "@schema-pop/schema";
 import { ExporterTools } from "../exporterTools";
 import { brainfuckHarness } from "./bfHarness";
 

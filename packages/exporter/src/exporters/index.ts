@@ -4,7 +4,6 @@ export * from "./c";
 export * from "./cpp";
 export * from "./html";
 export * from "./md";
-export * from "./mermaid";
 export * from "./random";
 export * from "./rust";
 export * from "./rustSerde";

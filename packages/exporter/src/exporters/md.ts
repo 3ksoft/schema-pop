@@ -1,10 +1,5 @@
-import type {
-	BaseConfig,
-	ExporterPlugin,
-	Field,
-	LayoutPlan,
-	TypePlan,
-} from "@schema-pop/schema";
+import type { BaseConfig, ExporterPlugin } from "../api";
+import type { Field, LayoutPlan, TypePlan } from "@schema-pop/schema";
 
 type FunctionPlan = {
 	name: string;

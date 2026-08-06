@@ -1,7 +1,6 @@
+import type { BaseConfig, ExporterPlugin } from "../api";
 import type {
 	ArkMeta,
-	BaseConfig,
-	ExporterPlugin,
 	Field,
 	FieldPlan,
 	LayoutPlan,
@@ -142,7 +141,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 			if (symbolNames.length > 256) {
 				throw new Error(
 					`WGSL global symbol registry has ${symbolNames.length} entries; ` +
-						"current symbol fields are u8-backed and support at most 256 symbols",
+					"current symbol fields are u8-backed and support at most 256 symbols",
 				);
 			}
 
@@ -274,7 +273,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 					typesCode += `\n`;
 				}
 
-				if (t.kind === "alias" && !WGSL_PREDECLARED_ALIASES.has(t.name)) {
+				if (t.kind === "alias" && !WGSL_PREDECLARED_ALIASES.has(t.name as any)) {
 					const aliasName = typeName(t.name);
 					const target = getCleanWgslType(t.type as Field);
 					typesCode += `alias ${aliasName} = ${target};\n\n`;
@@ -430,7 +429,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 			for (const t of plan.types) {
 				if (isRichType(t)) continue;
 
-				if ((t.kind === "struct" || (t.kind === "alias" && !WGSL_PREDECLARED_ALIASES.has(t.name))) && !hasAtomics(t, typesMap)) {
+				if ((t.kind === "struct" || (t.kind === "alias" && !WGSL_PREDECLARED_ALIASES.has(t.name as any))) && !hasAtomics(t, typesMap)) {
 					const cleanName = typeName(t.name);
 					const snakeName = toSnakeCase(t.name);
 					const words = getSizeInWords(t.paddedSize ?? t.size ?? 4);

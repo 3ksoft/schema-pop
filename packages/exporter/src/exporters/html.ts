@@ -1,6 +1,5 @@
+import type { BaseConfig, ExporterPlugin } from "../api";
 import type {
-	BaseConfig,
-	ExporterPlugin,
 	Field,
 	FieldPlan,
 	LayoutPlan,
