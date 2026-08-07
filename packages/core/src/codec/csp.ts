@@ -82,6 +82,9 @@ export function createInterpretedCodec(
 
     // Wyciągnięcie jedno-elementowych enumów wygenerowanych przez ArkType
     const singletonEnumByName = new Map<string, string>();
+    const isPackedField = (f: any): boolean =>
+        (f.bitSize ?? 0) > 0 && (f.size ?? 0) > 0 && f.bitSize < f.size * 8;
+
     for (const t of plan.types) {
         if (t.kind === "enum" && (t as any).variants?.length === 1) {
             singletonEnumByName.set(t.name, (t as any).variants[0].name);
@@ -364,7 +367,7 @@ export function createInterpretedCodec(
                 deserialize: (view, offset = 0, outObj) => {
                     const target = outObj || {};
                     for (const f of t.fields) {
-                        if ((f as any).bitOffset !== undefined) {
+                        if (isPackedField(f)) {
                             const bitSize = (f as any).bitSize;
                             const bitOffset = (f as any).bitOffset;
                             const mask = Math.pow(2, bitSize) - 1;
@@ -383,7 +386,7 @@ export function createInterpretedCodec(
                 serialize: (val, view, offset = 0) => {
                     const handledBitBytes = new Set<number>();
                     for (const f of t.fields) {
-                        if ((f as any).bitOffset !== undefined) {
+                        if (isPackedField(f)) {
                             if (handledBitBytes.has(f.offset)) continue;
                             handledBitBytes.add(f.offset);
                             const sameBytes = t.fields.filter(
@@ -415,7 +418,7 @@ export function createInterpretedCodec(
                     const f = t.fields.find((field: any) => field.name === key);
                     if (!f) return;
 
-                    if ((f as any).bitOffset !== undefined) {
+                    if (isPackedField(f)) {
                         const size = f.size || 1;
                         const rPrim = size === 4 ? "u32" : size === 2 ? "u16" : "u8";
                         const mask = Math.pow(2, (f as any).bitSize) - 1;

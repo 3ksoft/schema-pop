@@ -17,11 +17,7 @@ function emit(scopeMod: any, name: string) {
 	};
 	const ctx = fromModule(scopeMod.export());
 	const { plan } = new SchemaAnalyzer().analyze(ctx, {
-		wordSize: "64",
-		layout: "aligned",
 		mode: "binary",
-		version: "1.0.0",
-		endian: "le",
 	});
 
 	writeFileSync(paths.plan, `export const plan = ${JSON.stringify(plan)};`)

@@ -424,12 +424,16 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 			};
 
 			// ====================================================================
-			// ETAP 2: Generowanie Helperów odczytu/zapisu dla pamięci
+			// ETAP 2: Generowanie Helperów odczytu/zapisu dla pamięci (ZAWSZE DLA WSZYSTKICH TYPÓW)
 			// ====================================================================
 			for (const t of plan.types) {
-				if (isRichType(t)) continue;
+				// Wyjątek WGSL: typy z atomikami nie mogą być zwracane/przekazywane przez wartość w funkcjach.
+				if (hasAtomics(t, typesMap)) continue;
 
-				if ((t.kind === "struct" || (t.kind === "alias" && !WGSL_PREDECLARED_ALIASES.has(t.name as any))) && !hasAtomics(t, typesMap)) {
+				// ----------------------------------------------------------------
+				// 1. STRUCTY i ALIASY
+				// ----------------------------------------------------------------
+				if (t.kind === "struct" || (t.kind === "alias" && !WGSL_PREDECLARED_ALIASES.has(t.name as any))) {
 					const cleanName = typeName(t.name);
 					const snakeName = toSnakeCase(t.name);
 					const words = getSizeInWords(t.paddedSize ?? t.size ?? 4);
@@ -437,7 +441,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 					const rawAt = (idx: string) => words === 1 ? `raw` : `raw[${idx}]`;
 					const outAt = (idx: string) => words === 1 ? `out` : `out[${idx}]`;
 
-					// --- Unpacker ---
+					// --- UNPACKER ---
 					let unpackBody = `\tvar out: ${cleanName};\n`;
 
 					if (t.kind === "alias") {
@@ -474,9 +478,15 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 					helpersCode += `fn unpack_words_to_${snakeName}(raw: ${rawType}) -> ${cleanName} {\n${unpackBody}}\n\n`;
 					helpersCode += `fn unpack_${snakeName}(raw: ${rawType}) -> ${cleanName} {\n\treturn unpack_words_to_${snakeName}(raw);\n}\n\n`;
 
-					// --- Packer ---
-					let packBody = `\tvar out: ${rawType};\n`;
-					const initializedWords = new Set<number>();
+					// --- PACKER ---
+					let packBody = "";
+					// GWARANCJA: Inicjalizujemy wszystkie słowa zerami, aby bitfieldy i insertBits miały czysty bufor
+					if (words === 1) {
+						packBody += `\tvar out: u32 = 0u;\n`;
+					} else {
+						packBody += `\tvar out: array<u32, ${words}>;\n`;
+						packBody += `\tfor (var w = 0u; w < ${words}u; w++) { out[w] = 0u; }\n`;
+					}
 
 					if (t.kind === "alias") {
 						packBody += `\t` + genPack(t.type as Field, "0u", "unpacked", 0, words);
@@ -489,10 +499,6 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 							const cleanType = getCleanWgslType(f.type);
 
 							if (l.isBitfield) {
-								if (!initializedWords.has(l.wordIndex)) {
-									packBody += `\t${outAt(`${l.wordIndex}u`)} = 0u;\n`;
-									initializedWords.add(l.wordIndex);
-								}
 								let valExpr = "";
 								if (cleanType === "boolean") valExpr = `select(0u, 1u, ${source})`;
 								else if (f.type.kind === "reference") {
@@ -516,6 +522,9 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 					helpersCode += `fn pack_${snakeName}(unpacked: ${cleanName}) -> ${rawType} {\n\treturn pack_${snakeName}_to_words(unpacked);\n}\n\n`;
 				}
 
+				// ----------------------------------------------------------------
+				// 2. UNIE (Dla unii ZAWSZE generujemy get_tag oraz pack/unpack dla wariantów)
+				// ----------------------------------------------------------------
 				if (t.kind === "union") {
 					const snakeName = toSnakeCase(t.name);
 					const rawWords = getSizeInWords(t.paddedSize);
@@ -526,22 +535,16 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 					const tagShift = (t.tagOffset % 4) * 8;
 					const tagSize = t.tagSize * 8;
 
-					// Variant payloads are packed AFTER the tag/header region, at the
-					// union's payloadOffset (same formula tsCodec uses). Without this
-					// word offset the payload aliases the tag word (out[0]) and the
-					// insertBits() below clobbers the low byte of the first field.
 					const unionAlign = t.align || 1;
-					const payloadByteOffset =
-						Math.ceil((t.tagOffset + t.tagSize) / unionAlign) * unionAlign;
+					const payloadByteOffset = Math.ceil((t.tagOffset + t.tagSize) / unionAlign) * unionAlign;
 					const payloadWord = Math.floor(payloadByteOffset / 4);
-					const pOff =
-						rawWords > 1 && payloadWord > 0 ? ` + ${payloadWord}u` : "";
+					const pOff = rawWords > 1 && payloadWord > 0 ? ` + ${payloadWord}u` : "";
 
-					// 1. Wyciąganie taga
+					// Tag Getter
 					helpersCode += `fn get_${snakeName}_tag(val: ${rawType}) -> u32 {\n`;
 					helpersCode += `\treturn extractBits(${rawAt(`${tagWord}u`)}, ${tagShift}u, ${tagSize}u);\n}\n\n`;
 
-					// 2. Unpack/Pack wariantów
+					// Unpack / Pack Wariantów
 					for (let i = 0; i < t.variants.length; i++) {
 						const v = t.variants[i];
 						if (v.type.kind !== "reference") continue;
@@ -553,7 +556,7 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 						const snakeVarName = toSnakeCase(vStruct.name);
 						const vWords = getSizeInWords(vStruct.paddedSize ?? vStruct.size ?? 4);
 
-						// Unpack variant
+						// Unpack Variant
 						helpersCode += `fn unpack_${snakeName}_as_${snakeVarName}(val: ${rawType}) -> ${cleanVarName} {\n`;
 						if (vWords === 1) {
 							helpersCode += `\treturn unpack_words_to_${snakeVarName}(${rawAt(`0u${pOff}`)});\n`;
@@ -566,14 +569,20 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 						}
 						helpersCode += `}\n\n`;
 
-						// Pack variant
+						// Pack Variant
 						const localTagVal = v.tag !== undefined ? v.tag : (v as any).tag ?? (i + 1);
-						const tagVal =
-							symbolOf(v) !== undefined && symbolIds.has(symbolOf(v)!)
-								? symbolIds.get(symbolOf(v)!)!
-								: localTagVal;
+						const tagVal = symbolOf(v) !== undefined && symbolIds.has(symbolOf(v)!)
+							? symbolIds.get(symbolOf(v)!)!
+							: localTagVal;
+
 						helpersCode += `fn pack_${snakeName}_from_${snakeVarName}(unpacked: ${cleanVarName}) -> ${rawType} {\n`;
-						helpersCode += `\tvar out: ${rawType};\n`;
+						if (rawWords === 1) {
+							helpersCode += `\tvar out: u32 = 0u;\n`;
+						} else {
+							helpersCode += `\tvar out: array<u32, ${rawWords}>;\n`;
+							helpersCode += `\tfor (var w = 0u; w < ${rawWords}u; w++) { out[w] = 0u; }\n`;
+						}
+
 						if (vWords === 1) {
 							helpersCode += `\t${rawWords === 1 ? "out" : `out[0u${pOff}]`} = pack_${snakeVarName}_to_words(unpacked);\n`;
 						} else {

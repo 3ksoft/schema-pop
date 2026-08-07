@@ -139,10 +139,17 @@ export const $ = scope({
 
 	...fieldVariantDefs,
 
+	// `Array` is an ambient ArkType generic. Referencing a public scope alias
+	// named `Array` from another string definition resolves to that intrinsic
+	// (`$Array`) instead of this object variant. Keep the recursive variant under
+	// a collision-free private name. The public `Array` variant above stays
+	// unchanged for external consumers.
+	"#PopArray": fieldVariantDefs.Array,
+
 	// Private (#) so `schema.import()` consumers (layout.ts) can keep their own
 	// public Field alias; the defs above resolve "Field" to this union here.
 	"#Field":
-		"String | Symbol | Number | Boolean | Enum | Array | Object | Any | Link | Union | Unit",
+		"String | Symbol | Number | Boolean | Enum | PopArray | Object | Any | Link | Union | Unit",
 
 	PopFunction: {
 		type: "'function'",

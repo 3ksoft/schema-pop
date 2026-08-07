@@ -1039,7 +1039,10 @@ export class SchemaAnalyzer {
 			});
 		}
 
-		if (type.size) {
+		// Explicit ABI metadata on arrays must not collapse the composite into a
+		// fake primitive. Keeping kind=array preserves element stride for codecs
+		// and lets getLayoutInternal() apply the configured size/alignment.
+		if (type.size && type.type !== "array") {
 			if (!type.align)
 				throw new Error("no align on type " + JSON.stringify(type, null, 2));
 			if (!type.bitSize)
@@ -1079,20 +1082,36 @@ export class SchemaAnalyzer {
 					pathHint ? `${pathHint}Item` : undefined,
 				),
 			} as any;
+
 			if (type.exactLength) {
 				nField.minLength = type.exactLength;
 				nField.maxLength = type.exactLength;
 				nField.exactLength = type.exactLength;
 			}
-			if (type.maxLength) nField.maxLength = type.maxLength;
 
-			// Composite types may carry an explicit ABI layout. Keep the array
-			// shape for codecs/exporters while letting getLayoutInternal() honor
-			// size/alignment supplied by schema metadata.
-			if (type.size !== undefined) nField.size = type.size;
-			nField.bitSize = type.item.bitSize * nField.maxLength;
+			if (type.maxLength) {
+				nField.maxLength = type.maxLength;
+			}
 
-			if (type.align !== undefined) nField.align = type.align;
+			if (type.size !== undefined) {
+				nField.size = type.size;
+			}
+
+			if (type.align !== undefined) {
+				nField.align = type.align;
+			}
+
+			const length = nField.exactLength ?? nField.maxLength;
+			const itemBitSize = nField.item?.bitSize;
+
+			if (
+				typeof itemBitSize === "number" &&
+				Number.isFinite(itemBitSize) &&
+				typeof length === "number"
+			) {
+				nField.bitSize = itemBitSize * length;
+			}
+
 			return this.assertField(nField);
 		}
 

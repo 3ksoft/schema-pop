@@ -27,8 +27,8 @@ const au32 = binary.type("u32").configure({
 });
 
 const vec2f = binary.type("f32[] == 2").configure({ wgslType: "vec2f", size: 8, bitSize: 8 * 8, align: 8 });
-const vec4f = binary.type("f32[] == 4").configure({ wgslType: "vec4f", size: 16, bitSize: 8 * 12, align: 16 });
-const vec3f = binary.type("f32[] == 3").configure({ wgslType: "vec3f", size: 12, bitSize: 8 * 16, align: 16 });
+const vec4f = binary.type("f32[] == 4").configure({ wgslType: "vec4f", size: 16, bitSize: 8 * 16, align: 16 });
+const vec3f = binary.type("f32[] == 3").configure({ wgslType: "vec3f", size: 12, bitSize: 8 * 12, align: 16 });
 
 const vec2i = binary.type("i32[] == 2").configure({ wgslType: "vec2i", size: 8, bitSize: 8 * 8, align: 8 });
 const vec3i = binary.type("i32[] == 3").configure({ wgslType: "vec3i", size: 12, bitSize: 8 * 12, align: 16 });
@@ -42,12 +42,14 @@ const local_invocation_id = binary.type("u32[] == 3").configure({
 	wgslBuiltin: "local_invocation_id",
 	wgslType: "vec3u",
 	size: 12,
+	bitSize: 8 * 12,
 	align: 16,
 });
 const global_invocation_id = binary.type("u32[] == 3").configure({
 	wgslBuiltin: "global_invocation_id",
 	wgslType: "vec3u",
 	size: 12,
+	bitSize: 8 * 12,
 	align: 16,
 });
 const local_invocation_index = binary.type("u32").configure({ wgslBuiltin: "local_invocation_index" });
@@ -55,12 +57,14 @@ const workgroup_id = binary.type("u32[] == 3").configure({
 	wgslBuiltin: "workgroup_id",
 	wgslType: "vec3u",
 	size: 12,
+	bitSize: 8 * 12,
 	align: 16,
 });
 const num_workgroups = binary.type("u32[] == 3").configure({
 	wgslBuiltin: "num_workgroups",
 	wgslType: "vec3u",
 	size: 12,
+	bitSize: 8 * 12,
 	align: 16,
 });
 const vertex_index = binary.type("u32").configure({ wgslBuiltin: "vertex_index" });
@@ -69,6 +73,7 @@ const builtin_position = binary.type("f32[] == 4").configure({
 	wgslBuiltin: "builtin_position",
 	wgslType: "vec4f",
 	size: 16,
+	bitSize: 8 * 16,
 	align: 16,
 });
 const front_facing = binary.type("boolean").configure({ wgslBuiltin: "front_facing" });

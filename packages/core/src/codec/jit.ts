@@ -29,6 +29,8 @@ export function createRuntimeCodec(
     const typeByName = new Map(plan.types.map((t) => [t.name, t]));
 
     const sizeOf = (t: any): number => t.paddedSize ?? t.size ?? 0;
+    const isPackedField = (f: any): boolean =>
+        (f.bitSize ?? 0) > 0 && (f.size ?? 0) > 0 && f.bitSize < f.size * 8;
 
     const inlineable = (name: string): boolean => {
         const t: any = typeByName.get(name);
@@ -212,7 +214,7 @@ export function createRuntimeCodec(
 			`;
         } else if (t.kind === "struct") {
             const readField = (f: any): string => {
-                if (f.bitOffset !== undefined) {
+                if (isPackedField(f)) {
                     const mask = Math.pow(2, f.bitSize) - 1;
                     const size = f.size || 1;
                     const rMethod = size === 4 ? `getUint32` : size === 2 ? `getUint16` : `getUint8`;
@@ -229,7 +231,7 @@ export function createRuntimeCodec(
             const handledBitBytes = new Set<number>();
             let serWrites = "";
             for (const f of t.fields) {
-                if ((f as any).bitOffset !== undefined) {
+                if (isPackedField(f)) {
                     if (handledBitBytes.has(f.offset)) continue;
                     handledBitBytes.add(f.offset);
                     const sameBytes = t.fields.filter((sf) => sf.offset === f.offset);
