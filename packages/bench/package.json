@@ -8,6 +8,8 @@
 		"gen:bebop": "bebopc -i bebop/schema.bop build --generator ts:./bebop/generated.ts && bebopc -i bebop/schemaText.bop build --generator ts:./bebop/generatedText.ts",
 		"bench": "bun src/run.ts",
 		"bench:text": "bun src/runText.ts",
+		"ab": "bun src/ab.ts",
+		"gen:multi": "bun src/gen-multi.ts",
 		"all": "bun src/gen.ts && bun src/run.ts && bun src/runText.ts"
 	},
 	"dependencies": {

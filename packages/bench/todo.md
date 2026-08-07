@@ -171,3 +171,73 @@ To refine the codec generator further, the following minimal test suite should b
 **Recommended basis for the real implementation:** The real generator should adopt the hybrid loop + inlined fields design code-shaped by `model_4` and `model_6`. It must eliminate IIFE wrappers, pre-allocate fixed arrays (`new Array(N)`), fold static offsets, and retain `for` loops over fixed-size struct arrays instead of unrolling them, directly incorporating the negative unrolling evidence established by `model_6`.
 
 **Confidence in final recommendation:** High
+---
+
+# Section K: Implementation Status (2026-08-07)
+
+Measured against the generator's own output, not hand-written variants:
+`src/codec-baseline.ts` freezes what `tsCodec` emitted before this change, and
+`src/gen-multi.ts` drops both through the `multi/` scaffolding so the same code
+runs on every engine.
+
+## Landed
+
+All four "Implement Now" items, in `packages/exporter/src/exporters/tsCodec.ts`:
+
+1. **Loop + inlined field access** — a fixed-array element that is a struct
+   reference now has its fields inlined into the loop body (one level deep,
+   independent of `inlineRefBytes`) instead of calling `deserializeT`.
+2. **Pre-allocated arrays** — `new Array(N)` + indexed assignment, replacing
+   `[]` + `.push`. The old code carried a comment claiming `new Array(N)` gets
+   deoptimized as holey on V8; measured on node AND deno, it does not — decode
+   is 15–19% faster there.
+3. **IIFE elimination** — fixed-length array fields are read into a hoisted
+   local before the object literal, so no closure is allocated per struct read.
+4. **Static offset folding** — `offset + 12 + 4` → `offset + 16`,
+   `offset + (2 * 4)` → `offset + 8`. Also, loops carry the element offset in an
+   accumulator (`__o += 40`) instead of recomputing `o + i * stride`.
+
+## Measured effect (base → opt, median of repeated runs)
+
+| runtime          | encode           | decode           |
+|------------------|------------------|------------------|
+| node 24 (V8)     | 61.4 → 57.0 ns   | 382 → 311 ns     |
+| deno 2.9 (V8)    | 68.9 → 62.5 ns   | 365 → 308 ns     |
+| bun 1.3 (JSC)    | 114.5 → 78.5 ns  | 337 → 310 ns     |
+| SpiderMonkey 140 | 260 → 196 ns     | 521 → 433 ns     |
+
+Every runtime improves on both paths. Against `hand-DataView` in `run.ts` the
+generated codec is now statistically indistinguishable on encode and decode
+alike; before it was 1.2–1.4x behind.
+
+**Caveat on single runs:** the first node measurement showed encode 11% SLOWER
+for opt. Three repeats reversed it. Do not act on one mitata run — see below.
+
+## Not done
+
+- **Unrolling threshold sweep (N = 2, 4, 8, 16, 32)** — still open. The current
+  generator keeps the existing `<= 16 && primitive item` literal-unroll rule for
+  primitive arrays and always loops for struct arrays.
+- Nested-depth and monomorphic-outObj matrices from Section J.
+
+## Measurement infrastructure added
+
+`src/ab.ts` (`bun run ab`) exists because per-run variance on this box was large
+enough to flip conclusions. It differs from `run.ts` in ways that matter:
+
+- **round-robin + rotation** — every round times every variant, starting slot
+  rotates, so clock/GC drift hits all variants instead of biasing one;
+- **paired ratios** — the headline number is the median of per-round
+  `variant / baseline` quotients. Frequency scaling multiplies both terms and
+  cancels; absolute medians swung 2x between runs while paired ratios held
+  within ±5%;
+- **long bursts** — default 50k iters/round. Decode allocates, so a burst must
+  span many nursery GCs before the per-burst GC cost stops being a coin flip
+  (±9% paired at 50k vs ±30% at 5k for identical code);
+- **`--processes N`** pools rounds from fresh processes, since code layout and
+  JIT decisions are fixed per process;
+- **`--variants A,B`** narrows to a direct two-way A/B.
+
+Known environment problem: this machine runs plasma, VS Code, sunshine and krfb,
+with the `schedutil` governor. Absolute numbers here are not comparable across
+sessions; only paired ratios are. `taskset` alone did not help.

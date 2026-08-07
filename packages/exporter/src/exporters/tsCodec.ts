@@ -160,11 +160,39 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 				return 0;
 			};
 
+			/**
+			 * Collapses the arithmetic we build up while walking nested offsets:
+			 * `offset + 12 + 4` → `offset + 16`, `offset + (2 * 4)` → `offset + 8`.
+			 * Engines constant-fold this anyway, but folding at emit time keeps
+			 * the generated source readable and keeps deeply nested reads from
+			 * growing a chain of additions per level.
+			 */
+			const foldOffset = (expr: string): string => {
+				const flat = expr.replace(/\((\d+)\s*\*\s*(\d+)\)/g, (_, a, b) =>
+					String(Number(a) * Number(b)),
+				);
+				const m = flat.match(/^(.*?)((?:\s*\+\s*\d+)+)$/);
+				if (!m) return flat;
+				const sum = [...m[2]!.matchAll(/\+\s*(\d+)/g)].reduce(
+					(acc, x) => acc + Number(x[1]),
+					0,
+				);
+				const base = m[1]!.trim();
+				return sum === 0 ? base : `${base} + ${sum}`;
+			};
+
+			// Set for exactly one `genRead` reference lookup, to inline a struct
+			// element's fields into an array loop body regardless of
+			// `inlineRefBytes`. Cleared on use so the inlining stays one level
+			// deep and code size can't blow up on a nested graph.
+			let inlineNextRef = false;
+
 			const genRead = (
 				f: Field,
-				off: string,
+				rawOff: string,
 				visited: Set<string> = new Set(),
 			): string => {
+				const off = foldOffset(rawOff);
 				switch (f.kind) {
 					case "primitive": {
 						const p = getPrim(f.name);
@@ -182,7 +210,9 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 					case "reference": {
 						const lit = singletonEnumByName.get(f.name);
 						if (lit !== undefined) return `"${lit}"`;
-						if (!visited.has(f.name) && inlineable(f.name)) {
+						const forced = inlineNextRef;
+						inlineNextRef = false;
+						if (!visited.has(f.name) && (forced || inlineable(f.name))) {
 							const t: any = typeByName.get(f.name)!;
 							const sub = new Set(visited);
 							sub.add(f.name);
@@ -248,9 +278,10 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 			const genWrite = (
 				f: Field,
 				val: string,
-				off: string,
+				rawOff: string,
 				visited: Set<string> = new Set(),
 			): string => {
+				const off = foldOffset(rawOff);
 				switch (f.kind) {
 					case "primitive": {
 						const p = getPrim(f.name);
@@ -266,7 +297,9 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 					case "reference": {
 						if (singletonEnumByName.has(f.name))
 							return `view.setUint8(${off}, 0);`;
-						if (!visited.has(f.name) && inlineable(f.name)) {
+						const forcedW = inlineNextRef;
+						inlineNextRef = false;
+						if (!visited.has(f.name) && (forcedW || inlineable(f.name))) {
 							const t: any = typeByName.get(f.name)!;
 							const sub = new Set(visited);
 							sub.add(f.name);
@@ -314,14 +347,21 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 							);
 							return `{ ${writes.join(" ")} }`;
 						}
+						if (f.exactLength !== undefined) {
+							// Mirror of the read path: carry the element offset in an
+							// accumulator (no multiply per iteration) and inline a
+							// struct element's field writes into the loop body.
+							inlineNextRef = true;
+							const inlinedItem = genWrite(f.item, `__e`, `__o`, visited);
+							inlineNextRef = false;
+							return `{ for (let i = 0, __o = ${off}; i < ${f.exactLength}; i++, __o += ${step}) { const __e = ${val}[i]!; ${inlinedItem} } }`;
+						}
 						const writeItem = genWrite(
 							f.item,
 							`${val}[i]!`,
 							`o + (i * ${step})`,
 							visited,
 						);
-						if (f.exactLength !== undefined)
-							return `{ const o = ${off}; for(let i=0; i<${f.exactLength}; i++) { ${writeItem} } }`;
 						return `{ view.setUint32(${off}, ${val}.length, ${isLE}); let o = ${off} + 4; for(let i=0; i<${val}.length; i++) { ${writeItem} } }`;
 					}
 					case "optional":
@@ -498,11 +538,53 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 						}
 						return genRead(f.type, `offset + ${f.offset}`);
 					};
+
+					// Fixed-length arrays of non-u8 items are read through a
+					// hoisted local instead of an IIFE inside the object literal.
+					// The IIFE form allocated a closure per struct read and hid the
+					// loop from the surrounding function; hoisting turns it into a
+					// plain counted loop over a pre-sized array, with the element
+					// offset carried in an accumulator so there is no multiply per
+					// iteration. Struct elements get their fields inlined into the
+					// loop body (one level) rather than going through a call.
+					const hoistable = (f: any): boolean => {
+						const ft: any = f.type;
+						return (
+							!isPackedField(f) &&
+							ft.kind === "array" &&
+							ft.exactLength !== undefined &&
+							!(ft.item.kind === "primitive" && ft.item.name === "u8")
+						);
+					};
+					const hoistLocal = (f: any) => `_arr_${fieldName(f.name)}`;
+					const emitHoist = (f: any, indent: string): string => {
+						const ft: any = f.type;
+						const n = ft.exactLength as number;
+						const step = getItemStep(ft.item);
+						const a = hoistLocal(f);
+						const cursor = `_off_${fieldName(f.name)}`;
+						inlineNextRef = true;
+						const item = genRead(ft.item, cursor);
+						inlineNextRef = false;
+						return (
+							`${indent}const ${a} = new Array(${n});\n` +
+							`${indent}for (let i = 0, ${cursor} = ${foldOffset(`offset + ${f.offset}`)}; i < ${n}; i++, ${cursor} += ${step}) {\n` +
+							`${indent}\t${a}[i] = ${item};\n` +
+							`${indent}}\n`
+						);
+					};
+					const readOrLocal = (f: any): string =>
+						hoistable(f) ? hoistLocal(f) : readField(f);
+
+					const hoisted = t.fields.filter(hoistable);
 					code += `export function deserialize${tName}(view: DataView, offset: number, outObj?: any): ${tName} {\n`;
-					code += `\tif (!outObj) {\n\t\treturn {\n`;
-					t.fields.forEach((f) => (code += `\t\t\t${fieldName(f.name)}: ${readField(f)},\n`));
+					code += `\tif (!outObj) {\n`;
+					for (const f of hoisted) code += emitHoist(f, "\t\t");
+					code += `\t\treturn {\n`;
+					t.fields.forEach((f) => (code += `\t\t\t${fieldName(f.name)}: ${readOrLocal(f)},\n`));
 					code += `\t\t} as any;\n\t}\n`;
-					t.fields.forEach((f) => (code += `\toutObj.${fieldName(f.name)} = ${readField(f)};\n`));
+					for (const f of hoisted) code += emitHoist(f, "\t");
+					t.fields.forEach((f) => (code += `\toutObj.${fieldName(f.name)} = ${readOrLocal(f)};\n`));
 					code += `\treturn outObj;\n}\n\n`;
 					code += `export function serialize${tName}(val: ${tName}, view: DataView, offset: number): void {\n`;
 					const handledBitBytes = new Set<number>();
