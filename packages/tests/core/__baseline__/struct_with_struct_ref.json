@@ -23,16 +23,15 @@
             "max": 255,
             "size": 1,
             "align": 1,
+            "bitSize": 8,
             "description": "unsigned 8-bit integer",
-            "popKind": "binary",
             "isBinary": true,
             "binaryType": "u8",
             "label": "x",
             "required": true,
             "kind": "primitive",
             "name": "u8",
-            "paddedSize": 1,
-            "bitSize": 8
+            "paddedSize": 1
           },
           "offset": 0,
           "bitOffset": 0,
@@ -67,23 +66,20 @@
         {
           "name": "flag",
           "type": {
-            "type": "boolean",
-            "size": 1,
-            "align": 1,
-            "description": "boolean (packed as 1 bit)",
-            "popKind": "bitwise",
-            "isBinary": true,
-            "binaryType": "boolean",
-            "label": "flag",
-            "required": true,
             "kind": "primitive",
             "name": "boolean",
+            "size": 1,
+            "align": 1,
             "paddedSize": 1,
-            "bitSize": 1
+            "bitSize": 8,
+            "unsigned": true,
+            "type": "boolean",
+            "label": "flag",
+            "required": true
           },
           "offset": 1,
           "bitOffset": 0,
-          "bitSize": 1,
+          "bitSize": 8,
           "size": 1,
           "paddingAfter": 0
         }

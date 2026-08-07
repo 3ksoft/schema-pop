@@ -25,17 +25,19 @@
               "max": 255,
               "size": 1,
               "align": 1,
+              "bitSize": 8,
               "description": "unsigned 8-bit integer",
-              "popKind": "binary",
               "isBinary": true,
               "binaryType": "u8",
               "label": "Item",
               "kind": "primitive",
               "name": "u8",
-              "paddedSize": 1,
-              "bitSize": 8
+              "paddedSize": 1
             },
-            "exactLength": 16
+            "minLength": 16,
+            "maxLength": 16,
+            "exactLength": 16,
+            "bitSize": 128
           },
           "offset": 0,
           "bitOffset": 0,

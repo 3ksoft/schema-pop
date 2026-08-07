@@ -18,7 +18,8 @@
         {
           "name": "payload",
           "type": {
-            "kind": "unit"
+            "kind": "any",
+            "name": "Any_payload"
           },
           "offset": 0,
           "bitOffset": 0,

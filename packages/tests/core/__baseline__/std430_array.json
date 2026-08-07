@@ -24,17 +24,19 @@
               "type": "number",
               "size": 4,
               "align": 4,
+              "bitSize": 32,
               "description": "32-bit float",
-              "popKind": "binary",
               "isBinary": true,
               "binaryType": "f32",
               "label": "Item",
               "kind": "primitive",
               "name": "f32",
-              "paddedSize": 4,
-              "bitSize": 32
+              "paddedSize": 4
             },
-            "exactLength": 10
+            "minLength": 10,
+            "maxLength": 10,
+            "exactLength": 10,
+            "bitSize": 320
           },
           "offset": 0,
           "bitOffset": 0,

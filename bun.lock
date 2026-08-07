@@ -15,6 +15,7 @@
         "@schema-pop/core": "workspace:*",
         "@schema-pop/exporter": "workspace:*",
         "@schema-pop/schema": "workspace:*",
+        "arktype": "^2.2.3",
         "bebop": "^3.2.3",
         "bebop-tools": "^3.2.3",
         "mitata": "^1.0.34",

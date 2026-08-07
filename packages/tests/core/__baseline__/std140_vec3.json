@@ -22,16 +22,15 @@
             "type": "number",
             "size": 4,
             "align": 4,
+            "bitSize": 32,
             "description": "32-bit float",
-            "popKind": "binary",
             "isBinary": true,
             "binaryType": "f32",
             "label": "a",
             "required": true,
             "kind": "primitive",
             "name": "f32",
-            "paddedSize": 4,
-            "bitSize": 32
+            "paddedSize": 4
           },
           "offset": 0,
           "bitOffset": 0,
@@ -47,17 +46,19 @@
               "type": "number",
               "size": 4,
               "align": 4,
+              "bitSize": 32,
               "description": "32-bit float",
-              "popKind": "binary",
               "isBinary": true,
               "binaryType": "f32",
               "label": "Item",
               "kind": "primitive",
               "name": "f32",
-              "paddedSize": 4,
-              "bitSize": 32
+              "paddedSize": 4
             },
-            "exactLength": 3
+            "minLength": 3,
+            "maxLength": 3,
+            "exactLength": 3,
+            "bitSize": 96
           },
           "offset": 4,
           "bitOffset": 0,

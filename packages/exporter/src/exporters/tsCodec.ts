@@ -36,6 +36,14 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 			const isLE = plan.endian === "le" ? "true" : "false";
 			const inlineBudget = config.inlineRefBytes ?? 16;
 
+			// A field is bit-packed only when it occupies FEWER bits than its
+			// storage unit. Every field carries `bitOffset` (0 for the common
+			// case), so testing `bitOffset !== undefined` classified whole f32s
+			// and struct references as bitfields and emitted shift/mask reads
+			// for them. Same predicate as the runtime codecs in core.
+			const isPackedField = (f: any): boolean =>
+				(f.bitSize ?? 0) > 0 && (f.size ?? 0) > 0 && f.bitSize < f.size * 8;
+
 			// Single-option synthesized enums (the per-variant `kind` discriminator
 			// literals) don't exist on the original arktype Module. Inline their
 			// read/write at the reference sites and skip emitting their ser/de.
@@ -478,7 +486,7 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 				}
 				if (t.kind === "struct") {
 					const readField = (f: any): string => {
-						if (f.bitOffset !== undefined) {
+						if (isPackedField(f)) {
 							const mask = Math.pow(2, f.bitSize) - 1;
 							const size = f.size || 1;
 							const rMethod = size === 4 ? `getUint32` : size === 2 ? `getUint16` : `getUint8`;
@@ -499,11 +507,11 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 					code += `export function serialize${tName}(val: ${tName}, view: DataView, offset: number): void {\n`;
 					const handledBitBytes = new Set<number>();
 					for (const f of t.fields) {
-						if ((f as any).bitOffset !== undefined) {
+						if (isPackedField(f)) {
 							if (handledBitBytes.has(f.offset)) continue;
 							handledBitBytes.add(f.offset);
 							const sameBytes = t.fields.filter(
-								(sf) => sf.offset === f.offset,
+								(sf) => sf.offset === f.offset && isPackedField(sf),
 							);
 							const size = f.size || 1;
 							const wMethod = size === 4 ? `setUint32` : size === 2 ? `setUint16` : `setUint8`;
@@ -536,7 +544,7 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 
 						t.fields.forEach((f) => {
 							code += `\t\tcase "${fieldName(f.name)}":\n`;
-							if (f.bitOffset !== undefined) {
+							if (isPackedField(f)) {
 								const size = f.size || 1;
 								const rMethod = size === 4 ? `getUint32` : size === 2 ? `getUint16` : `getUint8`;
 								const wMethod = size === 4 ? `setUint32` : size === 2 ? `setUint16` : `setUint8`;

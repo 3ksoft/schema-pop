@@ -18,17 +18,20 @@
         {
           "name": "idle",
           "value": 0,
-          "description": ""
+          "description": "",
+          "symbol": "idle"
         },
         {
           "name": "active",
           "value": 1,
-          "description": ""
+          "description": "",
+          "symbol": "active"
         },
         {
           "name": "error",
           "value": 2,
-          "description": ""
+          "description": "",
+          "symbol": "error"
         }
       ],
       "underlyingType": "u8",
