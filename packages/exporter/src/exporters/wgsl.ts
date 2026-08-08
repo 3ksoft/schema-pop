@@ -194,7 +194,12 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 			const getCleanWgslType = (f: Field): string => {
 				if (f.kind === "primitive") {
 					if (f.atomic) return `atomic<${f.binaryType || "u32"}>`;
-					if (f.name === "boolean" || f.name === "boolean") return "boolean";
+					// `boolean` nie jest typem WGSL, a `bool` nie jest host-shareable —
+					// w obu przypadkach struct nie przeszedłby przez Tint. Analyzer
+					// daje booleanowi bitSize 1, więc lowerujemy go dokładnie jak u1:
+					// pole u32 o wartości 0/1. Gałęzie `cleanType === "boolean"` niżej
+					// są przez to nieosiągalne dla layoutów GPU.
+					if (f.name === "bool" || f.name === "boolean") return "u32";
 					if (f.name === "f32") return "f32";
 					if (f.name === "i32" || f.name === "i16" || f.name === "i8") return "i32";
 					return "u32";
@@ -261,14 +266,15 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 					const underlying = t.underlyingType === "i32" ? "i32" : "u32";
 					const suffix = underlying === "u32" ? "u" : "";
 					typesCode += `alias ${name} = ${underlying};\n`;
+					// Enum-local ordinal, tak jak w każdym innym exporterze. Wartość
+					// musi być identyczna po obu stronach magistrali — CPU zapisuje
+					// `variant.value`, więc shader musi porównywać z tym samym.
+					// Globalny rejestr SMB_* jest emitowany osobno i służy do innych
+					// celów; podstawiony tutaj rozjeżdżał WGSL z TS i psuł
+					// indeksowanie tablic materiałów (SolidType_rock == 37 przy
+					// tablicy o 9 pozycjach).
 					for (const v of t.variants) {
-						const symbolConst = symbolOf(v) !== undefined
-							? symbolConstNames.get(symbolOf(v)!)
-							: undefined;
-						const valueExpr = symbolConst
-							? underlying === "u32" ? symbolConst : `i32(${symbolConst})`
-							: `${v.value}${suffix}`;
-						typesCode += `const ${name}_${v.name}: ${name} = ${valueExpr};\n`;
+						typesCode += `const ${name}_${v.name}: ${name} = ${v.value}${suffix};\n`;
 					}
 					typesCode += `\n`;
 				}
@@ -570,10 +576,10 @@ export function wgsl(config: WgslConfig): ExporterPlugin<WgslConfig, string> {
 						helpersCode += `}\n\n`;
 
 						// Pack Variant
-						const localTagVal = v.tag !== undefined ? v.tag : (v as any).tag ?? (i + 1);
-						const tagVal = symbolOf(v) !== undefined && symbolIds.has(symbolOf(v)!)
-							? symbolIds.get(symbolOf(v)!)!
-							: localTagVal;
+						// Ten sam ordinal co tsCodec zapisuje po stronie CPU — tag jest
+						// odczytywany z pamięci współdzielonej, więc nie może być
+						// numerowany inaczej dla WGSL.
+						const tagVal = v.tag !== undefined ? v.tag : (v as any).tag ?? (i + 1);
 
 						helpersCode += `fn pack_${snakeName}_from_${snakeVarName}(unpacked: ${cleanVarName}) -> ${rawType} {\n`;
 						if (rawWords === 1) {

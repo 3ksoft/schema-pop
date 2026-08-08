@@ -27,6 +27,17 @@ const PRIMITIVE_TS: Record<string, string> = {
 	string: "string",
 };
 
+// Arbitrary bit widths (u4, u12, i20 …) are legal schema primitives — the
+// binary codec packs them as shift/mask bitfields — but only the byte-aligned
+// ones are listed above, so anything else resolved to `unknown` and made the
+// generated types fail to compile against their own codec. Widths up to 32 bits
+// still fit a JS number; wider ones need bigint, matching u32/u64 above.
+for (let bits = 1; bits <= 128; bits++) {
+	const mapped = bits <= 32 ? "number" : "bigint";
+	PRIMITIVE_TS[`u${bits}`] ??= mapped;
+	PRIMITIVE_TS[`i${bits}`] ??= mapped;
+}
+
 export function ts(config: TsConfig): ExporterPlugin<TsConfig, string> {
 	const cfg: TsConfig = {
 		fieldNaming: "original",

@@ -79,9 +79,16 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 			const sizeOf = (t: any): number => t.paddedSize ?? t.size ?? 0;
 			const inlineable = (name: string): boolean => {
 				const t: any = typeByName.get(name);
-				if (!t.inlineSafe) return false;
+				if (!t?.inlineSafe) return false;
+				// The inline emitters below can only spell out a struct (object
+				// literal over `fields`) or an alias (delegation). Enums and unions
+				// have no `fields` and must keep going through their generated
+				// deserialize/serialize functions, or emission throws on undefined.
+				if (t.kind !== "struct" && t.kind !== "alias") return false;
 				return sizeOf(t) <= inlineBudget;
 			};
+			const inlineEmittable = (t: any): boolean =>
+				t?.kind === "struct" || t?.kind === "alias";
 
 			const getPrim = (name: string) => {
 				switch (name.toLowerCase()) {
@@ -212,7 +219,11 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 						if (lit !== undefined) return `"${lit}"`;
 						const forced = inlineNextRef;
 						inlineNextRef = false;
-						if (!visited.has(f.name) && (forced || inlineable(f.name))) {
+						if (
+							!visited.has(f.name) &&
+							(forced || inlineable(f.name)) &&
+							inlineEmittable(typeByName.get(f.name))
+						) {
 							const t: any = typeByName.get(f.name)!;
 							const sub = new Set(visited);
 							sub.add(f.name);
@@ -299,7 +310,11 @@ export function tsCodec(config: TsCodecConfig): ExporterPlugin<TsCodecConfig, st
 							return `view.setUint8(${off}, 0);`;
 						const forcedW = inlineNextRef;
 						inlineNextRef = false;
-						if (!visited.has(f.name) && (forcedW || inlineable(f.name))) {
+						if (
+							!visited.has(f.name) &&
+							(forcedW || inlineable(f.name)) &&
+							inlineEmittable(typeByName.get(f.name))
+						) {
 							const t: any = typeByName.get(f.name)!;
 							const sub = new Set(visited);
 							sub.add(f.name);

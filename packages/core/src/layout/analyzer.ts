@@ -691,8 +691,21 @@ export class SchemaAnalyzer {
 		let structAlign = 1;
 
 		if (fields.length > 0) {
-			const last = fields[fields.length - 1]!;
-			structSize = last.offset + last.size + last.paddingAfter;
+			// Nie wystarczy wziąć ostatniego pola: pola bitfieldowe niosą w `size`
+			// szerokość NOŚNIKA (słowa lub bajtu), nie własną. Kilka pól dzielących
+			// jedno słowo raportowało więc każde pełne `size`, przez co struct
+			// „kończył się" za swoim ostatnim bitem — 4× u8 pod autoPack wychodziło
+			// 7 B zamiast 4. Rozmiar bierzemy z najdalej sięgającego pola, licząc
+			// bitfieldy po ich realnym zasięgu bitowym.
+			structSize = fields.reduce((end, f) => {
+				const bitSize = f.bitSize ?? 0;
+				const bitOffset = f.bitOffset ?? 0;
+				const isBitfield = bitSize > 0 && (bitOffset > 0 || bitSize < f.size * 8);
+				const fieldEnd = isBitfield
+					? f.offset + Math.ceil((bitOffset + bitSize) / 8)
+					: f.offset + f.size + f.paddingAfter;
+				return Math.max(end, fieldEnd);
+			}, 0);
 			structAlign = fields.reduce(
 				(max, f) => Math.max(max, this.getLayout(f.type).align),
 				1,
@@ -804,6 +817,15 @@ export class SchemaAnalyzer {
 				if (currentBitOffset + bitSize > maxBits) {
 					currentOffset += wordSize;
 					currentBitOffset = 0;
+				}
+				// Bitfieldy szersze niż bajt są adresowane słowami: konsument liczy
+				// `extractBits(raw[offset/4], (offset % 4) * 8 + bitOffset, ...)`.
+				// Jeśli słowo zacznie się na niewyrównanym bajcie, ten shift wyjdzie
+				// poza 32 bity i shader nie przejdzie walidacji (pole na bajcie 50 z
+				// bitOffset 16 dawało shift 32). Nowe słowo musi więc startować na
+				// granicy słowa.
+				if (wordSize === 4 && currentBitOffset === 0 && currentOffset % 4 !== 0) {
+					currentOffset += 4 - (currentOffset % 4);
 				}
 				fields.push({
 					name: meta.key,

@@ -5,8 +5,8 @@ exports[`wgsl exporter — struct shape tagged union of differently-sized struct
 const SMB_zone: u32 = 1u;
 
 alias GameObjectTag = u32;
-const GameObjectTag_Obstacle: GameObjectTag = SMB_obstacle;
-const GameObjectTag_Zone: GameObjectTag = SMB_zone;
+const GameObjectTag_Obstacle: GameObjectTag = 0u;
+const GameObjectTag_Zone: GameObjectTag = 1u;
 
 struct Zone {
 	bounds: vec4<f32>,
@@ -18,9 +18,9 @@ struct Obstacle {
 	pos: vec2<f32>,
 	rotation: f32,
 	material: u32,
-	enabled: boolean,
-	static: boolean,
-	round: boolean,
+	enabled: u32,
+	static: u32,
+	round: u32,
 };
 
 const OBSTACLE_POS_LEN: u32 = 2u;
@@ -60,9 +60,9 @@ fn unpack_words_to_obstacle(raw: array<u32, 6>) -> Obstacle {
 	var out: Obstacle;
 	out.pos = vec2<f32>(bitcast<f32>(raw[0u + 0u]), bitcast<f32>(raw[0u + 1u]));
 	out.rotation = bitcast<f32>(raw[2u]);
-		out.enabled = extractBits(raw[4u], 0u, 8u) != 0u;
-	out.static = extractBits(raw[4u], 8u, 8u) != 0u;
-	out.round = extractBits(raw[4u], 16u, 8u) != 0u;
+		out.enabled = u32(extractBits(raw[4u], 0u, 8u));
+	out.static = u32(extractBits(raw[4u], 8u, 8u));
+	out.round = u32(extractBits(raw[4u], 16u, 8u));
 	return out;
 }
 
@@ -76,9 +76,9 @@ fn pack_obstacle_to_words(unpacked: Obstacle) -> array<u32, 6> {
 	out[0u + 0u] = bitcast<u32>(unpacked.pos.x);
 		out[0u + 1u] = bitcast<u32>(unpacked.pos.y);
 			out[2u] = bitcast<u32>(unpacked.rotation);
-		out[4u] = insertBits(out[4u], select(0u, 1u, unpacked.enabled), 0u, 8u);
-	out[4u] = insertBits(out[4u], select(0u, 1u, unpacked.static), 8u, 8u);
-	out[4u] = insertBits(out[4u], select(0u, 1u, unpacked.round), 16u, 8u);
+		out[4u] = insertBits(out[4u], u32(unpacked.enabled), 0u, 8u);
+	out[4u] = insertBits(out[4u], u32(unpacked.static), 8u, 8u);
+	out[4u] = insertBits(out[4u], u32(unpacked.round), 16u, 8u);
 	return out;
 }
 
@@ -250,9 +250,9 @@ fn pack_s(unpacked: S) -> array<u32, 2> {
 "
 `;
 
-exports[`wgsl exporter — boolean boolean field stays boolean in the logical struct, packed into a u32 word 1`] = `
+exports[`wgsl exporter — boolean boolean lowers to a u32 field, never to a WGSL \`boolean\` 1`] = `
 "struct S {
-	flag: boolean,
+	flag: u32,
 };
 
 
@@ -263,7 +263,7 @@ exports[`wgsl exporter — boolean boolean field stays boolean in the logical st
 
 fn unpack_words_to_s(raw: u32) -> S {
 	var out: S;
-	out.flag = extractBits(raw, 0u, 8u) != 0u;
+	out.flag = bitcast<u32>(raw);
 	return out;
 }
 
@@ -273,7 +273,7 @@ fn unpack_s(raw: u32) -> S {
 
 fn pack_s_to_words(unpacked: S) -> u32 {
 	var out: u32 = 0u;
-	out = insertBits(out, select(0u, 1u, unpacked.flag), 0u, 8u);
+	out = bitcast<u32>(unpacked.flag);
 	return out;
 }
 

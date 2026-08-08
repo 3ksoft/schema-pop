@@ -187,23 +187,32 @@ describe("wgsl exporter — global literal symbols", () => {
 			DecodeTelemetry: "String | Array",
 		});
 
+		// The global registry is still emitted — it has its own consumers.
 		expect(out).toMatch(/const SMB_string: u32 = \d+u;/);
 		expect(out).toMatch(/const SMB_array: u32 = \d+u;/);
-		expect(out).toContain("const StringKind_string: StringKind = SMB_string;");
-		expect(out).toContain("const TelemetryTypes_string: TelemetryTypes = SMB_string;");
-		expect(out).toContain("const ArrayKind_array: ArrayKind = SMB_array;");
-		expect(out).toContain("const DecodeTelemetryTag_String: DecodeTelemetryTag = SMB_string;");
-		expect(out).toContain("const DecodeTelemetryTag_Array: DecodeTelemetryTag = SMB_array;");
 
-		const stringId = Number(out.match(/const SMB_string: u32 = (\d+)u;/)?.[1]);
-		const arrayId = Number(out.match(/const SMB_array: u32 = (\d+)u;/)?.[1]);
-		expect(Number.isInteger(stringId)).toBe(true);
-		expect(Number.isInteger(arrayId)).toBe(true);
+		// But enum constants and union tags carry ENUM-LOCAL ordinals, identical
+		// to what every other exporter emits. These values cross the CPU/GPU
+		// boundary in shared memory: tsCodec writes `variant.value`, so a WGSL
+		// shader comparing against a global symbol id would silently mismatch,
+		// and enum values used as array indices (materials[SolidType_rock])
+		// would run off the end of the array.
+		expect(out).toContain("const StringKind_string: StringKind = 0u;");
+		expect(out).toContain("const ArrayKind_array: ArrayKind = 0u;");
+		expect(out).not.toMatch(/const \w+Kind_\w+: \w+ = SMB_/);
+
+		const tagOf = (name: string) =>
+			Number(out.match(new RegExp(`const DecodeTelemetryTag_${name}: DecodeTelemetryTag = (\\d+)u;`))?.[1]);
+		const stringTag = tagOf("String");
+		const arrayTag = tagOf("Array");
+		expect(Number.isInteger(stringTag)).toBe(true);
+		expect(Number.isInteger(arrayTag)).toBe(true);
+		// The tag written by the packer must be the same ordinal the constant names.
 		expect(out).toMatch(
-			new RegExp(`fn pack_decode_telemetry_from_string[\\s\\S]*?insertBits\\([^\\n]*, ${stringId}u,`),
+			new RegExp(`fn pack_decode_telemetry_from_string[\\s\\S]*?insertBits\\([^\\n]*, ${stringTag}u,`),
 		);
 		expect(out).toMatch(
-			new RegExp(`fn pack_decode_telemetry_from_array[\\s\\S]*?insertBits\\([^\\n]*, ${arrayId}u,`),
+			new RegExp(`fn pack_decode_telemetry_from_array[\\s\\S]*?insertBits\\([^\\n]*, ${arrayTag}u,`),
 		);
 	});
 
@@ -273,12 +282,17 @@ describe("wgsl exporter — f64", () => {
 });
 
 describe("wgsl exporter — boolean", () => {
-	// The logical struct keeps `boolean`; the memory representation packs it into a
-	// u32 word via extractBits/insertBits in the unpack/pack helpers.
-	test("boolean field stays boolean in the logical struct, packed into a u32 word", () => {
-		const out = gen({ S: { flag: "boolean" } });
-		expect(out).toMatch(/flag:\s*boolean/);
-		expect(out).toMatch(/extractBits\(raw, 0u, \d+u\) != 0u/);
+	// WGSL has no `boolean`, and `bool` is not host-shareable — a struct using
+	// either is rejected by the driver. A boolean lowers exactly like `u1`: a
+	// u32 field carrying 0/1, packed into a single bit of the word.
+	// WGSL has no `boolean`, and `bool` is not host-shareable — a struct using
+	// either is rejected by the driver. A boolean lowers to a u32 field carrying
+	// 0/1. How WIDE it is in memory is a layout question, not a type question:
+	// under autoPack it collapses to a single bit, otherwise it keeps its word.
+	test("boolean lowers to a u32 field, never to a WGSL `boolean`", () => {
+		const out = genStd430({ S: { flag: "boolean" } });
+		expect(out).toMatch(/flag:\s*u32/);
+		expect(out).not.toMatch(/\bboolean\b/);
 		expect(out).toMatchSnapshot();
 	});
 });
